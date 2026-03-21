@@ -61,6 +61,32 @@ jobs:
           name: mac-dmg
           path: build/*.dmg
 
+  release-github:
+    needs: [build-windows, build-mac]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Read version from package.json
+        id: ver
+        run: echo "version=$(node -p \"require('./package.json').version\")" >> $GITHUB_OUTPUT
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-gh
+          merge-multiple: true
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.ver.outputs.version }}
+          name: v${{ steps.ver.outputs.version }}
+          files: |
+            dist-gh/**/*.exe
+            dist-gh/**/*.dmg
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   release-gitee:
     # Gitee 附件约 100MB 上限，macOS .dmg 常超限，仅同步 Windows 安装包
     needs: [build-windows]
