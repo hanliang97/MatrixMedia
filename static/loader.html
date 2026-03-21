@@ -1,0 +1,174 @@
+﻿<!doctype html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <title></title>
+
+  <style>
+    html {
+      height: 100%;
+      min-height: 100%;
+      overflow: hidden;
+      user-select: none;
+      -webkit-app-region: no-drag;
+    }
+
+    html body {
+      background-size: 163px;
+      font: 14px/21px Monaco, sans-serif;
+      color: #999;
+      -webkit-font-smoothing: antialiased;
+      -webkit-text-size-adjust: 100%;
+      -moz-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+      text-size-adjust: 100%;
+      height: 100%;
+      min-height: 100%;
+      margin: 0px;
+    }
+
+    html body h4 {
+      margin: 0;
+    }
+
+    /* .loading-line {
+      height: 1px;
+      width: 100%;
+      position: absolute;
+    }
+
+    .top {
+      background: linear-gradient(-225deg, #ff3cac 0%, #2b86c5 58%, #ff3cac 100%);
+
+      top: 0;
+    }
+
+    .left {
+      background: linear-gradient(-225deg, #ff3cac 0%, #2b86c5 58%, #ff3cac 100%);
+      right: 99px;
+      transform: rotate(90deg);
+      width: 600px;
+    }
+
+    .right {
+      left: 99px;
+      transform: rotate(90deg);
+      width: 600px;
+      background: linear-gradient(-225deg, #ff3cac 0%, #2b86c5 58%, #ff3cac 100%);
+    }
+
+    .bottom {
+      background: linear-gradient(-225deg, #ff3cac 0%, #2b86c5 58%, #ff3cac 100%);
+
+      bottom: 0;
+    } */
+
+    .scene {
+      position: relative;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100%;
+      background: #222;
+      position: relative;
+    }
+
+    .loader {
+      position: relative;
+      width: 15em;
+      height: 15em;
+      background: linear-gradient(-225deg, #ff3cac 0%, #562b7c 52%, #2b86c5 100%);
+      border-radius: 50%;
+      animation: spin 0.5s linear infinite;
+    }
+
+    span {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      border-radius: inherit;
+      background: inherit;
+    }
+
+    span:nth-child(1) {
+      filter: blur(5px);
+    }
+
+    span:nth-child(2) {
+      filter: blur(10px);
+    }
+
+    span:nth-child(3) {
+      filter: blur(25px);
+    }
+
+    span:nth-child(4) {
+      filter: blur(50px);
+    }
+
+    span::after {
+      position: absolute;
+      content: "";
+      top: 10px;
+      left: 10px;
+      right: 10px;
+      bottom: 10px;
+      background: #222;
+      border-radius: inherit;
+    }
+
+    .text {
+      position: absolute;
+      opacity: 0;
+      animation: breath 3s ease-in-out infinite;
+    }
+
+    @keyframes breath {
+      from {
+        opacity: 0.05;
+      }
+
+      50% {
+        opacity: 1;
+      }
+
+      to {
+        opacity: 0.05;
+      }
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(1turn);
+      }
+    }
+    /* @keyframes slidein{
+      from{
+
+      }
+      to{
+        
+      }
+    } */
+  </style>
+</head>
+
+<body>
+  <div class="scene">
+    <!-- <i class="loading-line top"></i>
+    <i class="loading-line right"></i>
+    <i class="loading-line bottom"></i>
+    <i class="loading-line left"></i> -->
+    <div class="loader">
+      <span></span>
+      <span></span>
+      <span></span>
+      <span></span>
+    </div>
+    <div class="text">正在准备资源中...</div>
+  </div>
+
+</body>
+
+</html>

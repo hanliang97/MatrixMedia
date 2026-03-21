@@ -1,0 +1,9 @@
+ // 降低消息高度
+ //  当启用自定义标题时使用
+ .el-message {
+     top: 50px !important;
+ }
+
+ .el-notification {
+     top: 38px !important;
+ }

@@ -1,0 +1,89 @@
+name: Upload Electron Package
+
+on:
+  push:
+    branches:
+      - prod
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.15.1'
+      - name: Extract repository name
+        id: extract-repo-name
+        run: |
+          OWNER_NAME=$(echo "${{ github.repository }}" | awk -F '/' '{print $1}')
+          REPO_NAME=$(echo "${{ github.repository }}" | awk -F '/' '{print $2}')
+          echo "owner-name=$OWNER_NAME" >> $GITHUB_OUTPUT
+          echo "repo-name=$REPO_NAME" >> $GITHUB_OUTPUT
+        shell: bash
+      - name: Install dependencies
+        run: yarn
+      - name: Build Electron app (Windows)
+        run: yarn build
+      - name: Rename Windows installer
+        shell: pwsh
+        run: |
+          $pkg = Get-Content -Raw -Encoding UTF8 package.json | ConvertFrom-Json
+          $v = $pkg.version
+          $p = $pkg.build.productName
+          $from = Join-Path 'build' ($p + ' Setup ' + $v + '.exe')
+          $to = Join-Path 'build' ('Setup-' + $v + '-win-x64.exe')
+          Move-Item -LiteralPath $from -Destination $to
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: build/Setup-*-win-x64.exe
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.15.1'
+      - name: Install dependencies
+        run: yarn
+      - name: Build Electron app (macOS Intel + Apple Silicon)
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        run: yarn build:mac
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-dmg
+          path: build/*.dmg
+
+  release-gitee:
+    # Gitee 附件约 100MB 上限，macOS .dmg 常超限，仅同步 Windows 安装包
+    needs: [build-windows]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.15.1'
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-release
+          merge-multiple: true
+      - name: Install dependencies
+        run: yarn
+      - name: Upload to Gitee Release
+        shell: bash
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          mapfile -t files < <(find dist-release -type f -name '*.exe' | sort)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .exe under dist-release"; ls -laR dist-release; exit 1
+          fi
+          node upload-gitee.js "${{ secrets.GITEE_ACCESS_TOKEN }}" "$VERSION" "${files[@]}"

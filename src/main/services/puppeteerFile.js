@@ -1,0 +1,127 @@
+import { ipcMain, app, BrowserWindow } from "electron";
+import puppeteerCore from "puppeteer-core";
+import { addExtra } from "puppeteer-extra";
+import pie from "puppeteer-in-electron";
+import Type from "./Type";
+
+import StealthPlugin from "puppeteer-extra-plugin-stealth";
+
+const puppeteer = addExtra(puppeteerCore);
+puppeteer.use(StealthPlugin());
+
+// 视频任务队列
+const videoQueue = [];
+let videoBusy = false;
+
+function enqueueVideoTask(data, event) {
+  videoQueue.push({ data, event });
+  processNextVideo();
+}
+
+function processNextVideo() {
+  if (videoBusy) return;
+  const next = videoQueue.shift();
+  if (!next) return;
+  videoBusy = true;
+  doUpload(next.data, next.event, () => {
+    videoBusy = false;
+    processNextVideo();
+  });
+}
+
+function upFile() {
+  ipcMain.on("puppeteerFile", async (event, args) => {
+    if (args.pt.includes("视频")) {
+      enqueueVideoTask(args, event);
+    } else {
+      doUpload(args, event);
+    }
+  });
+}
+
+async function doUpload(data, event, onFinish) {
+  data.partition = data.partition.split('-')[0]
+  const maxRetries = 5;
+  let currentAttempt = 0;
+
+  const createWindowAndAttempt = async () => {
+    currentAttempt++;
+    if (currentAttempt > maxRetries) { 
+      console.log("已达到最大重试次数，操作失败", data);
+      event.reply("puppeteer-noLogin", data);
+      event.reply("puppeteerFile-done", {...data,status: false});
+      if (onFinish) onFinish();
+      return;
+    }
+
+    let browser;
+    let win;
+    let page;
+
+    try {
+      browser = await pie.connect(app, puppeteer);
+      win = new BrowserWindow({
+        show:  data?.show ?? false,
+        width: data?.width ?? 1300,
+        height: data?.height ?? 800,
+        title: `${data.partition} (尝试${currentAttempt}/${maxRetries})`,        
+        webPreferences: {
+          partition: data.partition,
+          nodeIntegration: false,
+          contextIsolation: true,
+          devTools: true,
+        },
+      });
+      page = await pie.getPage(browser, win);
+      // 添加10分钟自动关闭窗口的定时器
+      const AUTO_CLOSE_DELAY = 10 * 60 * 1000; // 10分钟
+      let autoCloseTimer = setTimeout(() => {
+        console.log(`窗口 ${data.partition} 已自动关闭（10分钟超时）`);
+        if (win && !win.isDestroyed()) {
+          win.close();
+        }
+      }, AUTO_CLOSE_DELAY);
+      // 设置UA和加载URL
+      if (data.pt.indexOf("视频") !== -1) {
+        await page.setUserAgent(data.useragent);
+        win.webContents.setUserAgent(data.useragent);
+        await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      } else {
+        await win.loadURL(data.url);
+      }
+      
+      // 窗口关闭事件
+      win.on("closed", () => {
+         clearTimeout(autoCloseTimer); // 清除自动关闭定时器
+         autoCloseTimer = null;
+        if (browser) browser.disconnect();
+      });
+
+      // 检查URL是否匹配并执行操作
+      setTimeout(async () => {
+        const currentUrl = page.url();
+        if (currentUrl === data.url) {
+          Type[data.pt](page, data, win, event,onFinish);
+        } else {
+          console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
+          win.close();
+          setTimeout(createWindowAndAttempt, 1000);
+        }
+      }, 3000);
+    } catch (error) {
+      console.log(`尝试${currentAttempt}发生错误:`, error);
+      if (win) win.close();
+      if (browser) browser.disconnect();
+      setTimeout(createWindowAndAttempt, 1000);
+    }
+  };
+ console.log(`尝试${currentAttempt}${data.pt}开始`);
+  if (onFinish || data.pt.indexOf("视频") !== -1) {
+    // 由队列管理或视频任务用异步方式
+    setTimeout(createWindowAndAttempt, 1000);
+  } else {
+    createWindowAndAttempt();
+  }
+}
+
+export default upFile;

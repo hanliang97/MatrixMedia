@@ -1,0 +1,45 @@
+// 订单内容页
+.order-container {
+    padding: 0 212px 20px 50px;
+}
+
+// 正文顶部的分割线及分割线上面的内容
+.top-nav {
+    display: flex;
+    height: 80px;
+    align-items: center;
+}
+
+.line {
+    background-color: #eeeeee;
+    width: 100%;
+    height: 1px;
+    margin-bottom: 30px;
+    margin-top: 10px;
+}
+
+
+.line-pop {
+    background-color: #eeeeee;
+    width: 100%;
+    height: 1px;
+}
+.popo-order{
+    padding-bottom: 8px;
+    cursor: pointer;
+}
+.popo-work{
+    padding-top: 8px;
+    cursor: pointer;
+}
+
+
+
+.tip-line {
+    background-color: #eeeeee;
+    width: 100%;
+    height: 1px;
+    margin-bottom: 10px;
+    margin-top: 10px;
+}
+

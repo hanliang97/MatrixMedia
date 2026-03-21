@@ -1,0 +1,113 @@
+#app {
+
+  // 主体区域
+  .main-container {
+    flex:1;
+    height: calc(100vh - 98px);
+    transition: margin-left .28s;
+  }
+
+  // 侧边栏
+  .sidebar-container {
+    .horizontal-collapse-transition {
+      transition: 0s width ease-in-out, 0s padding-left ease-in-out, 0s padding-right ease-in-out;
+    }
+    
+    transition: width .28s;
+    width: 256px !important;
+    font-size: 0px;
+    z-index: 1001;
+    height: calc(100vh - 95px);
+    a {
+      display: inline-block;
+      width: 100%;
+    }
+
+    .svg-icon {
+      margin-left: 14px;
+    }
+
+    .el-menu {
+      border: none;
+      width: 100% !important;
+    }
+  }
+
+  .hideSidebar {
+    .sidebar-container {
+
+      width: 60px !important;
+    }
+
+    .navbar-header-fixed {
+      width: calc(100% - 60px);
+      ;
+    }
+
+   
+
+    .submenu-title-noDropdown {
+      padding-left: 10px !important;
+      position: relative;
+
+      .el-tooltip {
+        padding: 0 10px !important;
+      }
+    }
+
+    .el-submenu {
+      &>.el-submenu__title {
+        padding-left: 10px !important;
+
+        &>span {
+          height: 0;
+          width: 0;
+          overflow: hidden;
+          visibility: hidden;
+          display: inline-block;
+        }
+
+        .el-submenu__icon-arrow {
+          display: none;
+        }
+      }
+    }
+  }
+
+  .sidebar-container .nest-menu .el-submenu>.el-submenu__title,
+  .sidebar-container .el-submenu .el-menu-item {
+    min-width: 180px !important;
+  }
+
+  .el-menu--collapse .el-menu .el-submenu {
+    min-width: 180px !important;
+  }
+
+  //适配移动端
+  .mobile {
+    .main-container {
+      margin-left: 0px;
+    }
+
+    .sidebar-container {
+      top: 50px;
+      transition: transform .28s;
+      width: 180px !important;
+    }
+
+    &.hideSidebar {
+      .sidebar-container {
+        transition-duration: 0.3s;
+        transform: translate3d(-180px, 0, 0);
+      }
+    }
+  }
+
+  .withoutAnimation {
+
+    .main-container,
+    .sidebar-container {
+      transition: none;
+    }
+  }
+}
