@@ -4,11 +4,22 @@ const https = require("https");
 const http = require("http");
 const moment = require("moment"); // 引入日期处理库
 
+/**
+ * 数据目录：打包后 __dirname 在 app.asar 内，macOS/Windows 均无法写入。
+ * 使用 userData 下的可写目录（如 ~/Library/Application Support/<应用名>/data）。
+ */
+function getDataDir() {
+  try {
+    const { app } = require("electron");
+    if (app && typeof app.getPath === "function") {
+      return path.join(app.getPath("userData"), "data");
+    }
+  } catch (_) {
+    /* 非 Electron 主进程环境 */
+  }
+  return path.resolve(__dirname, "data");
+}
 
-const dataDir = path.resolve(__dirname, "data");
-const agent = new https.Agent({
-  rejectUnauthorized: false,
-});
 
 // 工具：读取 JSON
 function readJsonFile(filePath) {
@@ -39,7 +50,7 @@ function generateId() {
  * @returns {Object|Array|null} 结果
  */
 function changeData({ item, fileName, type }) {
-  const folderPath = path.join(dataDir, fileName); // fileName 是文件夹
+  const folderPath = path.join(getDataDir(), fileName); // fileName 是文件夹
   if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
 
   item = item || {};
