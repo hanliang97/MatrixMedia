@@ -18,7 +18,7 @@ export default async function (page, data, window,event) {
     await page.waitForSelector(selector, { timeout: 1000 });
     const input = await page.$(selector);
     await input.click();
-    await page.keyboard.type(data.data.bt1 + " " + data.data.bq.replace("#解压", ""), { delay: 50 });
+    await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });
   } catch (e) {
     console.error("❌ 输入标题失败", e);
   }
@@ -29,8 +29,30 @@ export default async function (page, data, window,event) {
   }
   try {
     await page.waitForSelector("#preview-tours video", { timeout: 1000 * 60 * 5 });
-    await page.waitForSelector("._button-primary_3a3lq_60", { timeout: 10000 });
-    await page.click("._button-primary_3a3lq_60", { delay: 200 });
+    await page.waitForFunction(
+      () => {
+        const bar = document.querySelector("#setting-tours + div");
+        if (!bar || bar.offsetParent === null) return false;
+        for (const row of bar.querySelectorAll(":scope > div")) {
+          const t = row.textContent.replace(/\s+/g, "").trim();
+          if (t === "发布") return true;
+        }
+        return false;
+      },
+      { timeout: 10000 }
+    );
+    const publishHandle = await page.evaluateHandle(() => {
+      const bar = document.querySelector("#setting-tours + div");
+      if (!bar) return null;
+      for (const row of bar.querySelectorAll(":scope > div")) {
+        const t = row.textContent.replace(/\s+/g, "").trim();
+        if (t === "发布") return row;
+      }
+      return null;
+    });
+    const publishEl = publishHandle.asElement();
+    if (!publishEl) throw new Error("未找到发布按钮");
+    await publishEl.click({ delay: 200 });
     console.log("✅ 快手视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {

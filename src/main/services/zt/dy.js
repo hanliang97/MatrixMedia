@@ -1,7 +1,10 @@
 import path from "path";
 
-async function findBilibiliArticlesByName(page, name, window) {
-  const sel = ".video-card-zQ02ng";
+async function findBilibiliArticlesByName(page, name, window, cardSelector) {
+  const sel =
+    cardSelector && String(cardSelector).trim()
+      ? String(cardSelector).trim()
+      : ".video-card-zQ02ng";
   await page.waitForSelector(sel, { timeout: 5000 });
   const items = await page.$$(sel);
   for (const item of items) {
@@ -38,7 +41,7 @@ async function findBilibiliArticlesByName(page, name, window) {
 export default async function (page, data, window, event) {
   console.log("开始处理抖音:", data);
   await page.waitForTimeout(1000 * 5);
-  const result = await findBilibiliArticlesByName(page, data.bt, window);
+  const result = await findBilibiliArticlesByName(page, data.bt, window, data.statusCalss);
   if (result) {
     console.log("找到抖音视频:", result);
     event.reply("puppeteerFile-done", {

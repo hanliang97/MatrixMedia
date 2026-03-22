@@ -12,6 +12,22 @@ import {
   clearAccountLoginFlag,
 } from "@/utils/accountLoginFlag";
 
+const getCookieTaskHandlers = new Map();
+let getCookieListenerBound = false;
+
+function ensureGetCookieDoneListener() {
+  if (getCookieListenerBound) return;
+  getCookieListenerBound = true;
+  ipcRenderer.on("getCookie-done", (event, data) => {
+    const { taskId } = data;
+    const handler = getCookieTaskHandlers.get(taskId);
+    if (handler) {
+      handler(data);
+      getCookieTaskHandlers.delete(taskId);
+    }
+  });
+}
+
 function addFetchRoute(routes) {
   return new Promise(resolve => {
     fetch("http://localhost:30088/changeData", {
@@ -57,6 +73,7 @@ function addFetchRoute(routes) {
             const taskId = Date.now() + Math.random(); // 更唯一些
             const partition = "persist:" + i.phone.split('-')[0] + i.pt;
 
+            ensureGetCookieDoneListener();
             ipcRenderer.send("getCookie", {
               taskId,
               partition,
@@ -64,17 +81,7 @@ function addFetchRoute(routes) {
               pt: i.pt,
               name: `${i.phone.split('-')[0]}${i.pt}登录`,
             });
-            // 建立一个任务监听池
-            const taskHandlers = new Map();
-            ipcRenderer.on("getCookie-done", (event, data) => {
-              const { taskId } = data;
-              const handler = taskHandlers.get(taskId);
-              if (handler) {
-                handler(data);
-                taskHandlers.delete(taskId); // 一次性任务，用完移除
-              }
-            });
-            taskHandlers.set(taskId, data => {
+            getCookieTaskHandlers.set(taskId, data => {
               const flagName = data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
               if (data.success) {
                 if (data.result) {

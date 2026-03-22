@@ -30,9 +30,13 @@ export default async function (page, data, window,event) {
   }
 
   try {
-    await page.type("#my-position", "上雪工业园", { delay: 200 });
+    const address =
+      (data.data && String(data.data.address || "").trim()) || "";
+    if (address) {
+      await page.type("#my-position", address, { delay: 200 });
+    }
   } catch (err) {
-    console.error("水印处理失败:", err);
+    console.error("地址填写失败:", err);
   }
 
   // 点击提交按钮

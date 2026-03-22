@@ -5,7 +5,7 @@
       :close-on-click-modal="false"
       :visible.sync="metaVisible"
       :close-on-press-escape="false"
-      width="560px"
+      width="800px"
       @close="handleMetaClose"
     >
       <p class="file-line"><strong>已选文件：</strong>{{ displayFileName }}</p>
@@ -16,9 +16,21 @@
         <el-form-item label="视频标题">
           <el-input v-model="form.bt1" placeholder="发布时使用的标题" />
         </el-form-item>
+        
         <el-form-item label="视频标签">
           <el-input v-model="form.bq" placeholder="视频标签" />
         </el-form-item>
+        <el-form-item label="概括短标题">
+          <el-input v-model="form.bt2" placeholder="选填，建议 6～16 字" />
+          <p class="bt2-tip">
+            仅<strong>微信视频号</strong>会用到本项：对应发布页「概括视频主要内容」。其它平台忽略；若不填则自动沿用上方「视频标题」。
+          </p>
+        </el-form-item>
+        <el-form-item label="地址"> 
+          <el-input v-model="form.address" placeholder="选填" /> 
+          <p class="bt2-tip">
+            仅<strong>百家号</strong>会用到本项：对应发布页「地址」。其它平台忽略；若不填则不填写。
+          </p> </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button @click="metaVisible = false">取消</el-button>
@@ -49,11 +61,11 @@
         <span class="custom-tree-node" slot-scope="{ data }">
           <template v-if="!data.url">
             <span>{{ data.title }}</span>
-            <el-button size="mini" type="text" style="margin-left: 10px" @click.stop="verifyLogin(data)">验证登录</el-button>
+            <el-button size="mini" type="text" style="margin-left: 5px" @click.stop="verifyLogin(data)">验证登录</el-button>
           </template>
           <template v-else>
             <span>{{ data.pt }}</span>
-            <span style="margin-left: 10px" :style="{ color: data.loggedIn ? 'green' : 'red' }">
+            <span style="margin-left: 5px" :style="{ color: data.loggedIn ? 'green' : 'red' }">
               <span v-if="data.loggedIn" class="login-ok" @click="reLogin(data)">登录√</span>
               <span v-else @click="reLogin(data)">❌重新登录</span>
             </span>
@@ -128,7 +140,9 @@ export default {
       form: {
         title: "",
         bt1: "",
+        bt2: "",
         bq: "",
+        address: "",
       },
       thisShow: false,
       closeWindow: true,
@@ -148,21 +162,27 @@ export default {
     },
   },
   mounted() {
-    ipcRenderer.on("getCookie-done", (event, data) => {
+    this._onGetCookieDone = (event, data) => {
       const { taskId } = data;
       const handler = this.taskHandlers.get(taskId);
       if (handler) {
         handler(data);
         this.taskHandlers.delete(taskId);
       }
-    });
+    };
+    ipcRenderer.on("getCookie-done", this._onGetCookieDone);
+  },
+  beforeDestroy() {
+    if (this._onGetCookieDone) {
+      ipcRenderer.removeListener("getCookie-done", this._onGetCookieDone);
+    }
   },
   methods: {
     open(filePath) {
       if (!filePath) return;
       this.localFilePath = filePath;
       const defaultTitle = fileStem(filePath);
-      this.form = { title: defaultTitle, bt1: "", bq: "" };
+      this.form = { title: defaultTitle, bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
       this.metaVisible = true;
@@ -174,15 +194,18 @@ export default {
 
     buildVideoPayload() {
       const bookName = (this.form.title && this.form.title.trim()) || this.defaultBookName();
+      const bt1 = this.form.bt1.trim();
+      const bt2 = (this.form.bt2 && this.form.bt2.trim()) || bt1;
       return {
         bookName,
         textType: "local",
         data: {
           textOtherName: fileStem(this.localFilePath),
-          bt1: this.form.bt1.trim(),
-          bt2: this.form.bt1.trim(),
+          bt1,
+          bt2,
           bq: (this.form.bq || "").trim(),
           bdText: "",
+          address: this.form.address.trim(),
         },
       };
     },
@@ -216,7 +239,7 @@ export default {
 
     resetState() {
       this.localFilePath = "";
-      this.form = { title: "", bt1: "", bq: "" };
+      this.form = { title: "", bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
     },
@@ -387,12 +410,19 @@ export default {
 .meta-form {
   margin-bottom: 8px;
 }
+.bt2-tip {
+  margin: 8px 0 0;
+  font-size: 12px;
+  line-height: 1.5;
+  color: #909399;
+}
 .video-form {
   margin-bottom: 16px;
 }
 .custom-tree-node {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   justify-content: space-between;
 }
 .login-ok {
@@ -404,5 +434,6 @@ export default {
 }
 :deep(.el-tree-node.is-expanded > .el-tree-node__children) {
   display: flex;
+  flex-wrap: wrap;
 }
 </style>

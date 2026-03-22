@@ -29,18 +29,63 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入标题失败", e);
   }
   try {
-    await page.waitForSelector(".download-content-Lci5tL", { timeout: 1000 });
-    // 获取元素句柄
-    const input = await page.$(".download-content-Lci5tL input[value='0']");
-    await input.click();
-  } catch (e) {
-    console.error("❌ 输入标题失败", e);
-  }
+    // 不依赖会随打包变化的 container-xxx：等预览区 video（抖音 CDN）与同容器内的 rc 进度条同时出现
+    await page.waitForFunction(
+      () => {
+        for (const v of document.querySelectorAll("video")) {
+          const src = v.currentSrc || v.getAttribute("src") || "";
+          if (!src.includes("douyin.com")) continue;
+          const parent = v.parentElement;
+          if (parent && parent.querySelector(".rc-slider.rc-slider-horizontal")) {
+            return true;
+          }
+        }
+        return false;
+      },
+      { timeout: 1000 * 60 * 5 }
+    );
 
-  try {
-    // .text-JK4gL5
-    // 等待出现.text-JK4gL5 并且文字是 "重新上传"的标签出现
-    await page.waitForSelector(".container-b0L1T6>video", { timeout: 1000 * 60 * 5 });
+    // 「保存权限」区域往往在预览视频就绪后才挂载；放在预览等待之后，并放宽文案/控件匹配
+    await page.waitForFunction(
+      () => {
+        const norm = (t) => String(t).replace(/\s+/g, "").trim();
+        const hasSaveTitleIn = (root) =>
+          [...root.querySelectorAll("span")].some((s) => norm(s.textContent).includes("保存权限"));
+        for (const label of document.querySelectorAll("label")) {
+          if (!label.textContent.includes("不允许")) continue;
+          const inp = label.querySelector('input[value="0"]');
+          if (!inp || (inp.type !== "checkbox" && inp.type !== "radio")) continue;
+          let a = label;
+          for (let i = 0; i < 28 && a; i++) {
+            if (hasSaveTitleIn(a)) return true;
+            a = a.parentElement;
+          }
+        }
+        return false;
+      },
+      { timeout: 30000 }
+    );
+    const saved = await page.evaluate(() => {
+      const norm = (t) => String(t).replace(/\s+/g, "").trim();
+      const hasSaveTitleIn = (root) =>
+        [...root.querySelectorAll("span")].some((s) => norm(s.textContent).includes("保存权限"));
+      for (const label of document.querySelectorAll("label")) {
+        if (!label.textContent.includes("不允许")) continue;
+        const inp = label.querySelector('input[value="0"]');
+        if (!inp || (inp.type !== "checkbox" && inp.type !== "radio")) continue;
+        let a = label;
+        for (let i = 0; i < 28 && a; i++) {
+          if (hasSaveTitleIn(a)) {
+            label.click();
+            return true;
+          }
+          a = a.parentElement;
+        }
+      }
+      return false;
+    });
+    if (!saved) throw new Error("未找到保存权限-不允许");
+
     // 如果出现点击
     await page.click("#popover-tip-container");
     console.log("✅ 抖音视频上传成功");

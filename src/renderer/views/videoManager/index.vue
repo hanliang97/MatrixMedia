@@ -2,6 +2,7 @@
   <div class="container-box">
     <div class="toolbar">
       <el-button type="primary" @click="selectVideoFile">选择视频发布</el-button>
+      <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
     </div>
 
     <LocalVideoPublish ref="localPublishRef" @published="loadRecords" />
@@ -19,16 +20,9 @@
             <el-table-column prop="selectedFile" label="视频文件" width="140" />
             <el-table-column label="平台审核状态" width="200">
               <template slot-scope="scope">
-                <div
-                  v-for="(sub, si) in scope.row.showAlltype"
-                  :key="si"
-                  class="status-row"
-                >
+                <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="status-row">
                   <span class="pt-name" @click="copy(sub.videoLink)">{{ sub.pt }}</span>
-                  <span
-                    :class="{ fail: !sub.videoLink }"
-                    @click="opPt(sub)"
-                  >{{ sub.videoLink ? "通过" : "未通过" }}</span>
+                  <span :class="{ fail: !sub.videoLink }" @click="opPt(sub)">{{ sub.videoLink ? "通过" : "未通过" }}</span>
                 </div>
               </template>
             </el-table-column>
@@ -38,17 +32,8 @@
             </el-table-column>
             <el-table-column label="操作" width="200">
               <template slot-scope="scope">
-                <el-button type="primary" size="mini" class="mb8" @click="getStatus(scope.row.showAlltype)">
-                  获取状态
-                </el-button>
-                <el-popconfirm
-                  confirm-button-text="删除"
-                  cancel-button-text="取消"
-                  icon="el-icon-info"
-                  icon-color="red"
-                  title="确定删除这条记录吗？"
-                  @confirm="handleDelete(scope.row, index, scope.$index)"
-                >
+                <el-button type="primary" size="mini" class="mb8" @click="getStatus(scope.row.showAlltype)">获取状态</el-button>
+                <el-popconfirm confirm-button-text="删除" cancel-button-text="取消" icon="el-icon-info" icon-color="red" title="确定删除这条记录吗？" @confirm="handleDelete(scope.row, index, scope.$index)">
                   <el-button slot="reference" type="danger" size="mini">删除</el-button>
                 </el-popconfirm>
               </template>
@@ -58,26 +43,8 @@
       </template>
     </div>
 
-    <el-dialog
-      :title="loginData.partition"
-      :visible.sync="showLoginDialog"
-      append-to-body
-      destroy-on-close
-      width="1200px"
-    >
-      <webview
-        v-if="loginData.url"
-        :src="loginData.url"
-        style="display: flex; width: 100%; height: 650px"
-        webpreferences="javascript=yes"
-        :httpreferrer="loginData.url"
-        nodeintegrationinsubframes
-        disablewebsecurity
-        allowpopups
-        :partition="loginData.partition.split('-')[0]"
-        :key="loginData.partition.split('-')[0]"
-        :useragent="ptConfig[loginData.pt].useragent"
-      />
+    <el-dialog :title="loginData.partition" :visible.sync="showLoginDialog" append-to-body destroy-on-close width="1200px">
+      <webview v-if="loginData.url" :src="loginData.url" style="display: flex; width: 100%; height: 650px" webpreferences="javascript=yes" :httpreferrer="loginData.url" nodeintegrationinsubframes disablewebsecurity allowpopups :partition="loginData.partition.split('-')[0]" :key="loginData.partition.split('-')[0]" :useragent="ptConfig[loginData.pt].useragent" />
     </el-dialog>
   </div>
 </template>
@@ -96,6 +63,8 @@ export default {
   },
   data() {
     return {
+      // 抖音获取发布状态的class名称
+      statusCalss: ".video-card-zQ02ng",
       ptConfig,
       dataList: {},
       taskHandlers: new Map(),
@@ -122,7 +91,9 @@ export default {
   },
   methods: {
     copy: copyToClipboard,
-
+    openQQGroup() {
+      window.open("https://qm.qq.com/cgi-bin/qm/qr?k=NLsaKNd7gqbOeW_JXNg7bRreFtcLKXmp&jump_from=webapi&authKey=Nd/DrSrJWaH+Nip9gEIGse4LdHWpLkp8bVfcKwinOk4hI8XfNTDvGf/smQgZvWHT", "_blank");
+    },
     async selectVideoFile() {
       const path = await ipcRenderer.invoke("dialog:openVideoFile");
       if (path) {
@@ -147,8 +118,7 @@ export default {
         const list = data[key] || [];
         list.forEach(row => {
           if (row.textType !== "local") return;
-          const mergeKey =
-            row.textOtherName + "-" + row.textType + row.phone.split("-")[0] + row.selectedFile;
+          const mergeKey = row.textOtherName + "-" + row.textType + row.phone.split("-")[0] + row.selectedFile;
           if (!tempData[mergeKey]) {
             const copyRow = JSON.parse(JSON.stringify(row));
             copyRow.showAlltype = [JSON.parse(JSON.stringify(row))];
@@ -189,6 +159,7 @@ export default {
               taskId,
               ...item,
               pt: item.pt + "状态",
+              statusCalss: (this.statusCalss || "").trim(),
             });
             this.taskHandlers.set(taskId, data => {
               acLen++;
@@ -264,6 +235,9 @@ export default {
 
 .toolbar {
   margin-bottom: 16px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .info-box {
