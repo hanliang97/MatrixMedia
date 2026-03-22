@@ -68,49 +68,18 @@ export default {
 
   components: {},
   created() {
-    ipcRenderer.invoke("check-for-updates")
+    ipcRenderer.invoke("check-for-updates");
     ipcRenderer.invoke("IsUseSysTitle").then(res => {
       this.IsUseSysTitle = res;
     });
     // 下载进度
-    ipcRenderer.on("download-progress", (event, arg) => {
-      this.percentage = Number(arg);
-      this.dialogVisible =  Boolean(this.percentage)
-      
-    });
+    ipcRenderer.on("download-progress", this._onDownloadProgress);
     // 下载报错
-    ipcRenderer.on("download-error", (event, arg) => {
-      if (arg) {
-        this.progressStaus = "exception";
-        this.percentage = 40;
-        this.colors = "#d81e06";
-      }
-    });
+    ipcRenderer.on("download-error", this._onDownloadError);
     // 下载暂停提示
-    ipcRenderer.on("download-paused", (event, arg) => {
-      if (arg) {
-        this.progressStaus = "warning";
-        this.$alert("下载由于未知原因被中断！", "提示", {
-          confirmButtonText: "重试",
-          callback: () => {
-            ipcRenderer.invoke("check-for-updates");
-          },
-        });
-      }
-    });
+    ipcRenderer.on("download-paused", this._onDownloadPaused);
     // 下载成功
-    ipcRenderer.on("download-done", (event, age) => {
-      this.filePath = age.filePath;
-      this.progressStaus = "success";
-      this.dialogVisible = false
-      this.$alert("更新下载完成！", "提示", {
-        confirmButtonText: "安装",
-        callback: (action) => {
-          shell.openPath(this.filePath);
-        },
-      });
-    });
-   
+    ipcRenderer.on("download-done", this._onDownloadDone);
   },
 
   mounted() {
@@ -120,6 +89,55 @@ export default {
   },
 
   methods: {
+    _defaultProgressColors() {
+      return [
+        { color: "#f56c6c", percentage: 20 },
+        { color: "#e6a23c", percentage: 40 },
+        { color: "#6f7ad3", percentage: 60 },
+        { color: "#1989fa", percentage: 80 },
+        { color: "#5cb87a", percentage: 100 },
+      ];
+    },
+    resetDownloadUi() {
+      this.percentage = 0;
+      this.progressStaus = null;
+      this.colors = this._defaultProgressColors();
+      this.dialogVisible = false;
+    },
+    _onDownloadProgress(event, arg) {
+      this.percentage = Number(arg);
+      this.dialogVisible = Boolean(this.percentage);
+    },
+    _onDownloadError(event, arg) {
+      if (arg) {
+        this.progressStaus = "exception";
+        this.percentage = 40;
+        this.colors = "#d81e06";
+      }
+    },
+    _onDownloadPaused(event, arg) {
+      if (arg) {
+        this.progressStaus = "warning";
+        this.$alert("下载由于未知原因被中断！", "提示", {
+          confirmButtonText: "重试",
+          callback: () => {
+            this.resetDownloadUi();
+            ipcRenderer.invoke("check-for-updates");
+          },
+        });
+      }
+    },
+    _onDownloadDone(event, age) {
+      this.filePath = age.filePath;
+      this.progressStaus = "success";
+      this.dialogVisible = false;
+      this.$alert("更新下载完成！", "提示", {
+        confirmButtonText: "安装",
+        callback: () => {
+          shell.openPath(this.filePath);
+        },
+      });
+    },
     Mini() {
       ipcRenderer.invoke("windows-mini");
     },
@@ -134,6 +152,10 @@ export default {
   },
   destroyed() {
     ipcRenderer.removeAllListeners("w-max");
+    ipcRenderer.removeListener("download-progress", this._onDownloadProgress);
+    ipcRenderer.removeListener("download-error", this._onDownloadError);
+    ipcRenderer.removeListener("download-paused", this._onDownloadPaused);
+    ipcRenderer.removeListener("download-done", this._onDownloadDone);
   }
 };
 </script>

@@ -48,32 +48,80 @@ function getAllReleases() {
   });
 }
 
+/** 解析 v0.9.7 / 0.9.7 为可比较的数字（按段比较，避免 0.9.10 与 parseInt 拼接错误） */
+function compareSemver(remoteRaw, localRaw) {
+  const norm = s =>
+    String(s || "")
+      .replace(/^v/i, "")
+      .trim()
+      .split(".")
+      .map(x => parseInt(x, 10) || 0);
+  const a = norm(remoteRaw);
+  const b = norm(localRaw);
+  const len = Math.max(a.length, b.length, 3);
+  for (let i = 0; i < len; i++) {
+    const da = a[i] || 0;
+    const db = b[i] || 0;
+    if (da !== db) {
+      return da > db ? 1 : -1;
+    }
+  }
+  return 0;
+}
+
+/**
+ * 与 CI 产物一致：
+ * Win: Setup-0.9.7-win-x64.exe
+ * Mac ARM: 矩媒-0.9.7-arm64.dmg（Apple Silicon 时 process.arch === "arm64"）
+ * Intel Mac: 矩媒-0.9.7.dmg（文件名不含 -arm64 的普通 dmg）
+ */
+function pickReleaseInstaller(assets) {
+  const list = assets || [];
+  const platform = process.platform;
+  if (platform === "win32") {
+    return (
+      list.find(a => /Setup-[\d.]+-win-x64\.exe$/i.test(a.name)) ||
+      list.find(a => /-win-x64\.exe$/i.test(a.name)) ||
+      list.find(a => /\.exe$/i.test(a.name))
+    );
+  }
+  if (platform === "darwin") {
+    const dmgs = list.filter(a => /\.dmg$/i.test(a.name));
+    const isAppleSilicon = process.arch === "arm64";
+    if (isAppleSilicon) {
+      const arm = dmgs.find(a => /-arm64\.dmg$/i.test(a.name));
+      if (arm) {
+        return arm;
+      }
+    } else {
+      const intelDmg = dmgs.find(a => !/-arm64\.dmg$/i.test(a.name));
+      if (intelDmg) {
+        return intelDmg;
+      }
+    }
+    return dmgs.length > 0 ? dmgs[0] : null;
+  }
+  return null;
+}
+
 export default {
   async Mainfunc(IsUseSysTitle) {
     // Always register the check-for-updates handler first
     ipcMain.handle("check-for-updates", async event => {
       let datas = await getAllReleases();
-      if (datas.length > 0) {
-        let lastData = datas[0];
-        let lastVersion = parseInt(lastData.name.replace("v", "").split(".").join(""));
-        let currentVersion = parseInt(version.split(".").join(""));
-        const assets = lastData.assets || [];
-        let installer = null;
-        if (process.platform === "darwin") {
-          installer =
-            assets.find(a => /\.dmg$/i.test(a.name)) ||
-            assets.find(a => /\.pkg$/i.test(a.name)) ||
-            assets.find(a => /\.zip$/i.test(a.name));
-        } else if (process.platform === "win32") {
-          installer = assets.find(a => /\.exe$/i.test(a.name));
-        }
-        const downloadURL = installer && installer.browser_download_url;
-        if (downloadURL) {
-          console.log(lastVersion, currentVersion, downloadURL, "66666666666666666");
-          if (lastVersion > currentVersion) {
-            downloadFile.download(BrowserWindow.fromWebContents(event.sender), downloadURL);
-          }
-        }
+      if (!Array.isArray(datas) || datas.length === 0) {
+        return false;
+      }
+      const lastData = datas[0];
+      const remoteVer =
+        (lastData.tag_name && String(lastData.tag_name).replace(/^v/i, "")) ||
+        (lastData.name && String(lastData.name).replace(/^v/i, ""));
+      const cmp = compareSemver(remoteVer, version);
+      const assets = lastData.assets || [];
+      const installer = pickReleaseInstaller(assets);
+      const downloadURL = installer && installer.browser_download_url;
+      if (downloadURL && cmp > 0) {
+        downloadFile.download(BrowserWindow.fromWebContents(event.sender), downloadURL);
       }
       return false;
     });
