@@ -1,8 +1,9 @@
 /**
  * 发布流水线（本地执行）：
- * 1. 在 main 上升版本号并提交、推送
- * 2. 切到 prod，合并 main，推送 prod（prod 仅承载发布，日常开发在 main）
- * 3. 切回 main
+ * 1. 在 main 上升版本号并提交、推送 origin main
+ * 2. 同步 main 到 Gitee（git@gitee.com:gzlingyi_0/pubtw.git），失败则强制推送
+ * 3. 切到 prod，合并 main，推送 prod（prod 仅承载发布，日常开发在 main）
+ * 4. 切回 main
  *
  * 用法: node pushall.js [patch|minor|major]
  * 默认 patch。要求工作区干净（无未提交改动）。
@@ -14,6 +15,9 @@ const { execSync } = require('child_process');
 
 const ROOT = path.resolve(__dirname);
 const PKG = path.join(ROOT, 'package.json');
+
+const GITEE_REMOTE = 'gitee';
+const GITEE_URL = 'git@gitee.com:gzlingyi_0/pubtw.git';
 
 const BUMP = ['patch', 'minor', 'major'].includes(process.argv[2])
   ? process.argv[2]
@@ -73,6 +77,25 @@ function checkoutBranch(name) {
   }
 }
 
+function ensureGiteeRemote() {
+  try {
+    runSilent(`git remote get-url ${GITEE_REMOTE}`);
+    run(`git remote set-url ${GITEE_REMOTE} ${GITEE_URL}`);
+  } catch {
+    run(`git remote add ${GITEE_REMOTE} ${GITEE_URL}`);
+  }
+}
+
+function syncGiteeMain() {
+  ensureGiteeRemote();
+  try {
+    run(`git push ${GITEE_REMOTE} main`);
+  } catch {
+    console.warn('推送到 Gitee 失败，正在强制同步 main...');
+    run(`git push -f ${GITEE_REMOTE} main`);
+  }
+}
+
 function main() {
   assertCleanWorkingTree();
 
@@ -95,13 +118,15 @@ function main() {
   run(`git commit -m "chore(release): v${next}"`);
   run('git push origin main');
 
+  syncGiteeMain();
+
   checkoutBranch('prod');
   run('git pull --ff-only origin prod');
   run(`git merge main -m "chore: merge main for release v${next}"`);
   run('git push origin prod');
 
   run('git checkout main');
-  console.log('完成。当前分支: main，已推送 main 与 prod。');
+  console.log('完成。当前分支: main，已推送 origin main、Gitee main 与 prod。');
 }
 
 main();
