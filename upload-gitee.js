@@ -12,7 +12,7 @@ let access_token = args[0]
 let name = args[1]
 let owner = 'gzlingyi_0'
 let repo = 'pubtw'
-let target_commitish = 'master'
+let target_commitish = 'main'
 let baseUrl = 'gitee.com'
 // 创建仓release post
 let createReleaseApi = `/api/v5/repos/${owner}/${repo}/releases`
