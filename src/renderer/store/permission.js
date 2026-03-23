@@ -40,11 +40,22 @@ function addFetchRoute(routes) {
       }),
     })
       .then(r => r.json())
+      .catch(err => {
+        console.error("[permission] 拉取账号路由失败:", err);
+        return {};
+      })
       .then(r => {
         let endData = {};
+        const payload = r && typeof r === "object" ? r : {};
+        const raw =
+          payload.data != null &&
+          typeof payload.data === "object" &&
+          !Array.isArray(payload.data)
+            ? payload.data
+            : {};
 
-        for (let item in r.data) {
-          let v = r.data[item];
+        for (let item in raw) {
+          let v = raw[item];
           v.forEach(i => {
             if (!endData[i.phone]) {
               endData[i.phone] = {
