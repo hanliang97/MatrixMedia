@@ -171,8 +171,6 @@ function tgaGetRelease(callback) {
       // 可能还需要其他标头，比如授权信息
     }
   }
-  let data = ''
-  console.log('标签获取', options)
   const req = https.request(options, res => {
     let data = ''
 
@@ -226,7 +224,7 @@ function getAllReleases(callback) {
 // 删除最旧的 Release
 function deleteOldestRelease() {
   getAllReleases(releases => {
-    console.log(releases)
+    console.log(releases, releases.assets)
     if (releases.length >= 5) {
       // 找到最旧的 Release
       const oldestRelease = releases[0]
