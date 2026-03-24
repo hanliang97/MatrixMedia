@@ -5,14 +5,51 @@ const http = require("http");
 const moment = require("moment"); // 引入日期处理库
 
 /**
- * 数据目录：打包后 __dirname 在 app.asar 内，macOS/Windows 均无法写入。
- * 使用 userData 下的可写目录（如 ~/Library/Application Support/<应用名>/data）。
+ * 业务数据目录名（英文路径，避免卸载器/工具链编码问题；与 appId 一致便于识别）
+ */
+const PERSISTENT_DATA_ROOT = "MatrixMedia";
+
+function dirHasContent(dir) {
+  try {
+    return fs.existsSync(dir) && fs.readdirSync(dir).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 从旧版 userData/data 一次性迁移到「文档」下目录（卸载应用时 userData 常被清空）。
+ */
+function migrateLegacyDataIfNeeded(legacyDir, dataDir) {
+  if (!dirHasContent(legacyDir) || dirHasContent(dataDir)) return;
+  try {
+    fs.mkdirSync(dataDir, { recursive: true });
+    for (const name of fs.readdirSync(legacyDir)) {
+      const from = path.join(legacyDir, name);
+      const to = path.join(dataDir, name);
+      fs.cpSync(from, to, { recursive: true });
+    }
+  } catch (e) {
+    console.error("MatrixMedia: 迁移历史数据到文档目录失败", e);
+  }
+}
+
+/**
+ * 数据目录：打包后 __dirname 在 app.asar 内，无法写入。
+ * 使用用户「文档」下的目录，卸载应用后一般仍会保留；并兼容从 userData/data 迁移。
  */
 function getDataDir() {
   try {
     const { app } = require("electron");
     if (app && typeof app.getPath === "function") {
-      return path.join(app.getPath("userData"), "data");
+      const documents = app.getPath("documents");
+      const dataDir = path.join(documents, PERSISTENT_DATA_ROOT, "data");
+      const legacyDir = path.join(app.getPath("userData"), "data");
+      migrateLegacyDataIfNeeded(legacyDir, dataDir);
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      return dataDir;
     }
   } catch (_) {
     /* 非 Electron 主进程环境 */
