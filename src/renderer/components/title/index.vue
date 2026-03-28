@@ -52,10 +52,15 @@ export default {
     dialogVisible: false,
     progressStaus: null,
     filePath: "",
-    srcList:[
-      require('@/assets/i1.png'),
-      require('@/assets/i2.png'),
-    ],
+    srcList: process.platform === "darwin"
+      ? [
+          require("@/assets/mac1.png"),
+          require("@/assets/mac2.png"),
+        ]
+      : [
+          require("@/assets/i1.png"),
+          require("@/assets/i2.png"),
+        ],
     colors: [
       { color: "#f56c6c", percentage: 20 },
       { color: "#e6a23c", percentage: 40 },
