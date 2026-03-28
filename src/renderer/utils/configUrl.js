@@ -1,3 +1,10 @@
+// 这个是发布视频的配置，获取状态的配置在getLoginInfo.js中
+/**
+ * index: 登录地址
+ * upload: 上传视频地址
+ * useragent: 用户代理
+ * listIndex: 列表页地址
+ */
 export default {
   抖音: {
     index: "https://creator.douyin.com/creator-micro/home",
@@ -34,6 +41,13 @@ export default {
     upload: "https://cp.kuaishou.com/article/publish/video?tabType=1",
     useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
     listIndex: "https://cp.kuaishou.com/article/manage/video",
-  }
+  },
+  小红书: {
+    index: "https://creator.xiaohongshu.com/new/home",
+    
+    upload: "https://creator.xiaohongshu.com/publish/publish?from=menu&target=video",
+    useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    listIndex: "https://creator.xiaohongshu.com/new/note-manager",
+  },
 
 };
