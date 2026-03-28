@@ -96,6 +96,7 @@ export default async function (page, data, window,event) {
       status: false,
       message: "上传失败",
     });
+    maybeClosePublishWindow(data, window);
     console.error("❌ 发布失败", e);
   }
 }

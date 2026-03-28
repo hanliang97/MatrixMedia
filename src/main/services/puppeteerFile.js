@@ -40,9 +40,42 @@ async function doUpload(data, event, onFinish) {
   const maxRetries = 5;
   let currentAttempt = 0;
   let finished = false;
+  let activeBrowser = null;
+  let activeWin = null;
+  let autoCloseTimer = null;
+  let actionCheckTimer = null;
+
+  const cleanupTaskResources = () => {
+    if (actionCheckTimer) {
+      clearTimeout(actionCheckTimer);
+      actionCheckTimer = null;
+    }
+    if (autoCloseTimer) {
+      clearTimeout(autoCloseTimer);
+      autoCloseTimer = null;
+    }
+    if (activeWin && !activeWin.isDestroyed() && data.closeWindowAfterPublish !== false) {
+      try {
+        activeWin.close();
+      } catch (e) {
+        console.error("兜底关闭窗口失败:", e);
+      }
+    }
+    if (activeBrowser) {
+      try {
+        activeBrowser.disconnect();
+      } catch (e) {
+        console.error("兜底断开浏览器连接失败:", e);
+      }
+    }
+    activeWin = null;
+    activeBrowser = null;
+  };
+
   const finishOnce = () => {
     if (finished) return;
     finished = true;
+    cleanupTaskResources();
     if (onFinish) onFinish();
   };
 
@@ -62,6 +95,7 @@ async function doUpload(data, event, onFinish) {
 
     try {
       browser = await pie.connect(app, puppeteer);
+      activeBrowser = browser;
       win = new BrowserWindow({
         show:  data?.show ?? false,
         width: data?.width ?? 1300,
@@ -74,10 +108,11 @@ async function doUpload(data, event, onFinish) {
           devTools: true,
         },
       });
+      activeWin = win;
       page = await pie.getPage(browser, win);
       // 添加10分钟自动关闭窗口的定时器
       const AUTO_CLOSE_DELAY = 10 * 60 * 1000; // 10分钟
-      let autoCloseTimer = setTimeout(() => {
+      autoCloseTimer = setTimeout(() => {
         console.log(`窗口 ${data.partition} 已自动关闭（10分钟超时）`);
         if (win && !win.isDestroyed()) {
           win.close();
@@ -94,13 +129,16 @@ async function doUpload(data, event, onFinish) {
       
       // 窗口关闭事件
       win.on("closed", () => {
-         clearTimeout(autoCloseTimer); // 清除自动关闭定时器
-         autoCloseTimer = null;
+        clearTimeout(autoCloseTimer); // 清除自动关闭定时器
+        autoCloseTimer = null;
         if (browser) browser.disconnect();
+        if (activeWin === win) activeWin = null;
+        if (activeBrowser === browser) activeBrowser = null;
       });
 
       // 检查URL是否匹配并执行操作
-      setTimeout(async () => {
+      actionCheckTimer = setTimeout(async () => {
+        actionCheckTimer = null;
         const currentUrl = page.url();
         if (currentUrl === data.url) {
           try {

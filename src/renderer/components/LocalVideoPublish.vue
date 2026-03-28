@@ -431,6 +431,8 @@ export default {
         const isBlbl = String(p.pt || "").includes("哔哩哔哩");
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
         const taskId = Date.now() + Math.random();
+        const shouldShow = isBlbl ? true : this.thisShow;
+        const shouldCloseWindowAfterPublish = shouldShow ? this.closeWindow : true;
         ipcRenderer.send("puppeteerFile", {
           ...p,
           taskId,
@@ -439,8 +441,8 @@ export default {
           selectedFile,
           url: this.ptConfig[p.pt].upload,
           // 哔哩哔哩需要人工上传封面，强制打开窗口以便用户操作
-          show: isBlbl ? true : this.thisShow,
-          closeWindowAfterPublish: isBlbl ? false : this.thisShow ? this.closeWindow : true,
+          show: shouldShow,
+          closeWindowAfterPublish: shouldCloseWindowAfterPublish,
           useragent: this.ptConfig[p.pt].useragent,
           partition,
           filePath: this.localFilePath,
