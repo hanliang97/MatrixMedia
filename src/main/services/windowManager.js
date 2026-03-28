@@ -4,8 +4,8 @@ import getCookie from "./getCookie";
 import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
 import setIpc from "./ipcMain";
 import { winURL, loadingURL } from "../config/StaticPath";
+import baseMenu from "../config/menu";
 
-let menuconfig = [];
 let loadWindow = null;
 let mainWindow = null;
 setIpc.Mainfunc(IsUseSysTitle);
@@ -13,6 +13,7 @@ setIpc.Mainfunc(IsUseSysTitle);
 const version = require("../../../package.json").version;
 
 function createMainWindow(fn) {
+  const menuconfig = Array.isArray(baseMenu) ? [...baseMenu] : [];
   /**
    * Initial window options
    */

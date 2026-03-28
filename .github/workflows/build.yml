@@ -74,6 +74,27 @@ jobs:
         run: |
           VERSION=$(node -p "require('./package.json').version")
           echo "version=$VERSION" >> $GITHUB_OUTPUT
+      - name: Generate release notes
+        shell: bash
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | head -n 1)
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)")
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)")
+          fi
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 无更新记录"
+          fi
+          {
+            echo "## 更新记录"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "对比范围: ${PREV_TAG}..HEAD"
+              echo
+            fi
+            echo "$COMMITS"
+          } > release-notes.md
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -84,6 +105,7 @@ jobs:
         with:
           tag_name: v${{ steps.ver.outputs.version }}
           name: v${{ steps.ver.outputs.version }}
+          body_path: release-notes.md
           files: |
             dist-gh/**/*.exe
             dist-gh/**/*.dmg
@@ -107,6 +129,27 @@ jobs:
           merge-multiple: true
       - name: Install dependencies
         run: yarn
+      - name: Generate release notes
+        shell: bash
+        run: |
+          PREV_TAG=$(git tag --sort=-version:refname | head -n 1)
+          if [ -n "$PREV_TAG" ]; then
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s (%h)")
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)")
+          fi
+          if [ -z "$COMMITS" ]; then
+            COMMITS="- 无更新记录"
+          fi
+          {
+            echo "## 更新记录"
+            echo
+            if [ -n "$PREV_TAG" ]; then
+              echo "对比范围: ${PREV_TAG}..HEAD"
+              echo
+            fi
+            echo "$COMMITS"
+          } > release-notes.md
       - name: Upload to Gitee Release
         shell: bash
         run: |
@@ -115,4 +158,4 @@ jobs:
           if [ ${#files[@]} -eq 0 ]; then
             echo "No .exe or .dmg under dist-release"; ls -laR dist-release; exit 1
           fi
-          node upload-gitee.js "${{ secrets.GITEE_ACCESS_TOKEN }}" "$VERSION" "${files[@]}"
+          RELEASE_BODY="$(cat release-notes.md)" node upload-gitee.js "${{ secrets.GITEE_ACCESS_TOKEN }}" "$VERSION" "${files[@]}"

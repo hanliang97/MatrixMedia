@@ -10,10 +10,15 @@ const agent = new https.Agent({
 const args = process.argv.slice(2)
 let access_token = args[0]
 let name = args[1]
+const releaseBodyFromEnv = process.env.RELEASE_BODY
 let owner = 'gzlingyi_0'
 let repo = 'pubtw'
 let target_commitish = 'main'
 let baseUrl = 'gitee.com'
+const releaseBody =
+  typeof releaseBodyFromEnv === 'string' && releaseBodyFromEnv.trim()
+    ? releaseBodyFromEnv
+    : 'Release for ' + name
 // 创建仓release post
 let createReleaseApi = `/api/v5/repos/${owner}/${repo}/releases`
 let pushBody = {
@@ -21,7 +26,7 @@ let pushBody = {
   tag_name: 'v' + name,
   tag: 'v' + name,
   name: 'v' + name,
-  body: 'Release for ' + name,
+  body: releaseBody,
   target_commitish
 }
 

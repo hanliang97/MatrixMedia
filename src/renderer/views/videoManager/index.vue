@@ -27,12 +27,35 @@
               </template>
             </el-table-column>
             <el-table-column prop="phone" label="发布账号" />
+            <el-table-column label="发布进度" width="320">
+              <template slot-scope="scope">
+               
+                <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="progress-row">
+                  <span class="pt-name">{{ sub.pt }}</span>
+                  <div class="progress-detail">
+                    <span class="progress-count">重发 {{ normalizeCount(sub.republishCount) }} 次</span>
+                    <span class="progress-count success">成功 {{ normalizeCount(sub.publishSuccessCount) }}</span>
+                    <span class="progress-count fail">失败 {{ normalizeCount(sub.publishFailCount) }}</span>
+                    <el-tag size="mini" :type="publishStatusType(sub.publishStatus)">{{ publishStatusText(sub.publishStatus) }}</el-tag>
+                  </div>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="来源" width="72">
               <template>本地</template>
             </el-table-column>
             <el-table-column label="操作" width="200">
               <template slot-scope="scope">
-                <el-button type="primary" size="mini" class="mb8" @click="getStatus(scope.row.showAlltype)">获取状态</el-button>
+                <el-button
+                  type="primary"
+                  size="mini"
+                  class="mb8"
+                  :loading="isStatusLoading(scope.row)"
+                  :disabled="isStatusLoading(scope.row)"
+                  @click="handleGetStatus(scope.row)"
+                >
+                  获取状态
+                </el-button>
                 <el-popconfirm confirm-button-text="删除" cancel-button-text="取消" icon="el-icon-info" icon-color="red" title="确定删除这条记录吗？" @confirm="handleDelete(scope.row, index, scope.$index)">
                   <el-button slot="reference" type="danger" size="mini">删除</el-button>
                 </el-popconfirm>
@@ -68,6 +91,7 @@ export default {
       ptConfig,
       dataList: {},
       taskHandlers: new Map(),
+      statusLoadingMap: {},
       loginData: {},
       showLoginDialog: false,
     };
@@ -79,6 +103,8 @@ export default {
       if (handler) {
         handler(data);
         this.taskHandlers.delete(taskId);
+      } else {
+        this.syncPublishProgress(data);
       }
     };
     ipcRenderer.on("puppeteerFile-done", this._onPuppeteerDone);
@@ -91,6 +117,110 @@ export default {
   },
   methods: {
     copy: copyToClipboard,
+    getStatusRowKey(row) {
+      if (!row) return "";
+      return [row.textOtherName || "", String(row.phone || "").split("-")[0], row.selectedFile || ""].join("-");
+    },
+    isStatusLoading(row) {
+      const key = this.getStatusRowKey(row);
+      return !!this.statusLoadingMap[key];
+    },
+    async handleGetStatus(row) {
+      if (!row || this.isStatusLoading(row)) return;
+      const key = this.getStatusRowKey(row);
+      this.$set(this.statusLoadingMap, key, true);
+      this.getStatus(row.showAlltype).catch(err => {
+        console.error("获取状态失败:", err);
+      });
+      setTimeout(() => {
+        this.$set(this.statusLoadingMap, key, false);
+        this.$alert("状态获取处理中，请等待 1-2 分钟后再查看结果。", "声明", {
+          confirmButtonText: "知道了",
+          type: "warning",
+        });
+      }, 10000);
+    },
+    normalizeCount(v) {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : 0;
+    },
+    publishStatusType(status) {
+      if (status === "success") return "success";
+      if (status === "fail") return "danger";
+      return "warning";
+    },
+    publishStatusText(status) {
+      if (status === "success") return "成功";
+      if (status === "fail") return "失败";
+      return "发布中";
+    },
+    getFileName(filePath) {
+      if (!filePath) return "";
+      const s = String(filePath).replace(/\\/g, "/");
+      const arr = s.split("/");
+      return arr[arr.length - 1] || "";
+    },
+    fillPublishStats(row) {
+      const copyRow = { ...row };
+      const attemptCount = Number(copyRow.publishAttemptCount) || 1;
+      copyRow.publishAttemptCount = attemptCount;
+      copyRow.republishCount = Number(copyRow.republishCount);
+      if (!Number.isFinite(copyRow.republishCount) || copyRow.republishCount < 0) {
+        copyRow.republishCount = Math.max(0, attemptCount - 1);
+      }
+      copyRow.publishSuccessCount = this.normalizeCount(copyRow.publishSuccessCount);
+      copyRow.publishFailCount = this.normalizeCount(copyRow.publishFailCount);
+      copyRow.publishStatus = copyRow.publishStatus || "publishing";
+      return copyRow;
+    },
+    findLocalPublishRecord(donePayload) {
+      const textOtherName = donePayload.textOtherName || (donePayload.data && donePayload.data.textOtherName) || "";
+      const selectedFile = donePayload.selectedFile || this.getFileName(donePayload.filePath);
+      const pt = donePayload.pt;
+      const phone = String(donePayload.phone || "").split("-")[0];
+      const dateKeys = Object.keys(this.dataList || {});
+      for (const dateKey of dateKeys) {
+        const dayRows = this.dataList[dateKey] || [];
+        for (const row of dayRows) {
+          const details = row.showAlltype || [];
+          for (const sub of details) {
+            const subPhone = String(sub.phone || "").split("-")[0];
+            if (
+              sub.textType === "local" &&
+              sub.pt === pt &&
+              sub.textOtherName === textOtherName &&
+              sub.selectedFile === selectedFile &&
+              subPhone === phone
+            ) {
+              return { date: dateKey, row: sub };
+            }
+          }
+        }
+      }
+      return null;
+    },
+    async syncPublishProgress(donePayload) {
+      if (!donePayload || donePayload.textType !== "local") return;
+      if (!donePayload.pt || String(donePayload.pt).includes("状态") || String(donePayload.pt).includes("登录")) return;
+      const target = this.findLocalPublishRecord(donePayload);
+      if (!target || !target.row || !target.row.id) return;
+      const row = this.fillPublishStats(target.row);
+      const success = !!donePayload.status;
+      await dataRequest({
+        type: "update",
+        fileName: "pushData",
+        item: {
+          id: row.id,
+          date: target.date,
+          publishSuccessCount: success ? row.publishSuccessCount + 1 : row.publishSuccessCount,
+          publishFailCount: success ? row.publishFailCount : row.publishFailCount + 1,
+          publishStatus: success ? "success" : "fail",
+          lastPublishMessage: donePayload.message || (success ? "发布成功" : "发布失败"),
+          lastPublishAt: Date.now(),
+        },
+      });
+      this.loadRecords();
+    },
     openQQGroup() {
       window.open("https://qm.qq.com/cgi-bin/qm/qr?k=NLsaKNd7gqbOeW_JXNg7bRreFtcLKXmp&jump_from=webapi&authKey=Nd/DrSrJWaH+Nip9gEIGse4LdHWpLkp8bVfcKwinOk4hI8XfNTDvGf/smQgZvWHT", "_blank");
     },
@@ -120,11 +250,11 @@ export default {
           if (row.textType !== "local") return;
           const mergeKey = row.textOtherName + "-" + row.textType + row.phone.split("-")[0] + row.selectedFile;
           if (!tempData[mergeKey]) {
-            const copyRow = JSON.parse(JSON.stringify(row));
-            copyRow.showAlltype = [JSON.parse(JSON.stringify(row))];
+            const copyRow = this.fillPublishStats(JSON.parse(JSON.stringify(row)));
+            copyRow.showAlltype = [this.fillPublishStats(JSON.parse(JSON.stringify(row)))];
             tempData[mergeKey] = copyRow;
           } else {
-            tempData[mergeKey].showAlltype.push(JSON.parse(JSON.stringify(row)));
+            tempData[mergeKey].showAlltype.push(this.fillPublishStats(JSON.parse(JSON.stringify(row))));
           }
         });
         if (Object.keys(tempData).length) {
@@ -273,6 +403,35 @@ export default {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+}
+
+.progress-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+
+.progress-detail {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 300px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.progress-count {
+  font-size: 12px;
+  color: #666;
+}
+
+.progress-count.success {
+  color: #2e8b57;
+}
+
+.progress-count.fail {
+  cursor: default;
 }
 
 .pt-name {

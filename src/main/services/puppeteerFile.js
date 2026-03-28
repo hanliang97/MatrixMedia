@@ -9,48 +9,50 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 const puppeteer = addExtra(puppeteerCore);
 puppeteer.use(StealthPlugin());
 
-// 视频任务队列
-const videoQueue = [];
-let videoBusy = false;
+// Puppeteer 任务串行队列（上传/状态/登录统一排队）
+const taskQueue = [];
+let taskBusy = false;
 
-function enqueueVideoTask(data, event) {
-  videoQueue.push({ data, event });
-  processNextVideo();
+function enqueueTask(data, event) {
+  taskQueue.push({ data, event });
+  processNextTask();
 }
 
-function processNextVideo() {
-  if (videoBusy) return;
-  const next = videoQueue.shift();
+function processNextTask() {
+  if (taskBusy) return;
+  const next = taskQueue.shift();
   if (!next) return;
-  videoBusy = true;
+  taskBusy = true;
   doUpload(next.data, next.event, () => {
-    videoBusy = false;
-    processNextVideo();
+    taskBusy = false;
+    processNextTask();
   });
 }
 
 function upFile() {
   ipcMain.on("puppeteerFile", async (event, args) => {
-    if (args.pt.includes("视频")) {
-      enqueueVideoTask(args, event);
-    } else {
-      doUpload(args, event);
-    }
+    enqueueTask(args, event);
   });
 }
 
 async function doUpload(data, event, onFinish) {
-  data.partition = data.partition.split('-')[0]
+  data.partition = data.partition.split("-")[0];
   const maxRetries = 5;
   let currentAttempt = 0;
+  let finished = false;
+  const finishOnce = () => {
+    if (finished) return;
+    finished = true;
+    if (onFinish) onFinish();
+  };
 
   const createWindowAndAttempt = async () => {
     currentAttempt++;
-    if (currentAttempt > maxRetries) { 
+    if (currentAttempt > maxRetries) {
       console.log("已达到最大重试次数，操作失败", data);
       event.reply("puppeteer-noLogin", data);
-      event.reply("puppeteerFile-done", {...data,status: false});
-      if (onFinish) onFinish();
+      event.reply("puppeteerFile-done", { ...data, status: false });
+      finishOnce();
       return;
     }
 
@@ -101,7 +103,23 @@ async function doUpload(data, event, onFinish) {
       setTimeout(async () => {
         const currentUrl = page.url();
         if (currentUrl === data.url) {
-          Type[data.pt](page, data, win, event,onFinish);
+          try {
+            const action = Type[data.pt];
+            if (typeof action !== "function") {
+              throw new Error(`未找到平台处理器: ${data.pt}`);
+            }
+            await action(page, data, win, event, finishOnce);
+            finishOnce();
+          } catch (err) {
+            console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
+            event.reply("puppeteerFile-done", {
+              ...data,
+              status: false,
+              message: "执行失败",
+            });
+            if (win && !win.isDestroyed()) win.close();
+            finishOnce();
+          }
         } else {
           console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
           win.close();
@@ -115,13 +133,8 @@ async function doUpload(data, event, onFinish) {
       setTimeout(createWindowAndAttempt, 1000);
     }
   };
- console.log(`尝试${currentAttempt}${data.pt}开始`);
-  if (onFinish || data.pt.indexOf("视频") !== -1) {
-    // 由队列管理或视频任务用异步方式
-    setTimeout(createWindowAndAttempt, 1000);
-  } else {
-    createWindowAndAttempt();
-  }
+  console.log(`尝试${currentAttempt}${data.pt}开始`);
+  setTimeout(createWindowAndAttempt, 1000);
 }
 
 export default upFile;

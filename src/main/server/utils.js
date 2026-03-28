@@ -137,11 +137,37 @@ function changeData({ item, fileName, type }) {
 
       // 如果是pushData文件名，则检查重复数据
       if (fileName == "pushData") {
-        const isDuplicate = list.some(existingItem => existingItem.textOtherName === newItem.textOtherName && existingItem.pt === newItem.pt && existingItem.selectedFile === newItem.selectedFile && existingItem.textType === newItem.textType);
+        const duplicateIndex = list.findIndex(
+          existingItem =>
+            existingItem.textOtherName === newItem.textOtherName &&
+            existingItem.pt === newItem.pt &&
+            existingItem.selectedFile === newItem.selectedFile &&
+            existingItem.textType === newItem.textType
+        );
+        const isDuplicate = duplicateIndex !== -1;
         console.log("isDuplicate是否存在相同的数据", isDuplicate);
         // 只有不是重复数据时才添加
         if (!isDuplicate) {
+          const attemptCount = Number(newItem.publishAttemptCount) || 1;
+          newItem.publishAttemptCount = attemptCount;
+          newItem.republishCount = Math.max(0, attemptCount - 1);
+          newItem.publishSuccessCount = Number(newItem.publishSuccessCount) || 0;
+          newItem.publishFailCount = Number(newItem.publishFailCount) || 0;
+          newItem.publishStatus = newItem.publishStatus || "publishing";
+          newItem.lastPublishMessage = newItem.lastPublishMessage || "等待发布结果";
+          newItem.lastPublishAt = newItem.lastPublishAt || Date.now();
           list.push(newItem);
+        } else {
+          const oldItem = list[duplicateIndex] || {};
+          const attemptCount = (Number(oldItem.publishAttemptCount) || 1) + 1;
+          list[duplicateIndex] = {
+            ...oldItem,
+            publishAttemptCount: attemptCount,
+            republishCount: Math.max(0, attemptCount - 1),
+            publishStatus: "publishing",
+            lastPublishMessage: "重新发布中",
+            lastPublishAt: Date.now(),
+          };
         }
       } else {
         // 非pushData文件名，直接添加

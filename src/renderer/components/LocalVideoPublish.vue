@@ -341,6 +341,7 @@ export default {
       }
       const video = this.buildVideoPayload();
       const selectedFile = fileBaseName(this.localFilePath);
+      const currentDate = moment().format("YYYY-MM-DD");
 
       const checked = this.$refs.tree.getCheckedNodes(true);
       const platforms = checked.filter(item => item.url);
@@ -355,19 +356,32 @@ export default {
         return 0;
       });
 
+      const hasBlbl = platforms.some(p => String(p.pt || "").includes("哔哩哔哩"));
+      if (hasBlbl) {
+        this.$alert("哔哩哔哩发布需要手动上传封面，请在弹出的发布窗口中完成封面上传。", "封面提示", {
+          confirmButtonText: "我知道了",
+          type: "warning",
+        });
+      }
+
       for (let p of platforms) {
+        const isBlbl = String(p.pt || "").includes("哔哩哔哩");
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
         const taskId = Date.now() + Math.random();
         ipcRenderer.send("puppeteerFile", {
           ...p,
           taskId,
           ...video,
+          textOtherName: video.data.textOtherName,
+          selectedFile,
           url: this.ptConfig[p.pt].upload,
-          show: this.thisShow,
-          closeWindowAfterPublish: this.thisShow ? this.closeWindow : true,
+          // 哔哩哔哩需要人工上传封面，强制打开窗口以便用户操作
+          show: isBlbl ? true : this.thisShow,
+          closeWindowAfterPublish: isBlbl ? false : this.thisShow ? this.closeWindow : true,
           useragent: this.ptConfig[p.pt].useragent,
           partition,
           filePath: this.localFilePath,
+          date: currentDate,
         });
 
         dataRequest({
@@ -384,7 +398,14 @@ export default {
             phone: p.phone,
             partition,
             url: this.ptConfig[p.pt].listIndex,
-            date: moment().format("YYYY-MM-DD"),
+            date: currentDate,
+            publishAttemptCount: 1,
+            republishCount: 0,
+            publishSuccessCount: 0,
+            publishFailCount: 0,
+            publishStatus: "publishing",
+            lastPublishMessage: "等待发布结果",
+            lastPublishAt: Date.now(),
           },
         });
 
