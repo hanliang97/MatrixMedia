@@ -146,6 +146,8 @@ export default {
       },
       thisShow: false,
       closeWindow: true,
+      republishContext: null,
+      republishTextOtherName: "",
       showLoginDialog: false,
       loginData: {},
       treeData: [],
@@ -185,7 +187,66 @@ export default {
       this.form = { title: defaultTitle, bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
+      this.republishContext = null;
+      this.republishTextOtherName = "";
       this.metaVisible = true;
+    },
+    openRepublish(payload = {}) {
+      const filePath = payload.filePath || "";
+      if (!filePath) {
+        this.$message.warning("缺少历史视频路径，无法重发");
+        return false;
+      }
+      this.localFilePath = filePath;
+      const defaultTitle = fileStem(filePath);
+      const form = payload.form || {};
+      this.form = {
+        title: (form.title || defaultTitle || "").trim(),
+        bt1: (form.bt1 || "").trim(),
+        bt2: (form.bt2 || "").trim(),
+        bq: (form.bq || "").trim(),
+        address: (form.address || "").trim(),
+      };
+      this.thisShow = false;
+      this.closeWindow = true;
+      this.republishTextOtherName = payload.textOtherName || fileStem(filePath);
+      this.republishContext = {
+        records: Array.isArray(payload.records) ? payload.records : [],
+        failedTargets: Array.isArray(payload.failedTargets) ? payload.failedTargets : [],
+      };
+      this.metaVisible = false;
+      this.loadAccounts();
+      this.platformVisible = true;
+      this.$nextTick(() => {
+        const checkedKeys = this.resolveRepublishCheckedKeys(this.republishContext.failedTargets);
+        if (this.$refs.tree) {
+          this.$refs.tree.setCheckedKeys(checkedKeys);
+        }
+      });
+      return true;
+    },
+    resolveRepublishCheckedKeys(failedTargets = []) {
+      if (!Array.isArray(failedTargets) || failedTargets.length === 0) return [];
+      const keys = [];
+      const targetSet = new Set(
+        failedTargets.map(v => `${String(v.pt || "").trim()}__${String(v.phone || "").split("-")[0]}`)
+      );
+      (this.treeData || []).forEach(group => {
+        (group.children || []).forEach(child => {
+          const key = `${String(child.pt || "").trim()}__${String(child.phone || "").split("-")[0]}`;
+          if (targetSet.has(key)) {
+            keys.push(child.id);
+          }
+        });
+      });
+      return keys;
+    },
+    findRepublishRecord(pt, phone) {
+      if (!this.republishContext || !Array.isArray(this.republishContext.records)) return null;
+      const p = String(phone || "").split("-")[0];
+      return this.republishContext.records.find(
+        item => String(item.pt || "") === String(pt || "") && String(item.phone || "").split("-")[0] === p
+      );
     },
 
     defaultBookName() {
@@ -200,7 +261,7 @@ export default {
         bookName,
         textType: "local",
         data: {
-          textOtherName: fileStem(this.localFilePath),
+          textOtherName: this.republishTextOtherName || fileStem(this.localFilePath),
           bt1,
           bt2,
           bq: (this.form.bq || "").trim(),
@@ -242,6 +303,8 @@ export default {
       this.form = { title: "", bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
+      this.republishContext = null;
+      this.republishTextOtherName = "";
     },
 
     loadAccounts() {
@@ -384,30 +447,64 @@ export default {
           date: currentDate,
         });
 
-        dataRequest({
-          type: "add",
-          fileName: "pushData",
-          item: {
-            bookName: video.bookName,
-            textOtherName: video.data.textOtherName,
-            textType: video.textType,
-            pt: p.pt,
-            selectedFile,
-            bt: video.data.bt1,
-            useragent: this.ptConfig[p.pt].useragent,
-            phone: p.phone,
-            partition,
-            url: this.ptConfig[p.pt].listIndex,
-            date: currentDate,
-            publishAttemptCount: 1,
-            republishCount: 0,
-            publishSuccessCount: 0,
-            publishFailCount: 0,
-            publishStatus: "publishing",
-            lastPublishMessage: "等待发布结果",
-            lastPublishAt: Date.now(),
-          },
-        });
+        const republishRecord = this.findRepublishRecord(p.pt, p.phone);
+        if (republishRecord && republishRecord.id && republishRecord.date) {
+          const oldAttempt = Number(republishRecord.publishAttemptCount) || 1;
+          let oldRepublish = Number(republishRecord.republishCount);
+          if (!Number.isFinite(oldRepublish) || oldRepublish < 0) {
+            oldRepublish = Math.max(0, oldAttempt - 1);
+          }
+          dataRequest({
+            type: "update",
+            fileName: "pushData",
+            item: {
+              id: republishRecord.id,
+              date: republishRecord.date,
+              bookName: video.bookName,
+              textOtherName: video.data.textOtherName,
+              selectedFile,
+              bt: video.data.bt1,
+              bt2: video.data.bt2,
+              bq: video.data.bq,
+              address: video.data.address,
+              filePath: this.localFilePath,
+              publishAttemptCount: oldAttempt + 1,
+              republishCount: oldRepublish + 1,
+              publishStatus: "publishing",
+              lastPublishMessage: "等待发布结果",
+              lastPublishAt: Date.now(),
+            },
+          });
+        } else {
+          dataRequest({
+            type: "add",
+            fileName: "pushData",
+            item: {
+              bookName: video.bookName,
+              textOtherName: video.data.textOtherName,
+              textType: video.textType,
+              pt: p.pt,
+              selectedFile,
+              bt: video.data.bt1,
+              bt2: video.data.bt2,
+              bq: video.data.bq,
+              address: video.data.address,
+              filePath: this.localFilePath,
+              useragent: this.ptConfig[p.pt].useragent,
+              phone: p.phone,
+              partition,
+              url: this.ptConfig[p.pt].listIndex,
+              date: currentDate,
+              publishAttemptCount: 1,
+              republishCount: 0,
+              publishSuccessCount: 0,
+              publishFailCount: 0,
+              publishStatus: "publishing",
+              lastPublishMessage: "等待发布结果",
+              lastPublishAt: Date.now(),
+            },
+          });
+        }
 
         if (p.pt === "视频号") {
           await new Promise(resolve => setTimeout(resolve, 4000));

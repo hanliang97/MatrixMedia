@@ -23,6 +23,7 @@
                 <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="status-row">
                   <span class="pt-name" @click="copy(sub.videoLink)">{{ sub.pt }}</span>
                   <span :class="{ fail: !sub.videoLink }" @click="opPt(sub)">{{ sub.videoLink ? "通过" : "未通过" }}</span>
+                 
                 </div>
               </template>
             </el-table-column>
@@ -44,7 +45,7 @@
             <el-table-column label="来源" width="72">
               <template>本地</template>
             </el-table-column>
-            <el-table-column label="操作" width="200">
+            <el-table-column label="操作" width="260">
               <template slot-scope="scope">
                 <el-button
                   type="primary"
@@ -59,6 +60,9 @@
                 <el-popconfirm confirm-button-text="删除" cancel-button-text="取消" icon="el-icon-info" icon-color="red" title="确定删除这条记录吗？" @confirm="handleDelete(scope.row, index, scope.$index)">
                   <el-button slot="reference" type="danger" size="mini">删除</el-button>
                 </el-popconfirm>
+                <el-button type="warning" size="mini" class="mb8" @click="handleRepublish(scope.row)">
+                  重新发布
+                </el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -153,6 +157,62 @@ export default {
       if (status === "success") return "成功";
       if (status === "fail") return "失败";
       return "发布中";
+    },
+    isPublishFailed(row) {
+      if (!row) return false;
+      if (String(row.publishStatus || "") === "fail") return true;
+      if (Number(row.publishFailCount) > 0 && Number(row.publishSuccessCount) === 0) return true;
+      if (String(row.lastPublishMessage || "").includes("失败")) return true;
+      return false;
+    },
+    async handleRepublish(row) {
+      const details = (row && row.showAlltype) || [];
+      if (!details.length) {
+        this.$message.warning("当前记录没有可重发的平台");
+        return;
+      }
+      let filePath = details.map(v => v && v.filePath).find(Boolean);
+      if (!filePath) {
+        this.$message.info("历史记录缺少视频路径，请先重新选择视频文件。");
+        filePath = await ipcRenderer.invoke("dialog:openVideoFile");
+        if (!filePath) {
+          this.$message.warning("未选择视频文件，已取消重发。");
+          return;
+        }
+      }
+
+      const sample = details[0] || {};
+      const failedTargets = details
+        .filter(this.isPublishFailed)
+        .map(v => ({
+          pt: v.pt,
+          phone: String(v.phone || "").split("-")[0],
+        }));
+
+      const ok = this.$refs.localPublishRef.openRepublish({
+        filePath,
+        textOtherName: sample.textOtherName || "",
+        form: {
+          title: sample.bookName || sample.textOtherName || "",
+          bt1: sample.bt || "",
+          bt2: sample.bt2 || sample.bt || "",
+          bq: sample.bq || "",
+          address: sample.address || "",
+        },
+        records: details.map(v => ({
+          id: v.id,
+          date: v.date,
+          pt: v.pt,
+          phone: String(v.phone || "").split("-")[0],
+          publishAttemptCount: Number(v.publishAttemptCount) || 1,
+          republishCount: Number(v.republishCount),
+        })),
+        failedTargets,
+      });
+      if (!ok) return;
+      if (failedTargets.length === 0) {
+        this.$message.info("未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。");
+      }
     },
     getFileName(filePath) {
       if (!filePath) return "";
