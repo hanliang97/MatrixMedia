@@ -114,9 +114,9 @@ jobs:
 
           if [ -n "$RANGE_START" ]; then
             RANGE_LABEL="${RANGE_START}..HEAD"
-            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)")
+            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)")
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
           fi
           if [ -z "$COMMITS" ]; then
             COMMITS="- 无更新记录"
@@ -208,9 +208,9 @@ jobs:
 
           if [ -n "$RANGE_START" ]; then
             RANGE_LABEL="${RANGE_START}..HEAD"
-            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)")
+            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
           else
-            COMMITS=$(git log --pretty=format:"- %s (%h)")
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
           fi
           if [ -z "$COMMITS" ]; then
             COMMITS="- 无更新记录"
