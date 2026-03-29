@@ -20,7 +20,7 @@
 ## 开源免费
 国内gitee下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
 
-github下载地址为 https://github.com/1438343098/MatrixMedia/releases
+github下载地址为 https://github.com/hanliang97/MatrixMedia/releases
 
 ## 工具使用文档
 国内文档地址
