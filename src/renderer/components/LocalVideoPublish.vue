@@ -23,7 +23,7 @@
         <el-form-item label="概括短标题">
           <el-input v-model="form.bt2" placeholder="选填，建议 6～16 字" />
           <p class="bt2-tip">
-            仅<strong>微信视频号</strong>会用到本项：对应发布页「概括视频主要内容」。其它平台忽略；若不填则自动沿用上方「视频标题」。
+            仅<strong>微信视频号</strong>会用到本项：对应发布页「概括视频主要内容」。选择视频号时本项必填，长度需为 6～16 字，且不能包含特殊标点符号。
           </p>
         </el-form-item>
         <el-form-item label="地址"> 
@@ -270,6 +270,23 @@ export default {
         },
       };
     },
+    isVideohaoPlatform(platform) {
+      return String((platform && platform.pt) || "").includes("视频号");
+    },
+    validateVideohaoBt2(value) {
+      const bt2 = String(value || "").trim();
+      if (!bt2) {
+        return "发布视频号时，请填写概括短标题";
+      }
+      const len = Array.from(bt2).length;
+      if (len < 6 || len > 16) {
+        return "视频号概括短标题长度需为 6～16 字";
+      }
+      if (!/^[\u4e00-\u9fa5A-Za-z0-9\s]+$/.test(bt2)) {
+        return "视频号概括短标题不能包含特殊标点符号";
+      }
+      return "";
+    },
 
     onMetaNext() {
       if (!this.form.bt1 || !this.form.bt1.trim()) {
@@ -402,16 +419,23 @@ export default {
         this.$message.warning("未选择视频文件");
         return;
       }
-      const video = this.buildVideoPayload();
-      const selectedFile = fileBaseName(this.localFilePath);
-      const currentDate = moment().format("YYYY-MM-DD");
-
       const checked = this.$refs.tree.getCheckedNodes(true);
       const platforms = checked.filter(item => item.url);
       if (platforms.length === 0) {
         this.$message.warning("请至少选择一个平台");
         return;
       }
+      const hasVideohao = platforms.some(this.isVideohaoPlatform);
+      if (hasVideohao) {
+        const bt2Error = this.validateVideohaoBt2(this.form.bt2);
+        if (bt2Error) {
+          this.$message.warning(bt2Error);
+          return;
+        }
+      }
+      const video = this.buildVideoPayload();
+      const selectedFile = fileBaseName(this.localFilePath);
+      const currentDate = moment().format("YYYY-MM-DD");
 
       platforms.sort((a, b) => {
         if (a.pt.includes("视频号")) return -1;

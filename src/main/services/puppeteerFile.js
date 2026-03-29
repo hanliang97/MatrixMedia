@@ -44,6 +44,18 @@ async function doUpload(data, event, onFinish) {
   let activeWin = null;
   let autoCloseTimer = null;
   let actionCheckTimer = null;
+  const retryDelay = 1000;
+
+  const safeReply = (channel, payload) => {
+    try {
+      if (!event || !event.sender || event.sender.isDestroyed()) return false;
+      event.reply(channel, payload);
+      return true;
+    } catch (err) {
+      console.error(`发送 ${channel} 事件失败:`, err);
+      return false;
+    }
+  };
 
   const cleanupTaskResources = () => {
     if (actionCheckTimer) {
@@ -80,11 +92,12 @@ async function doUpload(data, event, onFinish) {
   };
 
   const createWindowAndAttempt = async () => {
+    if (finished) return;
     currentAttempt++;
     if (currentAttempt > maxRetries) {
       console.log("已达到最大重试次数，操作失败", data);
-      event.reply("puppeteer-noLogin", data);
-      event.reply("puppeteerFile-done", { ...data, status: false });
+      safeReply("puppeteer-noLogin", data);
+      safeReply("puppeteerFile-done", { ...data, status: false });
       finishOnce();
       return;
     }
@@ -121,7 +134,9 @@ async function doUpload(data, event, onFinish) {
       // 设置UA和加载URL
       if (data.pt.indexOf("视频") !== -1) {
         await page.setUserAgent(data.useragent);
-        win.webContents.setUserAgent(data.useragent);
+        if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+          win.webContents.setUserAgent(data.useragent);
+        }
         await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       } else {
         await win.loadURL(data.url);
@@ -134,45 +149,95 @@ async function doUpload(data, event, onFinish) {
         if (browser) browser.disconnect();
         if (activeWin === win) activeWin = null;
         if (activeBrowser === browser) activeBrowser = null;
+        if (finished) return;
+        if (currentAttempt >= maxRetries) {
+          safeReply("puppeteer-noLogin", data);
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            message: "窗口已关闭，任务结束",
+          });
+          finishOnce();
+          return;
+        }
+        setTimeout(() => {
+          createWindowAndAttempt().catch(err => {
+            console.error("重试创建窗口失败:", err);
+            safeReply("puppeteerFile-done", {
+              ...data,
+              status: false,
+              message: "重试失败",
+            });
+            finishOnce();
+          });
+        }, retryDelay);
       });
 
       // 检查URL是否匹配并执行操作
       actionCheckTimer = setTimeout(async () => {
         actionCheckTimer = null;
-        const currentUrl = page.url();
-        if (currentUrl === data.url) {
-          try {
+        if (finished) return;
+        try {
+          if (!page || typeof page.url !== "function") {
+            throw new Error("页面对象不可用");
+          }
+          const currentUrl = page.url();
+          if (currentUrl === data.url) {
             const action = Type[data.pt];
             if (typeof action !== "function") {
               throw new Error(`未找到平台处理器: ${data.pt}`);
             }
             await action(page, data, win, event, finishOnce);
             finishOnce();
-          } catch (err) {
-            console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
-            event.reply("puppeteerFile-done", {
+            return;
+          }
+          console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
+          if (win && !win.isDestroyed()) win.close();
+        } catch (err) {
+          console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
+          if (currentAttempt >= maxRetries) {
+            safeReply("puppeteerFile-done", {
               ...data,
               status: false,
               message: "执行失败",
             });
             if (win && !win.isDestroyed()) win.close();
             finishOnce();
+            return;
           }
-        } else {
-          console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
-          win.close();
-          setTimeout(createWindowAndAttempt, 1000);
+          if (win && !win.isDestroyed()) win.close();
         }
       }, 3000);
     } catch (error) {
       console.log(`尝试${currentAttempt}发生错误:`, error);
       if (win) win.close();
       if (browser) browser.disconnect();
-      setTimeout(createWindowAndAttempt, 1000);
+      if (finished) return;
+      setTimeout(() => {
+        createWindowAndAttempt().catch(err => {
+          console.error("重试创建窗口失败:", err);
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            message: "重试失败",
+          });
+          finishOnce();
+        });
+      }, retryDelay);
     }
   };
   console.log(`尝试${currentAttempt}${data.pt}开始`);
-  setTimeout(createWindowAndAttempt, 1000);
+  setTimeout(() => {
+    createWindowAndAttempt().catch(err => {
+      console.error("首次创建窗口失败:", err);
+      safeReply("puppeteerFile-done", {
+        ...data,
+        status: false,
+        message: "创建窗口失败",
+      });
+      finishOnce();
+    });
+  }, retryDelay);
 }
 
 export default upFile;
