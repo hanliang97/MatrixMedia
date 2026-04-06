@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, app } from "electron";
+import { BrowserWindow, Menu, app as electronApp } from "electron";
 import { platform } from "os";
 import getCookie from "./getCookie";
 import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
@@ -94,7 +94,7 @@ function createMainWindow(fn) {
   });
   mainWindow.on("closed", () => {
     mainWindow = null;
-    app.quit();
+    electronApp.quit();
   });
 }
 

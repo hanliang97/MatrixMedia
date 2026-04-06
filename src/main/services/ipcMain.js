@@ -1,10 +1,10 @@
-import { ipcMain, dialog, BrowserWindow, app, shell } from 'electron'
+import { ipcMain, dialog, BrowserWindow, app as electronApp, shell } from 'electron'
 import { spawn } from 'child_process'
 import Server from '../server/index'
 
 import { winURL } from '../config/StaticPath'
 import downloadFile from './downloadFile'
-import puppeteerFile from './puppeteerFile'
+import { registerPuppeteerIpc } from './puppeteerFile'
 
 const https = require('https')
 const version = require('../../../package.json').version
@@ -139,7 +139,7 @@ export default {
       }
       if (process.platform === 'win32') {
         spawn(installerPath, [], { detached: true, stdio: 'ignore' }).unref()
-        app.quit()
+        electronApp.quit()
       } else {
         await shell.openPath(installerPath)
       }
@@ -147,7 +147,7 @@ export default {
     })
 
     // puppeteerFile 上传文件发布，获取登录状态
-    puppeteerFile()
+    registerPuppeteerIpc()
 
     // 获取文件下面的文件
     ipcMain.handle('getFiles', (event, args) => {
@@ -184,8 +184,8 @@ export default {
     })
 
     ipcMain.handle('reset-app', () => {
-      app.relaunch()
-      app.exit()
+      electronApp.relaunch()
+      electronApp.exit()
     })
     ipcMain.handle('open-messagebox', async (event, arg) => {
       const res = await dialog.showMessageBox(

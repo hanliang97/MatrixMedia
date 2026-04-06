@@ -30,6 +30,7 @@ lib-cov
 # Coverage directory used by tools like istanbul
 coverage
 *.lcov
+test/.cache/
 
 # nyc test coverage
 .nyc_output
@@ -132,5 +133,6 @@ dist
 .yarn/install-state.gz
 .pnp.*
 
+.worktrees/
 
 /src/main/server/data

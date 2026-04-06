@@ -1,3 +1,5 @@
+"use strict";
+
 import { ipcMain, app, BrowserWindow } from "electron";
 import puppeteerCore from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
@@ -9,12 +11,22 @@ import StealthPlugin from "puppeteer-extra-plugin-stealth";
 const puppeteer = addExtra(puppeteerCore);
 puppeteer.use(StealthPlugin());
 
-// Puppeteer 任务串行队列（上传/状态/登录统一排队）
+/**
+ * IPC 事件适配为与 CLI 共用的 transport（仅依赖 .reply）
+ */
+export function createIpcTransport(ipcEvent) {
+  return {
+    reply(channel, ...args) {
+      ipcEvent.reply(channel, ...args);
+    },
+  };
+}
+
 const taskQueue = [];
 let taskBusy = false;
 
-function enqueueTask(data, event) {
-  taskQueue.push({ data, event });
+function enqueueTask(data, transport, userOnFinish) {
+  taskQueue.push({ data, transport, userOnFinish });
   processNextTask();
 }
 
@@ -23,19 +35,39 @@ function processNextTask() {
   const next = taskQueue.shift();
   if (!next) return;
   taskBusy = true;
-  doUpload(next.data, next.event, () => {
-    taskBusy = false;
-    processNextTask();
-  });
+  const queueDone = () => {
+    try {
+      if (typeof next.userOnFinish === "function") {
+        next.userOnFinish();
+      }
+    } finally {
+      taskBusy = false;
+      processNextTask();
+    }
+  };
+  doUpload(next.data, next.transport, queueDone);
 }
 
-function upFile() {
+/**
+ * 注册渲染进程 `puppeteerFile` IPC，与历史行为一致
+ */
+export function registerPuppeteerIpc() {
   ipcMain.on("puppeteerFile", async (event, args) => {
-    enqueueTask(args, event);
+    enqueueTask(args, createIpcTransport(event));
   });
 }
 
-async function doUpload(data, event, onFinish) {
+/**
+ * CLI 或其它主进程代码直接调用，与 IPC 共用同一套上传逻辑
+ * @param {object} data 与 `ipcRenderer.send("puppeteerFile", data)` 相同结构
+ * @param {{ reply: (channel: string, ...args: any[]) => void }} transport
+ * @param {() => void} [onFinish] 任务结束时回调（如视频队列）
+ */
+export function runPuppeteerTask(data, transport, onFinish) {
+  enqueueTask(data, transport, onFinish);
+}
+
+async function doUpload(data, transport, queueDone) {
   data.partition = data.partition.split("-")[0];
   const maxRetries = 5;
   let currentAttempt = 0;
@@ -48,8 +80,7 @@ async function doUpload(data, event, onFinish) {
 
   const safeReply = (channel, payload) => {
     try {
-      if (!event || !event.sender || event.sender.isDestroyed()) return false;
-      event.reply(channel, payload);
+      transport.reply(channel, payload);
       return true;
     } catch (err) {
       console.error(`发送 ${channel} 事件失败:`, err);
@@ -66,13 +97,6 @@ async function doUpload(data, event, onFinish) {
       clearTimeout(autoCloseTimer);
       autoCloseTimer = null;
     }
-    if (activeWin && !activeWin.isDestroyed() && data.closeWindowAfterPublish !== false) {
-      try {
-        activeWin.close();
-      } catch (e) {
-        console.error("兜底关闭窗口失败:", e);
-      }
-    }
     if (activeBrowser) {
       try {
         activeBrowser.disconnect();
@@ -80,7 +104,6 @@ async function doUpload(data, event, onFinish) {
         console.error("兜底断开浏览器连接失败:", e);
       }
     }
-    activeWin = null;
     activeBrowser = null;
   };
 
@@ -88,7 +111,7 @@ async function doUpload(data, event, onFinish) {
     if (finished) return;
     finished = true;
     cleanupTaskResources();
-    if (onFinish) onFinish();
+    if (queueDone) queueDone();
   };
 
   const createWindowAndAttempt = async () => {
@@ -110,10 +133,10 @@ async function doUpload(data, event, onFinish) {
       browser = await pie.connect(app, puppeteer);
       activeBrowser = browser;
       win = new BrowserWindow({
-        show:  data?.show ?? false,
+        show: data.mmCliSuppressWindow ? false : data?.show ?? false,
         width: data?.width ?? 1300,
         height: data?.height ?? 800,
-        title: `${data.partition} (尝试${currentAttempt}/${maxRetries})`,        
+        title: `${data.partition} (尝试${currentAttempt}/${maxRetries})`,
         webPreferences: {
           partition: data.partition,
           nodeIntegration: false,
@@ -123,15 +146,15 @@ async function doUpload(data, event, onFinish) {
       });
       activeWin = win;
       page = await pie.getPage(browser, win);
-      // 添加10分钟自动关闭窗口的定时器
-      const AUTO_CLOSE_DELAY = 10 * 60 * 1000; // 10分钟
+
+      const AUTO_CLOSE_DELAY = 10 * 60 * 1000;
       autoCloseTimer = setTimeout(() => {
         console.log(`窗口 ${data.partition} 已自动关闭（10分钟超时）`);
         if (win && !win.isDestroyed()) {
           win.close();
         }
       }, AUTO_CLOSE_DELAY);
-      // 设置UA和加载URL
+
       if (data.pt.indexOf("视频") !== -1) {
         await page.setUserAgent(data.useragent);
         if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
@@ -141,15 +164,35 @@ async function doUpload(data, event, onFinish) {
       } else {
         await win.loadURL(data.url);
       }
-      
-      // 窗口关闭事件
+
       win.on("closed", () => {
-        clearTimeout(autoCloseTimer); // 清除自动关闭定时器
-        autoCloseTimer = null;
-        if (browser) browser.disconnect();
+        if (autoCloseTimer) {
+          clearTimeout(autoCloseTimer);
+          autoCloseTimer = null;
+        }
+        try {
+          if (browser) browser.disconnect();
+        } catch (_) {
+          // 忽略
+        }
         if (activeWin === win) activeWin = null;
         if (activeBrowser === browser) activeBrowser = null;
         if (finished) return;
+        const retry = Boolean(win._mmRetryAfterClose) && currentAttempt < maxRetries;
+        if (retry) {
+          setTimeout(() => {
+            createWindowAndAttempt().catch(err => {
+              console.error("重试创建窗口失败:", err);
+              safeReply("puppeteerFile-done", {
+                ...data,
+                status: false,
+                message: "重试失败",
+              });
+              finishOnce();
+            });
+          }, retryDelay);
+          return;
+        }
         if (currentAttempt >= maxRetries) {
           safeReply("puppeteer-noLogin", data);
           safeReply("puppeteerFile-done", {
@@ -157,23 +200,10 @@ async function doUpload(data, event, onFinish) {
             status: false,
             message: "窗口已关闭，任务结束",
           });
-          finishOnce();
-          return;
         }
-        setTimeout(() => {
-          createWindowAndAttempt().catch(err => {
-            console.error("重试创建窗口失败:", err);
-            safeReply("puppeteerFile-done", {
-              ...data,
-              status: false,
-              message: "重试失败",
-            });
-            finishOnce();
-          });
-        }, retryDelay);
+        finishOnce();
       });
 
-      // 检查URL是否匹配并执行操作
       actionCheckTimer = setTimeout(async () => {
         actionCheckTimer = null;
         if (finished) return;
@@ -187,12 +217,14 @@ async function doUpload(data, event, onFinish) {
             if (typeof action !== "function") {
               throw new Error(`未找到平台处理器: ${data.pt}`);
             }
-            await action(page, data, win, event, finishOnce);
-            finishOnce();
-            return;
+            await action(page, data, win, transport, finishOnce);
+          } else {
+            console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
+            if (win && !win.isDestroyed()) {
+              win._mmRetryAfterClose = true;
+              win.close();
+            }
           }
-          console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
-          if (win && !win.isDestroyed()) win.close();
         } catch (err) {
           console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
           if (currentAttempt >= maxRetries) {
@@ -205,12 +237,18 @@ async function doUpload(data, event, onFinish) {
             finishOnce();
             return;
           }
-          if (win && !win.isDestroyed()) win.close();
+          if (win && !win.isDestroyed()) {
+            win._mmRetryAfterClose = true;
+            win.close();
+          }
         }
       }, 3000);
     } catch (error) {
       console.log(`尝试${currentAttempt}发生错误:`, error);
-      if (win) win.close();
+      if (win && !win.isDestroyed()) {
+        win._mmRetryAfterClose = true;
+        win.close();
+      }
       if (browser) browser.disconnect();
       if (finished) return;
       setTimeout(() => {
@@ -226,7 +264,7 @@ async function doUpload(data, event, onFinish) {
       }, retryDelay);
     }
   };
-  console.log(`尝试${currentAttempt}${data.pt}开始`);
+
   setTimeout(() => {
     createWindowAndAttempt().catch(err => {
       console.error("首次创建窗口失败:", err);
@@ -240,4 +278,7 @@ async function doUpload(data, event, onFinish) {
   }, retryDelay);
 }
 
-export default upFile;
+/** @deprecated 使用 registerPuppeteerIpc */
+export default function upFile() {
+  registerPuppeteerIpc();
+}

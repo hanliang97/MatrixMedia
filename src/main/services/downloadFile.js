@@ -1,5 +1,5 @@
 /* eslint-disable no-case-declarations */
-import { app, dialog } from 'electron'
+import { dialog } from 'electron'
 import path from 'path'
 
 function safeSend(mainWindow, channel, ...args) {
@@ -29,7 +29,7 @@ export default {
     }
     mainWindow.webContents.downloadURL(downloadUrL)
     mainWindow.webContents.session.once('will-download', (event, item) => {
-      const filePath = path.join(app.getPath('downloads'), item.getFilename())
+      const filePath = path.join(require('electron').app.getPath('downloads'), item.getFilename())
       item.setSavePath(filePath)
       item.on('updated', (event, state) => {
         switch (state) {

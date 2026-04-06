@@ -1,17 +1,71 @@
 "use strict";
 
-import { app, Tray, nativeImage, Menu, dialog, screen } from "electron";
+const electron = require("electron");
+if (typeof electron !== "object" || !electron.app) {
+  const runAsNode = process.env.ELECTRON_RUN_AS_NODE;
+  if (runAsNode && String(runAsNode).trim() !== "") {
+    console.error(
+      "MatrixMedia: 检测到环境变量 ELECTRON_RUN_AS_NODE 已开启，主进程会得到 npm 的 electron 路径字符串而非 API。",
+      "请先取消该变量后再启动，例如：ELECTRON_RUN_AS_NODE= electron . cli publish --help"
+    );
+  } else {
+    console.error(
+      "MatrixMedia: require('electron') 异常，请使用「electron .」从项目根启动（勿直接 electron path/to/main.js）。",
+      typeof electron
+    );
+  }
+  process.exit(1);
+}
+const app = electron.app;
+const { Tray, nativeImage, Menu, dialog, screen } = electron;
+
 import initWindow from "./services/windowManager";
 import DisableButton from "./config/DisableButton";
-import electronDevtoolsInstaller, { VUEJS_DEVTOOLS } from "electron-devtools-installer";
 import path from "path";
 import pie from "puppeteer-in-electron";
+import { isCliMode, runCliMain } from "./cli";
 
+const cliMode = isCliMode(process.argv);
+
+if (!cliMode) {
+  const gotTheLock = app.requestSingleInstanceLock();
+  if (!gotTheLock) {
+    app.quit();
+  }
+}
+
+app.commandLine.appendSwitch("disable-features", "OutOfBlinkCors");
+
+if (!cliMode) {
+  app.on("window-all-closed", () => {
+    app.quit();
+  });
+}
 
 let tray;
-// ⚠️ 一定要在 app.ready 前执行
-pie.initialize(app).then(res => {
-  app.isReady() ? onAppReady() : app.on("ready", onAppReady);
+
+pie.initialize(app).then(() => {
+  if (cliMode) {
+    const startCli = () => {
+      runCliMain(process.argv)
+        .then(code => {
+          app.exit(typeof code === "number" ? code : 0);
+        })
+        .catch(err => {
+          console.error(err);
+          app.exit(1);
+        });
+    };
+    if (app.isReady()) {
+      startCli();
+    } else {
+      app.on("ready", startCli);
+    }
+  } else if (app.isReady()) {
+    onAppReady();
+  } else {
+    app.on("ready", onAppReady);
+  }
 });
 
 function onAppReady() {
@@ -19,7 +73,6 @@ function onAppReady() {
     const iconPath = path.join(__static, "logo.png");
     console.log(iconPath);
     let icon = nativeImage.createFromPath(iconPath);
-    /* macOS 菜单栏约 22pt；大图（如 500px）若不缩放会明显偏大 */
     if (process.platform === "darwin" && !icon.isEmpty()) {
       const scale = screen.getPrimaryDisplay().scaleFactor || 1;
       const target = Math.round(10 * scale);
@@ -46,8 +99,6 @@ function onAppReady() {
       {
         label: "重启应用",
         click: function () {
-          // win.reload();
-          // 询问是否重启dialog
           dialog
             .showMessageBox(win, {
               type: "question",
@@ -65,42 +116,35 @@ function onAppReady() {
       {
         label: "退出程序",
         click: () => {
-          app.quit(); // 退出应用程序
+          app.quit();
         },
       },
     ]);
 
     tray.setContextMenu(contextMenu);
     tray.setToolTip("推推达人");
-    // 监听托盘点击事件
     tray.on("click", () => {
       win.isVisible() ? win.hide() : win.show();
     });
-    // 确保在应用程序退出时销毁托盘
     app.on("will-quit", () => {
       tray.destroy();
     });
   });
   DisableButton.Disablef12();
   if (process.env.NODE_ENV === "development") {
-    electronDevtoolsInstaller(VUEJS_DEVTOOLS)
-      .then(name => console.log(`installed: ${name}`))
-      .catch(err => console.log("Unable to install `vue-devtools`: \n", err));
+    try {
+      const { default: installExtension, VUEJS_DEVTOOLS } = require("electron-devtools-installer");
+      installExtension(VUEJS_DEVTOOLS)
+        .then(name => console.log(`installed: ${name}`))
+        .catch(err => console.log("Unable to install `vue-devtools`: \n", err));
+    } catch (err) {
+      console.log("electron-devtools-installer 加载失败:", err);
+    }
   }
 }
-//禁止程序多开，此处需要单例锁的同学打开注释即可
-const gotTheLock = app.requestSingleInstanceLock();
-if (!gotTheLock) {
-  app.quit();
-}
 
-// 解决9.x跨域异常问题
-app.commandLine.appendSwitch("disable-features", "OutOfBlinkCors");
-
-app.on("window-all-closed", () => {
-  // 所有平台均为所有窗口关闭就退出软件
-  app.quit();
-});
 app.on("browser-window-created", () => {
-  console.log("window-created");
+  if (!cliMode) {
+    console.log("window-created");
+  }
 });

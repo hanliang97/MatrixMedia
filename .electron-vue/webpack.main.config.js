@@ -21,7 +21,9 @@ let mainConfig = {
     main: path.join(__dirname, '../src/main/index.js')
   },
   externals: [
-    ...Object.keys(dependencies || {})
+    ...Object.keys(dependencies || {}),
+    'electron',
+    'electron-devtools-installer'
   ],
   module: {
     rules: [
