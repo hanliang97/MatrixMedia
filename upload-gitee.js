@@ -35,13 +35,13 @@ deleteOldestRelease()
 // 发布
 createRelease()
 
-/** 额外文件路径：node upload-gitee.js <token> <version> [file ...]（仅上传 .exe / .dmg） */
+/** 额外文件路径：node upload-gitee.js <token> <version> [file ...]（上传 .exe / .dmg / .AppImage） */
 function resolveUploadPaths() {
   const extra = args.slice(2).filter(a => a && a !== '--')
   if (extra.length > 0) {
     return extra
       .map(f => path.resolve(f))
-      .filter(fp => /\.(exe|dmg)$/i.test(fp))
+      .filter(fp => /\.(exe|dmg|AppImage)$/i.test(fp))
   }
   const buildDir = path.join(__dirname, 'build')
   const raw = path.join(

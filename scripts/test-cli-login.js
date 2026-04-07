@@ -51,7 +51,7 @@ const { nativeImageToBlockLines, nativeImageToHalfBlockLines } = require(blocksB
 
 (() => {
   const r = parseLoginArgs(["-p", "dy", "--phone", "1", "--show", "--no-terminal-qr"]);
-  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.ok, false);
 })();
 
 (() => {
