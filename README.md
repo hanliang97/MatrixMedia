@@ -16,7 +16,7 @@
 本项目的 CLI 被刻意设计为 **AI 工具无关 / 框架无关** 的外部命令：只要你的工具能调用 shell、读取退出码或 JSON stdout，就能直接对接 —— 包括但不限于：
 
 - [OpenClaw](https://github.com/openclaw/openclaw)
-- Hermes
+- [Hermes](https://github.com/NousResearch/hermes-agent)
 - Claude Code、Cursor、Cline、Aider 等编程智能体
 - Dify、n8n、LangChain、CrewAI、AutoGen 等工作流 / 多智能体编排框架
 - 任何支持「外部命令 + argv + 退出码」约定的自动化平台（含自研调度器）
@@ -107,7 +107,7 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 ## Contributors
 
 - **核心维护**：[@hanliang97](https://github.com/hanliang97)
-- **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw)、Hermes 等智能体 / 编排生态 — 本仓库顶部以 `openclaw-integrable` 注释示例地显式声明 CLI 入口；`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向所有「外部命令型」AI 工具设计，任何遵循同样契约的平台（含自研调度器）都可直接接入，欢迎围绕 CLI 契约反馈与共建。
+- **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw)、[Hermes](https://github.com/NousResearch/hermes-agent) 等智能体 / 编排生态 — 本仓库顶部以 `openclaw-integrable` 注释示例地显式声明 CLI 入口；`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向所有「外部命令型」AI 工具设计，任何遵循同样契约的平台（含自研调度器）都可直接接入，欢迎围绕 CLI 契约反馈与共建。
 - **AI 协作声明**：部分 CLI 子命令（`cli accounts` / `cli history`）、skills 文档（`.cursor/skills/matrixmedia-cli-publish/`）以及 README 的 CLI 章节由 Anthropic Claude（通过 [Claude Code](https://claude.com/claude-code)）辅助设计、实现与撰写；人类维护者负责需求决策、代码评审与合入。所有产出遵循本仓库的 [GPL-2.0-only](./LICENSE) 授权条款，不因 AI 参与而改变许可。
 
 欢迎通过 Issue / PR 参与共建。
