@@ -35,7 +35,7 @@ matrixmedia cli publish \
   -f "/Users/me/videos/demo.mp4" \
   -t "矩媒CLI发布演示" \
   --name "CLI演示任务" \
-  --tags "开源,CLI,自动化"
+  --tags "#开源 #CLI #自动化 #矩媒"
 ```
 
 ## Example 3: Show window for debugging
@@ -105,12 +105,14 @@ matrixmedia cli publish \
   -f "/Users/me/videos/run5km.mp4" \
   -t "新手第一天跑步就坚持 5 公里是什么体验" \
   --bt2 "5公里新手挑战" \
-  --tags "跑步 新手 减脂"
+  --tags "#跑步 #新手 #减脂 #5公里"
 ```
 
 Why it matters:
 - `--bt2` is 7 chars, within 6–16; no punctuation that would be stripped.
-- Tags use **single space**. 视频号 会把它们拼到描述后面（想成 hashtag 需自己写 `"#跑步 #新手 #减脂"`）。
+- 视频号会把 `--tags` 整串拼进描述，**必须带 `#`** 才成话题；缺 `#` 只是普通尾缀文字。
+- **最多 4 个话题**：这里刚好 4，再多 agent 应该裁掉最弱相关的。
+- Tags use **single space** 分隔。
 - 不传 `--bt2` 会触发 warn 并回退到 `--title`，基本必翻车。
 
 ## Example 9: 抖音 — hashtag 风格标签

@@ -132,6 +132,24 @@ export function parsePublishArgs(subArgv) {
     );
   }
 
+  if (out.bq) {
+    const tags = String(out.bq).trim().split(/\s+/).filter(Boolean);
+    if (tags.length > 4) {
+      console.warn(
+        `MatrixMedia: --tags 共 ${tags.length} 个，建议最多 4 个话题；多余标签会降低每个话题的权重，生成层请按相关性裁到 4 个以内。`
+      );
+    }
+    const hashtagPlatforms = new Set(["视频号", "抖音", "快手"]);
+    if (hashtagPlatforms.has(out.platform)) {
+      const withoutHash = tags.filter(t => !t.startsWith("#"));
+      if (withoutHash.length > 0) {
+        console.warn(
+          `MatrixMedia: 平台 ${out.platform} 会把 --tags 原样拼进描述；${withoutHash.length} 个标签缺少 # 前缀（${withoutHash.join(" ")}），不会被识别为话题，仅作为普通文字。`
+        );
+      }
+    }
+  }
+
   return { ok: true, value: out };
 }
 
@@ -154,10 +172,11 @@ export function publishHelpText() {
                             抖音/小红书也会消费 bt2（抖音拼进描述、小红书回退标题或正文），
                             哔哩哔哩/百家号/头条/快手当前不使用。
       --tags <text>     视频标签 → data.bq（同 --bq）。多个标签用【空格】分隔，例如 "减脂 健身 教程"。
-                            • 视频号/抖音/快手：整串拼进描述末尾，想成 hashtag 需自行加 # 前缀
-                              （如 "#减脂 #健身"），否则就是普通文字。
-                            • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离。
-                            • 百家号/头条：当前代码不消费 bq。
+                            【上限 4 个话题】：超过 4 个会触发 warn，agent 生成时请按相关性裁到 ≤ 4。
+                            • 视频号/抖音/快手：整串拼进描述末尾，**必须带 # 前缀**成为话题
+                              （如 "#减脂 #健身 #新手 #跑步"），缺 # 会被识别为普通尾缀文字。
+                            • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离，可省。
+                            • 百家号/头条：当前代码不消费 bq，无需填。
       --address <text>  地址 → data.address；仅百家号
       --show            （已忽略）CLI 不显示自动化窗口
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
