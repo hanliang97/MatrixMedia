@@ -94,7 +94,66 @@ matrixmedia cli history \
   --json > /tmp/mm-april-history.json
 ```
 
-## Example 8: Pre-publish preflight
+## Example 8: 视频号 — 短标 + 空格分隔标签（最典型）
+
+User intent: 发布视频号视频，长标题 + 单独短标 + 3 个标签。
+
+```bash
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/run5km.mp4" \
+  -t "新手第一天跑步就坚持 5 公里是什么体验" \
+  --bt2 "5公里新手挑战" \
+  --tags "跑步 新手 减脂"
+```
+
+Why it matters:
+- `--bt2` is 7 chars, within 6–16; no punctuation that would be stripped.
+- Tags use **single space**. 视频号 会把它们拼到描述后面（想成 hashtag 需自己写 `"#跑步 #新手 #减脂"`）。
+- 不传 `--bt2` 会触发 warn 并回退到 `--title`，基本必翻车。
+
+## Example 9: 抖音 — hashtag 风格标签
+
+抖音把 `bq` 拼在 `bt2` 之后作为描述。想做 hashtag 显式加 `#`：
+
+```bash
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "新手第一天跑步就坚持5公里是什么体验" \
+  --bt2 "5公里新手挑战" \
+  --tags "#跑步 #减脂 #新手"
+```
+
+## Example 10: 哔哩哔哩 — 独立标签控件
+
+bilibili 的标签是独立输入 + 回车的控件，前导 `#` 会被剥掉，直接写词：
+
+```bash
+matrixmedia cli publish \
+  -p blbl \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "开黑就是快乐" \
+  --tags "游戏 解说 开黑"
+```
+
+## Example 11: 百家号 — tags 会被忽略
+
+当前 `upLoad/bjh.js` 没有写入 tag 逻辑；不要在这里浪费时间编标签，写好标题 + 地址即可：
+
+```bash
+matrixmedia cli publish \
+  -p bjh \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "这家咖啡店必须推给你" \
+  --address "北京市朝阳区三里屯"
+```
+
+## Example 12: Pre-publish preflight
 
 User intent: 发布前顺手核一次登录态。
 

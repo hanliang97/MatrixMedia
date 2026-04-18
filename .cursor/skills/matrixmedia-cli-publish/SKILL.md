@@ -119,11 +119,55 @@ Map user intent to CLI args:
 - `-f`, `--file`: local video path
 - `-t`, `--title`: required video title
 - `--name`, `--book-name`: task name
-- `--bt2`: short summary title
-- `--tags`, `--bq`: video tags
+- `--bt2`: short summary title（see "Per-Platform Field Semantics" below — **mandatory for 视频号**)
+- `--tags`, `--bq`: video tags（space-separated; `#` prefix semantics vary per platform)
 - `--address`: location field (Baidu use case)
 - `--show`: show automation window
 - `--no-close-window`: keep window open when `--show` is enabled
+
+## Per-Platform Field Semantics
+
+Each platform consumes `bt1` / `bt2` / `bq` differently — this is the single most common source of "looks right but publishes ugly" bugs. Use this table instead of guessing:
+
+| Platform | `--title` (bt1) | `--bt2` short description | `--tags` (bq) |
+|----------|-----------------|---------------------------|---------------|
+| **视频号** (sph) | Concatenated into description: `bt1 + " " + bq` | **Required.** Separate input box hinting "6–16 字符". Code strips `，。、/,;:!?'"()[]{}<>` → space. Falling back to `bt1` is almost always wrong. | Concatenated into description with `bt1`. Add `#` yourself if you want hashtag styling. |
+| **抖音** (dy) | Title field `.semi-input` | Leads the description: `bt2 + " " + bq`. Falls back to `bt1` if not provided. | Concatenated after `bt2` in description. Add `#` yourself for hashtag styling. |
+| **快手** (ks) | Description: `bt1 + " " + bq` | unused | Concatenated after `bt1` in description. Add `#` for hashtag styling. |
+| **哔哩哔哩** (blbl) | Submission title | unused | **Independent tag widget.** Code does `split(/\s+/)` then strips leading `#`, types each tag followed by Enter. Leading `#` is harmless but redundant. |
+| **百家号** (bjh) | Article title | unused | **unused by current automation** — tags won't be written regardless. |
+| **头条** (tt) | Up to 30 chars | unused | **unused** — a fixed category checkbox is auto-selected instead. |
+| **小红书** (xhs, experimental) | Title (falls back to `bt2`) | Body fallback (falls back to `bdText`) | `normalizeTagList` splits `\s+`, strips leading `#`, then re-inserts each as `#tag` in the body. |
+
+### 视频号短标生成规则（最常踩坑）
+
+When publishing to 视频号, the agent **must** either accept `--bt2` from the user or generate one. Rules when generating:
+
+1. Length: **6–16 characters (Chinese chars and ASCII letters each count as 1)**. Aim for 8–12 to be safe.
+2. Punctuation blacklist (will be replaced with space by the uploader): `，。、/ , ; : ! ? ' " ( ) [ ] { } < >`. Avoid entirely, don't try to style with them.
+3. Content: distill the video's core hook / outcome / number — not a truncation of the long title.
+4. Don't reuse `--title` verbatim; the long title already goes into the description, duplicating it in the short-title box looks spammy on feed cards.
+5. Style: short declarative phrase, optionally an emotional beat or a number, no trailing punctuation.
+
+Good vs bad (long title "新手第一天跑步就坚持 5 公里是什么体验"):
+
+- ✅ `"5公里新手挑战"` — 7 chars, no punctuation, keeps the hook (number + identity).
+- ✅ `"第一天跑5公里"` — 8 chars.
+- ❌ `"新手第一天跑步就坚持5公里是什么体验"` — 18 chars, exceeds hint, also redundant with title.
+- ❌ `"第一天！跑5公里！"` — punctuation will be stripped to spaces, becoming `第一天  跑5公里 `.
+
+When the user hands over only a long title and asks the agent to publish to 视频号, **auto-generate a short title** that satisfies the rules, and echo it back in the result summary so the user can audit.
+
+### 标签写法规范
+
+1. **Separator is a single ASCII space.** Do not use `,` `，` `、` `;` `；` `|` — the CLI warns on these but the downstream `split(/\s+/)` would treat them as part of the tag.
+2. **Per-platform `#` prefix**:
+   - 视频号 / 抖音 / 快手 — tags are appended to the description verbatim. If the user wants hashtags, the agent must emit `"#tag1 #tag2"`. Plain `"tag1 tag2"` becomes regular trailing words.
+   - 哔哩哔哩 / 小红书 — leading `#` is auto-stripped. Prefer writing without `#` for clarity.
+   - 百家号 / 头条 — tags are ignored; do not waste effort crafting them.
+3. **Quantity**: platforms typically accept 3–10. Keep under 8 to avoid UI rejection edge cases.
+4. **Character set**: Chinese, English, digits, no spaces inside a tag, no emoji in 哔哩哔哩 (widget rejects them silently).
+5. **Repetition**: do not repeat the same tag across `--title` / `--bt2` / `--tags` on 视频号 / 抖音 / 快手 — it gets triplicated in the description.
 
 ## Login Rules
 

@@ -105,6 +105,33 @@ export function parsePublishArgs(subArgv) {
     out.show = false;
   }
 
+  if (out.platform === "视频号") {
+    const bt2Trim = out.bt2 && String(out.bt2).trim();
+    if (!bt2Trim) {
+      console.warn(
+        "MatrixMedia: 视频号短标未提供 --bt2，将回退为视频标题；平台输入框建议 6-16 字符，且会将 ，。、/,;:!?'\"()[]{}<> 等标点替换为空格。"
+      );
+    } else {
+      const cleaned = bt2Trim.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, "");
+      if (cleaned.length > 16) {
+        console.warn(
+          `MatrixMedia: 视频号短标 --bt2 共 ${cleaned.length} 字（不含标点），建议控制在 6-16 字内，过长可能被平台截断或报错。`
+        );
+      }
+      if (cleaned.length < 6) {
+        console.warn(
+          `MatrixMedia: 视频号短标 --bt2 仅 ${cleaned.length} 字（不含标点），平台提示 6-16 字，过短可能被拒。`
+        );
+      }
+    }
+  }
+
+  if (out.bq && /[,，、;；|]/.test(out.bq)) {
+    console.warn(
+      "MatrixMedia: --tags 推荐用空格分隔多个标签（如 '减脂 健身 教程'）；检测到 ,，、;；| 等分隔符，哔哩哔哩 / 小红书会按空格切分，逗号将作为单个标签字符保留。"
+    );
+  }
+
   return { ok: true, value: out };
 }
 
@@ -122,8 +149,15 @@ export function publishHelpText() {
   -t, --title <text>    视频标题（必填）→ data.bt1
       --name <n>        名称 / 任务记录名 → bookName；默认与视频文件名（无扩展名）一致
       --book-name <n>   同 --name
-      --bt2 <text>      概括短标题 → data.bt2；仅视频号等重点使用；默认与视频标题一致
-      --tags <text>     视频标签 → data.bq（同 --bq）
+      --bt2 <text>      概括短标 → data.bt2；【视频号必填】目标输入框提示 6-16 字符，代码会把
+                            ，。、/,;:!?'"()[]{}<> 等标点替换为空格；不传则回退为 --title（会触发 warn）。
+                            抖音/小红书也会消费 bt2（抖音拼进描述、小红书回退标题或正文），
+                            哔哩哔哩/百家号/头条/快手当前不使用。
+      --tags <text>     视频标签 → data.bq（同 --bq）。多个标签用【空格】分隔，例如 "减脂 健身 教程"。
+                            • 视频号/抖音/快手：整串拼进描述末尾，想成 hashtag 需自行加 # 前缀
+                              （如 "#减脂 #健身"），否则就是普通文字。
+                            • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离。
+                            • 百家号/头条：当前代码不消费 bq。
       --address <text>  地址 → data.address；仅百家号
       --show            （已忽略）CLI 不显示自动化窗口
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
@@ -132,7 +166,14 @@ export function publishHelpText() {
 退出码: 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）
 
 示例:
-  矩媒.exe cli publish -p dy --phone 13800138000 -f C:\\\\v.mp4 -t "我的视频标题"
-  electron . cli publish -p dy --phone 13800138000 -f ./a.mp4 --name "任务A" -t "标题" --tags "标签1"
+  矩媒.exe cli publish -p dy --phone 13800138000 -f C:\\\\v.mp4 -t "我的视频标题" --tags "#减脂 #健身"
+  electron . cli publish -p dy --phone 13800138000 -f ./a.mp4 --name "任务A" -t "标题" --tags "#标签1 #标签2"
+  # 视频号务必带 --bt2 短标 + 空格分隔的 tags：
+  matrixmedia cli publish -p sph --phone 13800138000 -f ./v.mp4 \\\\
+    -t "新手第一天跑步就坚持 5 公里是什么体验" \\\\
+    --bt2 "5公里新手挑战" \\\\
+    --tags "跑步 新手 减脂"
+  # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：
+  matrixmedia cli publish -p blbl --phone 13800138000 -f ./v.mp4 -t "标题" --tags "游戏 解说 开黑"
 `.trim();
 }
