@@ -1,22 +1,34 @@
 ---
 name: matrixmedia-cli-publish
-description: Run MatrixMedia in CLI mode for login and video publishing, including argument building, preflight checks, and failure handling. Use when the user asks to publish via CLI, mentions OpenClaw/external command orchestration, or asks AI to execute cli login/cli publish in this repository.
+description: Run MatrixMedia in CLI mode for login, video publishing, account status inspection, and publish history review. Covers argument building, preflight checks, and failure handling. Use when the user asks to publish via CLI, check 登录状态 / 发布记录, mentions OpenClaw/external command orchestration, or asks AI to execute cli login/publish/accounts/history in this repository.
 ---
 
-# MatrixMedia CLI Publish
+# MatrixMedia CLI
+
+## Subcommands
+
+| Subcommand | Purpose | Writes state? |
+|------------|---------|---------------|
+| `cli login` | Douyin scan-to-login via terminal QR or headless puppeteer | yes (session cookies) |
+| `cli publish` | Publish a local video via puppeteer automation | yes (pushData log) |
+| `cli accounts` | List all accounts from the GUI account tree and report current login state | no |
+| `cli history` | Read local publish records (pushData) with platform/phone/status filters | no |
 
 ## Quick Start
 
 Use this skill when the user asks to:
 - use CLI mode instead of GUI
 - publish videos by command line
+- inspect account login status or publish history from the command line
 - automate login/publish in OpenClaw or other agent workflows
 
-Default sequence:
+Default publish sequence:
 1. Preflight checks
-2. `cli login` (only when needed)
-3. `cli publish`
-4. Verify exit code and summarize result
+2. `cli accounts` to verify the target account is logged in (optional but recommended)
+3. `cli login` (only when needed)
+4. `cli publish`
+5. Verify exit code, optionally `cli history -n 5` to confirm the new record
+6. Summarize result
 
 ## Preflight Checklist
 
@@ -54,6 +66,18 @@ matrixmedia cli publish \
   -t "视频标题" \
   --name "任务名" \
   --tags "标签1,标签2"
+
+# list all accounts with login status
+matrixmedia cli accounts
+
+# list only logged-out Douyin accounts in JSON form
+matrixmedia cli accounts -p dy --logged-out --json
+
+# last 7 days of publish records
+matrixmedia cli history
+
+# failed publishes on Douyin in the last 30 days
+matrixmedia cli history -p dy -d 30 -s failed
 ```
 
 Development mode (repo local) examples:
@@ -87,17 +111,63 @@ Map user intent to CLI args:
 - `cli login` currently supports Douyin (`-p dy`) in CLI workflow.
 - If publish fails with login/session errors, run `cli login` first, then retry publish.
 - On Linux headless/SSH, prefer `xvfb-run -a` for login display pipeline.
+- `cli accounts` is non-interactive — it only reads session cookies and never triggers login; use it to pick the right `--phone` / `--partition` before login or publish.
+
+## Accounts Command
+
+Inspect login state for every account the GUI already knows about:
+
+```bash
+matrixmedia cli accounts [options]
+```
+
+Key flags:
+- `-p, --platform <id>`: filter by platform (`dy|tt|ks|blbl|bjh|sph`).
+- `--phone <id>`: filter by full phone string stored in the account tree.
+- `--logged-in` / `--logged-out`: keep only one side (mutually exclusive).
+- `--json`: machine-readable output (objects with `phone/pt/partition/loggedIn/reason/expireAt/createdAt`).
+
+Rules used per platform (cookie in the persist partition for that site):
+- 抖音 → `passport_assist_user`
+- 百家号 → `BDUSS`
+- 头条 → `odin_tt` (value length > 65)
+- 视频号 → `sessionid`
+- 哔哩哔哩 → `SESSDATA`
+- 快手 → `userId`
+
+Expired cookies report `loggedIn: false` with reason `cookie 已过期`.
+
+## History Command
+
+Read the local publish log (`<Documents>/MatrixMedia/data/pushData/YYYY-MM-DD.json`):
+
+```bash
+matrixmedia cli history [options]
+```
+
+Key flags:
+- `-p, --platform <id>`: platform filter.
+- `--phone <id>`: phone filter.
+- `-s, --status <s>`: `success | failed | publishing`（中文同义 `成功 | 失败 | 发布中`）。
+- `-d, --days <n>`: look-back window (default 7).
+- `--since <YYYY-MM-DD>` / `--until <YYYY-MM-DD>`: explicit range; overrides `--days`.
+- `-n, --limit <n>`: cap rows (default 50, sorted by last publish time desc).
+- `--json`: machine-readable output.
+
+Record-status inference: prefer `publishStatus`; fall back to `publishSuccessCount > 0 → success`, `publishFailCount > 0 → failed`, otherwise `publishing`. Attempt column shows `successCount/attemptCount`, matching what GUI 视频管理 renders.
 
 ## Execution Policy For Agents
 
-1. Always run `cli publish --help` once when flags are uncertain.
+1. Run `cli <sub> --help` once when flags are uncertain (applies to publish/login/accounts/history).
 2. Quote paths that may contain spaces.
 3. Prefer absolute file paths for `--file`.
-4. After execution, inspect exit code:
+4. Before publishing, run `cli accounts -p <platform> --phone <phone>` (or `--logged-out` variant) to confirm the session is still valid — it avoids wasting a 35-minute publish timeout on an expired cookie.
+5. After execution, inspect exit code:
    - `0`: success
    - `2`: argument error, fix arguments and rerun
    - `3`: task failure (often login/session/upload), recover then rerun
-5. Return a concise result summary: command intent, key args, outcome, next action.
+6. When debugging a failed publish, `cli history --phone <phone> -p <platform> -n 5` shows the most recent attempts and the `lastPublishMessage` that GUI displays.
+7. Return a concise result summary: command intent, key args, outcome, next action.
 
 ## Output Template
 

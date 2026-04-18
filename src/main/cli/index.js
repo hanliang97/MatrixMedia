@@ -4,11 +4,26 @@ import path from "path";
 import { getCliSubArgv, isCliMode } from "./detectArgv";
 import { parsePublishArgs, publishHelpText } from "./parsePublishArgs";
 import { parseLoginArgs, loginHelpText } from "./parseLoginArgs";
+import { parseAccountsArgs, accountsHelpText } from "./parseAccountsArgs";
+import { parseHistoryArgs, historyHelpText } from "./parseHistoryArgs";
+import { runAccountsCli } from "./runAccountsCli";
+import { runHistoryCli } from "./runHistoryCli";
 import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 
-export { isCliMode, getCliSubArgv, parsePublishArgs, publishHelpText, parseLoginArgs, loginHelpText };
+export {
+  isCliMode,
+  getCliSubArgv,
+  parsePublishArgs,
+  publishHelpText,
+  parseLoginArgs,
+  loginHelpText,
+  parseAccountsArgs,
+  accountsHelpText,
+  parseHistoryArgs,
+  historyHelpText,
+};
 
 function fileStem(filePath) {
   const base = path.basename(filePath || "");
@@ -22,9 +37,11 @@ function fileStem(filePath) {
 export async function runCliMain(argv = process.argv) {
   const sub = getCliSubArgv(argv);
   if (!sub || sub.length === 0) {
-    console.error("用法: <应用> cli publish ... | cli login ...");
+    console.error("用法: <应用> cli <publish|login|accounts|history> ...");
     console.error("  cli publish --help");
     console.error("  cli login --help");
+    console.error("  cli accounts --help");
+    console.error("  cli history --help");
     return 2;
   }
 
@@ -146,12 +163,49 @@ export async function runCliMain(argv = process.argv) {
     });
   }
 
+  if (cmd === "accounts") {
+    const parsed = parseAccountsArgs(sub.slice(1));
+    if (!parsed.ok) {
+      console.error(parsed.error);
+      return 2;
+    }
+    if (parsed.value.help) {
+      console.log(accountsHelpText());
+      return 0;
+    }
+    try {
+      return await runAccountsCli(parsed.value);
+    } catch (e) {
+      console.error(e);
+      return 1;
+    }
+  }
+
+  if (cmd === "history") {
+    const parsed = parseHistoryArgs(sub.slice(1));
+    if (!parsed.ok) {
+      console.error(parsed.error);
+      return 2;
+    }
+    if (parsed.value.help) {
+      console.log(historyHelpText());
+      return 0;
+    }
+    try {
+      return runHistoryCli(parsed.value);
+    } catch (e) {
+      console.error(e);
+      return 1;
+    }
+  }
+
   if (cmd === "--help" || cmd === "-h") {
-    console.log(publishHelpText());
+    console.log("可用子命令: publish | login | accounts | history");
+    console.log("各自 --help 查看详细参数。");
     return 0;
   }
 
   console.error("未知子命令:", cmd);
-  console.error("支持: publish | login，见 cli publish --help / cli login --help");
+  console.error("支持: publish | login | accounts | history");
   return 2;
 }
