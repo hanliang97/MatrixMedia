@@ -9,19 +9,31 @@
 便于脚本与智能体编排。
 
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
-<!-- 说明：OpenClaw 或其它自动化工具可通过 argv 含 `cli` 识别为 CLI 模式；子命令 `login`（仅抖音）与 `publish`（全部 6 个平台）详见下文。 -->
+<!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（仅抖音）与 `publish`（全部 6 个平台）详见下文。 -->
 
-## OpenClaw 联动
+## AI 工具 / 智能体联动
 
-本项目声明 **可与 [OpenClaw](https://github.com/openclaw/openclaw) 等工具联动**：通过启动应用并传入 `cli` 参数进入无图形主界面流程，由标准输入输出与退出码交互。
+本项目的 CLI 被刻意设计为 **AI 工具无关 / 框架无关** 的外部命令：只要你的工具能调用 shell、读取退出码或 JSON stdout，就能直接对接 —— 包括但不限于：
 
-| 标识 | 含义 |
-|------|------|
-| `openclaw-integrable` | 仓库级声明，供发现与文档检索 |
-| `id=matrixmedia-cli` | 建议的工具/技能命名空间 |
-| `argv-marker=cli` | 进程参数中需包含子串 `cli`（如 `矩媒.exe cli publish ...`） |
+- [OpenClaw](https://github.com/openclaw/openclaw)
+- Hermes
+- Claude Code、Cursor、Cline、Aider 等编程智能体
+- Dify、n8n、LangChain、CrewAI、AutoGen 等工作流 / 多智能体编排框架
+- 任何支持「外部命令 + argv + 退出码」约定的自动化平台（含自研调度器）
 
-典型用法：在 OpenClaw 侧将本应用配置为**外部命令**（`command` + `args`）：`cli login` 仅用于完成**抖音**的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对全部 6 个平台一致可用。终端二维码与无头模式等行为见各子命令 `--help`。
+统一约定：
+
+| 约定项 | 内容 |
+|--------|------|
+| 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`） |
+| 子命令 | `cli login \| publish \| accounts \| history`，每个均支持 `--help` |
+| 退出码 | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等） |
+| 机器可读输出 | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费 |
+| 登录态共享 | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰 |
+
+仓库顶部的 `<!-- openclaw-integrable ... -->` HTML 注释以 OpenClaw 的 schema 示例上述约定；其它平台如需类似的仓库级可发现标记，可沿用同一 `argv-marker=cli` 语义，或加上自家的注释标签（例如 `<!-- hermes-integrable ... -->`），互不冲突。
+
+典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 仅用于完成 **抖音** 的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对全部 6 个平台一致可用。终端二维码与无头模式等行为见各子命令 `--help`。
 
 ## 目前可以一键发布视频的平台有
 
@@ -95,7 +107,7 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 ## Contributors
 
 - **核心维护**：[@hanliang97](https://github.com/hanliang97)
-- **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw) — 本仓库顶部以 `openclaw-integrable` 注释显式声明 CLI 入口，`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向 OpenClaw 等智能体工具的外部命令集成场景设计，欢迎围绕 CLI 契约反馈与共建。
+- **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw)、Hermes 等智能体 / 编排生态 — 本仓库顶部以 `openclaw-integrable` 注释示例地显式声明 CLI 入口；`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向所有「外部命令型」AI 工具设计，任何遵循同样契约的平台（含自研调度器）都可直接接入，欢迎围绕 CLI 契约反馈与共建。
 - **AI 协作声明**：部分 CLI 子命令（`cli accounts` / `cli history`）、skills 文档（`.cursor/skills/matrixmedia-cli-publish/`）以及 README 的 CLI 章节由 Anthropic Claude（通过 [Claude Code](https://claude.com/claude-code)）辅助设计、实现与撰写；人类维护者负责需求决策、代码评审与合入。所有产出遵循本仓库的 [GPL-2.0-only](./LICENSE) 授权条款，不因 AI 参与而改变许可。
 
 欢迎通过 Issue / PR 参与共建。
