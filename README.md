@@ -1,5 +1,7 @@
 # 矩媒 MatrixMedia
 
+## <strong>📺 [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)</strong>
+
 自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化：
 
 - **CLI 登录**：目前仅支持**抖音**（终端二维码 / puppeteer 无头）。
