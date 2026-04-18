@@ -1,9 +1,15 @@
 # 矩媒 MatrixMedia
 
-自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化；CLI 已支持**抖音**扫码登录、多平台视频发布、以及账号登录态与发布记录的查询，便于脚本与智能体编排。
+自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化：
+
+- **CLI 登录**：目前仅支持**抖音**（终端二维码 / puppeteer 无头）。
+- **CLI 发布**：**全部 6 个平台**均可用——抖音、快手、百家号、哔哩哔哩、头条、视频号。
+- **CLI 查询**：`cli accounts` 实时检测登录态，`cli history` 查看本机发布记录。
+
+便于脚本与智能体编排。
 
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
-<!-- 说明：OpenClaw 或其它自动化工具可通过 argv 含 `cli` 识别为 CLI 模式；子命令 `login`（抖音）与 `publish`（含抖音等）详见下文。 -->
+<!-- 说明：OpenClaw 或其它自动化工具可通过 argv 含 `cli` 识别为 CLI 模式；子命令 `login`（仅抖音）与 `publish`（全部 6 个平台）详见下文。 -->
 
 ## OpenClaw 联动
 
@@ -15,7 +21,7 @@
 | `id=matrixmedia-cli` | 建议的工具/技能命名空间 |
 | `argv-marker=cli` | 进程参数中需包含子串 `cli`（如 `矩媒.exe cli publish ...`） |
 
-典型用法：在 OpenClaw 侧将本应用配置为**外部命令**（`command` + `args`），调用 `cli login` 完成抖音分区登录、`cli publish` 上传视频；终端二维码与无头模式等行为见各子命令 `--help`。
+典型用法：在 OpenClaw 侧将本应用配置为**外部命令**（`command` + `args`）：`cli login` 仅用于完成**抖音**的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对全部 6 个平台一致可用。终端二维码与无头模式等行为见各子命令 `--help`。
 
 ## 目前可以一键发布视频的平台有
 
@@ -31,12 +37,14 @@
 
 从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。子命令一览：
 
-| 子命令 | 作用 |
-|--------|------|
-| `cli login` | 抖音扫码登录 / puppeteer 无头登录 |
-| `cli publish` | 发布本地视频（与 GUI「本地视频发布」等价） |
-| `cli accounts` | 列出所有账号并实时检测 cookie 登录态 |
-| `cli history` | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
+| 子命令 | 支持平台 | 作用 |
+|--------|----------|------|
+| `cli login` | **仅抖音**（`-p dy`） | 抖音扫码登录 / puppeteer 无头登录 |
+| `cli publish` | **全部 6 个平台**（`dy \| tt \| ks \| blbl \| bjh \| sph`） | 发布本地视频（与 GUI「本地视频发布」等价） |
+| `cli accounts` | 全平台 | 列出所有账号并实时检测 cookie 登录态 |
+| `cli history` | 全平台 | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
+
+> **非抖音平台的登录怎么办？** 当前 CLI 登录只实现了抖音一家；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
 开发态调用示例：
 

@@ -7,12 +7,14 @@ description: Run MatrixMedia in CLI mode for login, video publishing, account st
 
 ## Subcommands
 
-| Subcommand | Purpose | Writes state? |
-|------------|---------|---------------|
-| `cli login` | Douyin scan-to-login via terminal QR or headless puppeteer | yes (session cookies) |
-| `cli publish` | Publish a local video via puppeteer automation | yes (pushData log) |
-| `cli accounts` | List all accounts from the GUI account tree and report current login state | no |
-| `cli history` | Read local publish records (pushData) with platform/phone/status filters | no |
+| Subcommand | Platform coverage | Purpose | Writes state? |
+|------------|-------------------|---------|---------------|
+| `cli login` | **Douyin only** (`-p dy`) | Scan-to-login via terminal QR or headless puppeteer | yes (session cookies) |
+| `cli publish` | **All 6 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph`) | Publish a local video via puppeteer automation | yes (pushData log) |
+| `cli accounts` | All platforms | List all accounts from the GUI account tree and report current login state | no |
+| `cli history` | All platforms | Read local publish records (pushData) with platform/phone/status filters | no |
+
+> **Non-Douyin platforms cannot log in via CLI.** Ask the user to log in **once in the GUI**; CLI then reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`. If `cli accounts` reports `cookie 已过期`, send the user back to the GUI to re-login — there is no CLI flow for bilibili/kuaishou/baijiahao/toutiao/shipinhao login today.
 
 ## Quick Start
 
@@ -125,10 +127,13 @@ Map user intent to CLI args:
 
 ## Login Rules
 
-- `cli login` currently supports Douyin (`-p dy`) in CLI workflow.
-- If publish fails with login/session errors, run `cli login` first, then retry publish.
-- On Linux headless/SSH, prefer `xvfb-run -a` for login display pipeline.
-- `cli accounts` is non-interactive — it only reads session cookies and never triggers login; use it to pick the right `--phone` / `--partition` before login or publish.
+- `cli login` **only implements Douyin** today. Do not attempt `cli login -p tt/ks/blbl/bjh/sph` — the parser rejects it.
+- For non-Douyin platforms: instruct the user to log in once in the GUI; CLI automatically reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`.
+- If a publish fails with login/session errors:
+  - Douyin → run `cli login -p dy --phone <phone>` first, then retry publish.
+  - Other platforms → ask the user to re-login in the GUI, then retry `cli publish`.
+- On Linux headless/SSH, prefer `xvfb-run -a` for the Douyin login display pipeline.
+- `cli accounts` is non-interactive — it only reads session cookies and never triggers login; use it to pick the right `--phone` / `--partition` before login or publish, and to diagnose expired cookies.
 
 ## Accounts Command
 

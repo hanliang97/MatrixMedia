@@ -10,12 +10,14 @@
 
 该 Skill 覆盖以下子命令：
 
-| 子命令 | 用途 |
-|--------|------|
-| `cli login` | 抖音扫码登录 / puppeteer 无头登录 |
-| `cli publish` | 发布本地视频（与 GUI「本地视频发布」等价） |
-| `cli accounts` | 列出所有账号并实时检测 cookie 登录态 |
-| `cli history` | 读取 `pushData` 发布记录，支持平台/手机号/状态/时间过滤 |
+| 子命令 | 支持平台 | 用途 |
+|--------|----------|------|
+| `cli login` | **仅抖音**（`-p dy`） | 抖音扫码登录 / puppeteer 无头登录 |
+| `cli publish` | **全部 6 个平台**（`dy \| tt \| ks \| blbl \| bjh \| sph`） | 发布本地视频（与 GUI「本地视频发布」等价） |
+| `cli accounts` | 全平台 | 列出所有账号并实时检测 cookie 登录态 |
+| `cli history` | 全平台 | 读取 `pushData` 发布记录，支持平台/手机号/状态/时间过滤 |
+
+> 非抖音平台**无 CLI 登录通道**：请先在 GUI 登录一次，CLI 会复用同一 `persist:<phone><平台>` session partition 继续发布与查询。
 
 数据目录均为 `<Documents>/MatrixMedia/data/`（与 GUI 共用）。
 
