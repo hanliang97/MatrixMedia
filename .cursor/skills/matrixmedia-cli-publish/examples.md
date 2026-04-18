@@ -1,5 +1,15 @@
 # Examples
 
+> Examples below assume `matrixmedia` is on PATH. On Windows the NSIS installer
+> handles this automatically. On macOS, the user runs once:
+>
+> ```bash
+> sudo ln -sf /Applications/matrixmedia.app/Contents/MacOS/matrixmedia /usr/local/bin/matrixmedia
+> ```
+>
+> Without the symlink, replace every `matrixmedia` below with
+> `/Applications/matrixmedia.app/Contents/MacOS/matrixmedia`.
+
 ## Example 1: Minimal publish
 
 User intent: 发布抖音视频，已登录。

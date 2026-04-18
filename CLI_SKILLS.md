@@ -19,4 +19,15 @@
 
 数据目录均为 `<Documents>/MatrixMedia/data/`（与 GUI 共用）。
 
+## 快速安装（让 `matrixmedia` 进入 PATH）
+
+- **Windows**：NSIS 安装包会自动把安装目录写入当前用户 PATH，安装完成重开终端即可直接用 `matrixmedia cli ...`。
+- **macOS**：`.dmg` 无法写 PATH，拖装到 `/Applications` 后执行一次：
+
+  ```bash
+  sudo ln -sf /Applications/matrixmedia.app/Contents/MacOS/matrixmedia /usr/local/bin/matrixmedia
+  ```
+
+  卸载链接：`sudo rm /usr/local/bin/matrixmedia`。
+
 如果你的 AI 平台支持读取仓库内 Skill 目录，可直接加载上述文件并按其中流程执行 `cli login` / `cli publish` / `cli accounts` / `cli history`。

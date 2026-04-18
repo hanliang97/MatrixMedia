@@ -92,6 +92,23 @@ Windows installer behavior:
 - Executable command is unified as `matrixmedia`.
 - Users should not need to choose between Chinese/English executable names.
 
+macOS installer behavior:
+- `.dmg` only delivers the `.app` bundle; it cannot touch user `PATH`.
+- Recommend users run a one-time symlink after drag-installing:
+
+  ```bash
+  sudo ln -sf /Applications/matrixmedia.app/Contents/MacOS/matrixmedia /usr/local/bin/matrixmedia
+  ```
+
+  After that, plain `matrixmedia cli ...` works in any terminal. The link survives app upgrades as long as the `.app` stays at `/Applications/matrixmedia.app`.
+- If the user refuses `sudo`, fall back to an alias in their shell rc:
+
+  ```bash
+  alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
+  ```
+
+- When scripting on Mac without the symlink, always spell the full binary path — `/Applications/matrixmedia.app/Contents/MacOS/matrixmedia cli ...`.
+
 ## Argument Mapping
 
 Map user intent to CLI args:

@@ -1,6 +1,6 @@
 # 矩媒 MatrixMedia
 
-自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化；CLI 已支持**抖音**扫码登录与**抖音**等平台视频发布，便于脚本与智能体编排。
+自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化；CLI 已支持**抖音**扫码登录、多平台视频发布、以及账号登录态与发布记录的查询，便于脚本与智能体编排。
 
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
 <!-- 说明：OpenClaw 或其它自动化工具可通过 argv 含 `cli` 识别为 CLI 模式；子命令 `login`（抖音）与 `publish`（含抖音等）详见下文。 -->
@@ -29,24 +29,60 @@
 
 ## 命令行（CLI）
 
-从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。**抖音**相关能力示例：
+从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。子命令一览：
+
+| 子命令 | 作用 |
+|--------|------|
+| `cli login` | 抖音扫码登录 / puppeteer 无头登录 |
+| `cli publish` | 发布本地视频（与 GUI「本地视频发布」等价） |
+| `cli accounts` | 列出所有账号并实时检测 cookie 登录态 |
+| `cli history` | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
+
+开发态调用示例：
 
 ```bash
-# 抖音登录（终端二维码等，详见帮助）
 ELECTRON_RUN_AS_NODE= electron . cli login --help
-
-# 发布（当前 CLI 实现含抖音等多平台，以 --platform 为准）
 ELECTRON_RUN_AS_NODE= electron . cli publish --help
+ELECTRON_RUN_AS_NODE= electron . cli accounts --help
+ELECTRON_RUN_AS_NODE= electron . cli history --help
 ```
+
+### Windows：安装即可用
 
 Windows NSIS 安装包从 `0.4.5` 起会在安装时自动把应用安装目录加入当前用户 `PATH`，并固定 CLI 命令名为 `matrixmedia`。安装完成并重新打开终端后，可直接执行：
 
 ```bash
 matrixmedia cli login --help
 matrixmedia cli publish --help
+matrixmedia cli accounts
+matrixmedia cli history -d 7
 ```
 
-无需再区分中英文可执行文件名，统一使用 `matrixmedia` 即可。若环境变量 `ELECTRON_RUN_AS_NODE` 被误开启，请先按提示关闭后再启动。
+### macOS：一条命令加入 PATH
+
+macOS 的 `.dmg` 只是磁盘镜像，无法像 NSIS 那样自动写 PATH。把 app 拖进 `/Applications` 后，执行一次下面的命令创建符号链接即可：
+
+```bash
+sudo ln -sf /Applications/matrixmedia.app/Contents/MacOS/matrixmedia /usr/local/bin/matrixmedia
+```
+
+之后在任意终端都能直接用 `matrixmedia cli ...`。若后续升级 app 只是覆盖安装（app 路径不变），符号链接仍然有效，无需重复执行。卸载时删除链接：
+
+```bash
+sudo rm /usr/local/bin/matrixmedia
+```
+
+若无需永久写入，也可临时 alias：
+
+```bash
+alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
+```
+
+### 其它提示
+
+- 中英文可执行文件名已统一为 `matrixmedia`，无需区分。
+- 若环境变量 `ELECTRON_RUN_AS_NODE` 被误开启，请先按提示关闭后再启动。
+- `cli accounts` / `cli history` 仅读取本机数据，不会触发任何登录或发布动作，适合在 pipeline 里做 preflight 检查。
 
 ## 使用声明
 
