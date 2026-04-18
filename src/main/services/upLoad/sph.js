@@ -35,6 +35,40 @@ export default async function (page, data, window,event,onFinish) {
     const yInput = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper", { timeout: 5000 });
     // 传统input/textarea的操作
     await yInput.click();
+
+    // 首次使用账号：视频号会先弹一个「声明原创协议」弹窗
+    // （.weui-desktop-dialog__bd 里含 .protocol-text + 文本"声明原创"的 primary 按钮），
+    // 需要先勾协议再确认，之后才会进入常规的声明原创勾选 dialog。
+    // 非首次账号不弹此弹窗，整段需容错、非阻塞：短超时 + 吞错，不影响主流程。
+    try {
+      await page.waitForSelector(
+        "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text",
+        { timeout: 2500 }
+      );
+      const protocol = await page.$("wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text");
+      if (protocol) await protocol.click();
+      await page.waitForTimeout(300);
+      const clicked = await page.evaluate(() => {
+        const app = document.querySelector("wujie-app.wujie_iframe");
+        if (!app || !app.shadowRoot) return false;
+        const bodies = app.shadowRoot.querySelectorAll(".weui-desktop-dialog__bd");
+        for (const body of bodies) {
+          const dlg = body.closest(".weui-desktop-dialog") || body.parentElement;
+          const btns = (dlg || body).querySelectorAll("button.weui-desktop-btn_primary");
+          for (const btn of btns) {
+            if (String(btn.textContent || "").trim().includes("声明原创")) {
+              btn.click();
+              return true;
+            }
+          }
+        }
+        return false;
+      });
+      if (clicked) await page.waitForTimeout(800);
+    } catch (_) {
+      // 非首次账号或协议弹窗未出现，直接继续
+    }
+
     let cBox = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog label.ant-checkbox-wrapper", { timeout: 5000 });
     await cBox.click();
     let aBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog button.weui-desktop-btn_primary", { timeout: 5000 });
