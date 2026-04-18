@@ -92,6 +92,14 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 - 若环境变量 `ELECTRON_RUN_AS_NODE` 被误开启，请先按提示关闭后再启动。
 - `cli accounts` / `cli history` 仅读取本机数据，不会触发任何登录或发布动作，适合在 pipeline 里做 preflight 检查。
 
+## Contributors
+
+- **核心维护**：[@hanliang97](https://github.com/hanliang97)
+- **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw) — 本仓库顶部以 `openclaw-integrable` 注释显式声明 CLI 入口，`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向 OpenClaw 等智能体工具的外部命令集成场景设计，欢迎围绕 CLI 契约反馈与共建。
+- **AI 协作声明**：部分 CLI 子命令（`cli accounts` / `cli history`）、skills 文档（`.cursor/skills/matrixmedia-cli-publish/`）以及 README 的 CLI 章节由 Anthropic Claude（通过 [Claude Code](https://claude.com/claude-code)）辅助设计、实现与撰写；人类维护者负责需求决策、代码评审与合入。所有产出遵循本仓库的 [GPL-2.0-only](./LICENSE) 授权条款，不因 AI 参与而改变许可。
+
+欢迎通过 Issue / PR 参与共建。
+
 ## 使用声明
 
 1. 本项目仅用于合法合规的学习与效率提升场景，请严格遵守各平台服务协议与当地法律法规。
