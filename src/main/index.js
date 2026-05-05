@@ -24,6 +24,7 @@ import DisableButton from "./config/DisableButton";
 import path from "path";
 import pie from "puppeteer-in-electron";
 import { isCliMode, runCliMain } from "./cli";
+import { startScheduledPublishScheduler } from "./services/scheduledPublish";
 
 const cliMode = isCliMode(process.argv);
 
@@ -69,6 +70,7 @@ pie.initialize(app).then(() => {
 });
 
 function onAppReady() {
+  startScheduledPublishScheduler();
   initWindow(win => {
     const iconPath = path.join(__static, "logo.png");
     console.log(iconPath);

@@ -31,6 +31,19 @@
           <p class="bt2-tip">
             仅<strong>百家号</strong>会用到本项：对应发布页「地址」。其它平台忽略；若不填则不填写。
           </p> </el-form-item>
+        <el-form-item label="定时发布">
+          <el-switch v-model="scheduledPublish" active-text="定时" inactive-text="立即" />
+        </el-form-item>
+        <el-form-item v-if="scheduledPublish" label="发布时间">
+          <el-date-picker
+            v-model="publishAt"
+            type="datetime"
+            value-format="yyyy-MM-dd HH:mm:ss"
+            placeholder="选择年月日时分秒"
+            style="width: 260px"
+          />
+          <p class="bt2-tip">定时任务会立即进入发布历史，到点后自动发布；如果程序关闭错过时间，会显示任务过期。</p>
+        </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
         <el-button @click="metaVisible = false">取消</el-button>
@@ -146,6 +159,8 @@ export default {
       },
       thisShow: false,
       closeWindow: true,
+      scheduledPublish: false,
+      publishAt: "",
       republishContext: null,
       republishTextOtherName: "",
       showLoginDialog: false,
@@ -187,6 +202,8 @@ export default {
       this.form = { title: defaultTitle, bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
+      this.scheduledPublish = false;
+      this.publishAt = "";
       this.republishContext = null;
       this.republishTextOtherName = "";
       this.metaVisible = true;
@@ -209,6 +226,8 @@ export default {
       };
       this.thisShow = false;
       this.closeWindow = true;
+      this.scheduledPublish = false;
+      this.publishAt = "";
       this.republishTextOtherName = payload.textOtherName || fileStem(filePath);
       this.republishContext = {
         records: Array.isArray(payload.records) ? payload.records : [],
@@ -273,6 +292,15 @@ export default {
     isVideohaoPlatform(platform) {
       return String((platform && platform.pt) || "").includes("视频号");
     },
+    validatePublishAt() {
+      if (!this.scheduledPublish) return "";
+      const value = String(this.publishAt || "").trim();
+      if (!value) return "请选择定时发布时间";
+      const dt = moment(value, "YYYY-MM-DD HH:mm:ss", true);
+      if (!dt.isValid()) return "定时发布时间格式应为 YYYY-MM-DD HH:mm:ss";
+      if (!dt.isAfter(moment())) return "定时发布时间必须是未来时间";
+      return "";
+    },
     validateVideohaoBt2(value) {
       const bt2 = String(value || "").trim();
       if (!bt2) {
@@ -291,6 +319,11 @@ export default {
     onMetaNext() {
       if (!this.form.bt1 || !this.form.bt1.trim()) {
         this.$message.warning("请填写标题");
+        return;
+      }
+      const publishAtError = this.validatePublishAt();
+      if (publishAtError) {
+        this.$message.warning(publishAtError);
         return;
       }
       this.loadAccounts();
@@ -320,6 +353,8 @@ export default {
       this.form = { title: "", bt1: "", bt2: "", bq: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
+      this.scheduledPublish = false;
+      this.publishAt = "";
       this.republishContext = null;
       this.republishTextOtherName = "";
     },
@@ -433,9 +468,16 @@ export default {
           return;
         }
       }
+      const publishAtError = this.validatePublishAt();
+      if (publishAtError) {
+        this.$message.warning(publishAtError);
+        return;
+      }
       const video = this.buildVideoPayload();
       const selectedFile = fileBaseName(this.localFilePath);
       const currentDate = moment().format("YYYY-MM-DD");
+      const scheduledAtText = String(this.publishAt || "").trim();
+      const scheduledAtMs = this.scheduledPublish ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf() : null;
 
       platforms.sort((a, b) => {
         if (a.pt.includes("视频号")) return -1;
@@ -444,7 +486,7 @@ export default {
       });
 
       const hasBlbl = platforms.some(p => String(p.pt || "").includes("哔哩哔哩"));
-      if (hasBlbl) {
+      if (hasBlbl && !this.scheduledPublish) {
         this.$alert("哔哩哔哩发布需要手动上传封面，请在弹出的发布窗口中完成封面上传。", "封面提示", {
           confirmButtonText: "我知道了",
           type: "warning",
@@ -457,6 +499,41 @@ export default {
         const taskId = Date.now() + Math.random();
         const shouldShow = isBlbl ? true : this.thisShow;
         const shouldCloseWindowAfterPublish = shouldShow ? this.closeWindow : true;
+        if (this.scheduledPublish) {
+          dataRequest({
+            type: "add",
+            fileName: "pushData",
+            item: {
+              bookName: video.bookName,
+              textOtherName: video.data.textOtherName,
+              textType: video.textType,
+              pt: p.pt,
+              selectedFile,
+              bt: video.data.bt1,
+              bt2: video.data.bt2,
+              bq: video.data.bq,
+              address: video.data.address,
+              filePath: this.localFilePath,
+              useragent: this.ptConfig[p.pt].useragent,
+              phone: p.phone,
+              partition,
+              url: this.ptConfig[p.pt].listIndex,
+              uploadUrl: this.ptConfig[p.pt].upload,
+              date: currentDate,
+              scheduledTask: true,
+              scheduledPublishAt: scheduledAtMs,
+              scheduledPublishAtText: scheduledAtText,
+              publishAttemptCount: 1,
+              republishCount: 0,
+              publishSuccessCount: 0,
+              publishFailCount: 0,
+              publishStatus: "scheduled",
+              lastPublishMessage: "等待定时发布",
+              lastPublishAt: Date.now(),
+            },
+          });
+          continue;
+        }
         ipcRenderer.send("puppeteerFile", {
           ...p,
           taskId,
@@ -537,7 +614,10 @@ export default {
         }
       }
 
-      this.$message.success(`已提交 ${platforms.length} 个平台发布`);
+      if (this.scheduledPublish) {
+        ipcRenderer.send("scheduledPublish:refresh");
+      }
+      this.$message.success(this.scheduledPublish ? `已创建 ${platforms.length} 个平台定时发布任务` : `已提交 ${platforms.length} 个平台发布`);
       this.platformVisible = false;
       this.resetState();
       this.$emit("published");

@@ -150,19 +150,23 @@ export default {
     },
     publishStatusType(status) {
       if (status === "success") return "success";
-      if (status === "fail") return "danger";
+      if (status === "fail" || status === "failed" || status === "expired") return "danger";
+      if (status === "scheduled") return "info";
       return "warning";
     },
     publishStatusText(status) {
       if (status === "success") return "成功";
-      if (status === "fail") return "失败";
+      if (status === "fail" || status === "failed") return "失败";
+      if (status === "scheduled") return "等待定时发布";
+      if (status === "expired") return "任务过期";
       return "发布中";
     },
     isPublishFailed(row) {
       if (!row) return false;
-      if (String(row.publishStatus || "") === "fail") return true;
+      if (["fail", "failed", "expired"].includes(String(row.publishStatus || ""))) return true;
       if (Number(row.publishFailCount) > 0 && Number(row.publishSuccessCount) === 0) return true;
       if (String(row.lastPublishMessage || "").includes("失败")) return true;
+      if (String(row.lastPublishMessage || "").includes("过期")) return true;
       return false;
     },
     async handleRepublish(row) {
@@ -298,7 +302,7 @@ export default {
           date: target.date,
           publishSuccessCount: success ? row.publishSuccessCount + 1 : row.publishSuccessCount,
           publishFailCount: success ? row.publishFailCount : row.publishFailCount + 1,
-          publishStatus: success ? "success" : "fail",
+          publishStatus: success ? "success" : "failed",
           lastPublishMessage: donePayload.message || (success ? "发布成功" : "发布失败"),
           lastPublishAt: Date.now(),
         },

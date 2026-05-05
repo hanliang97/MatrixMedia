@@ -29,6 +29,12 @@ const STATUS_ALIASES = {
   失败: "failed",
   publishing: "publishing",
   发布中: "publishing",
+  scheduled: "scheduled",
+  定时: "scheduled",
+  等待定时发布: "scheduled",
+  expired: "expired",
+  过期: "expired",
+  任务过期: "expired",
 };
 
 export function parseHistoryArgs(subArgv) {
@@ -92,7 +98,7 @@ export function parseHistoryArgs(subArgv) {
     const raw = String(out.status).trim().toLowerCase();
     const st = STATUS_ALIASES[raw] || STATUS_ALIASES[String(out.status).trim()];
     if (!st) {
-      return { ok: false, error: `未知状态: ${out.status}（支持 success|failed|publishing）` };
+      return { ok: false, error: `未知状态: ${out.status}（支持 success|failed|publishing|scheduled|expired）` };
     }
     out.status = st;
   }
@@ -117,7 +123,8 @@ export function historyHelpText() {
 选项:
   -p, --platform <id>   仅列某个平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号
       --phone <id>      仅列某个手机号
-  -s, --status <s>      仅列某个状态：success|failed|publishing（中文同义：成功|失败|发布中）
+  -s, --status <s>      仅列某个状态：success|failed|publishing|scheduled|expired
+                          （中文同义：成功|失败|发布中|等待定时发布|任务过期）
   -d, --days <n>        读取最近 N 天，默认 7；与 --since/--until 冲突时以 since/until 为准
       --since <date>    起始日期（含），YYYY-MM-DD
       --until <date>    结束日期（含），YYYY-MM-DD

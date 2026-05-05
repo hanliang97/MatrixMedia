@@ -12,6 +12,7 @@ import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { changeData } from "../server/utils";
+import { createScheduledRecord } from "../services/scheduledPublish";
 
 export {
   isCliMode,
@@ -155,6 +156,7 @@ export async function runCliMain(argv = process.argv) {
       phone: derivePhoneForRecord(v),
       partition: v.partition,
       url: cfg.listIndex,
+      uploadUrl: cfg.upload,
       date: recordDate,
       publishAttemptCount: 1,
       republishCount: 0,
@@ -164,6 +166,45 @@ export async function runCliMain(argv = process.argv) {
       lastPublishMessage: "等待发布结果",
       lastPublishAt: Date.now(),
     };
+
+    if (v.publishAt) {
+      let scheduledRecord;
+      try {
+        scheduledRecord = createScheduledRecord(recordItem, v.publishAt);
+      } catch (e) {
+        console.error(e && e.message ? e.message : e);
+        return 2;
+      }
+      try {
+        const addRes = changeData({ fileName: "pushData", type: "add", item: scheduledRecord });
+        let recordId = null;
+        if (addRes && addRes.success && Array.isArray(addRes.data)) {
+          const found = [...addRes.data].reverse().find(
+            it =>
+              it.scheduledTask === true &&
+              it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
+              it.textOtherName === scheduledRecord.textOtherName &&
+              it.pt === scheduledRecord.pt &&
+              it.selectedFile === scheduledRecord.selectedFile &&
+              it.textType === scheduledRecord.textType
+          );
+          if (found) recordId = found.id;
+        }
+        console.log(
+          JSON.stringify({
+            status: true,
+            scheduled: true,
+            id: recordId,
+            publishAt: scheduledRecord.scheduledPublishAtText,
+            message: "定时发布任务已创建，已写入发布历史",
+          })
+        );
+        return 0;
+      } catch (e) {
+        console.error("MatrixMedia: 写入定时发布记录失败:", e && e.message);
+        return 1;
+      }
+    }
 
     let recordId = null;
     try {

@@ -39,6 +39,7 @@ export function parsePublishArgs(subArgv) {
     bt2: null,
     bq: "",
     address: "",
+    publishAt: null,
     show: false,
     closeWindowAfterPublish: true,
   };
@@ -63,6 +64,8 @@ export function parsePublishArgs(subArgv) {
       out.bq = args[++i] || "";
     } else if (a === "--address") {
       out.address = args[++i] || "";
+    } else if (a === "--publish-at") {
+      out.publishAt = args[++i];
     } else if (a === "--show") {
       out.show = true;
     } else if (a === "--no-close-window") {
@@ -178,6 +181,8 @@ export function publishHelpText() {
                             • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离，可省。
                             • 百家号/头条：当前代码不消费 bq，无需填。
       --address <text>  地址 → data.address；仅百家号
+      --publish-at <t>  一次性定时发布，格式 "YYYY-MM-DD HH:mm:ss"。创建后立即写入发布历史，
+                            到点后由应用主进程调度执行；不支持每日/每周/每月循环。
       --show            （已忽略）CLI 不显示自动化窗口
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
   -h, --help            显示帮助
@@ -194,5 +199,7 @@ export function publishHelpText() {
     --tags "跑步 新手 减脂"
   # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：
   matrixmedia cli publish -p blbl --phone 13800138000 -f ./v.mp4 -t "标题" --tags "游戏 解说 开黑"
+  # 一次性定时发布：必须提供实际视频、标题、账号等完整发布参数
+  matrixmedia cli publish -p dy --phone 13800138000 -f ./v.mp4 -t "标题" --publish-at "2026-05-05 20:30:00"
 `.trim();
 }

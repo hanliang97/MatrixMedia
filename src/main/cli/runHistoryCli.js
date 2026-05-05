@@ -25,14 +25,21 @@ function listDateFiles(dir) {
 
 function normalizeStatus(item) {
   const raw = String(item.publishStatus || "").toLowerCase();
-  if (raw === "success" || raw === "failed" || raw === "publishing") return raw;
+  if (raw === "success" || raw === "failed" || raw === "publishing" || raw === "scheduled" || raw === "expired") {
+    return raw;
+  }
+  if (raw === "fail") return "failed";
   if (Number(item.publishSuccessCount) > 0) return "success";
   if (Number(item.publishFailCount) > 0) return "failed";
   return "publishing";
 }
 
 function statusLabel(s) {
-  return s === "success" ? "成功" : s === "failed" ? "失败" : "发布中";
+  if (s === "success") return "成功";
+  if (s === "failed") return "失败";
+  if (s === "scheduled") return "等待定时发布";
+  if (s === "expired") return "任务过期";
+  return "发布中";
 }
 
 function formatTime(ms) {
@@ -147,8 +154,10 @@ export function runHistoryCli(options) {
   const okN = rows.filter(r => r.status === "success").length;
   const failN = rows.filter(r => r.status === "failed").length;
   const pubN = rows.filter(r => r.status === "publishing").length;
+  const scheduledN = rows.filter(r => r.status === "scheduled").length;
+  const expiredN = rows.filter(r => r.status === "expired").length;
   console.log(
-    `\n共 ${rows.length} 条记录，显示前 ${limited.length}：成功 ${okN} / 失败 ${failN} / 发布中 ${pubN}`
+    `\n共 ${rows.length} 条记录，显示前 ${limited.length}：成功 ${okN} / 失败 ${failN} / 发布中 ${pubN} / 等待定时 ${scheduledN} / 任务过期 ${expiredN}`
   );
   return 0;
 }

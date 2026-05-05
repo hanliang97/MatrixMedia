@@ -139,6 +139,8 @@ function changeData({ item, fileName, type }) {
       if (fileName == "pushData") {
         const duplicateIndex = list.findIndex(
           existingItem =>
+            !existingItem.scheduledTask &&
+            !newItem.scheduledTask &&
             existingItem.textOtherName === newItem.textOtherName &&
             existingItem.pt === newItem.pt &&
             existingItem.selectedFile === newItem.selectedFile &&

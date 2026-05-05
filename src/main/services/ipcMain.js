@@ -5,6 +5,7 @@ import Server from '../server/index'
 import { winURL } from '../config/StaticPath'
 import downloadFile from './downloadFile'
 import { registerPuppeteerIpc } from './puppeteerFile'
+import { registerScheduledPublishIpc } from './scheduledPublish'
 
 const https = require('https')
 const version = require('../../../package.json').version
@@ -166,6 +167,7 @@ export default {
 
     // puppeteerFile 上传文件发布，获取登录状态
     registerPuppeteerIpc()
+    registerScheduledPublishIpc()
 
     // 获取文件下面的文件
     ipcMain.handle('getFiles', (event, args) => {

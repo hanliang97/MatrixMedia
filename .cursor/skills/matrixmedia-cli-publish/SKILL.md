@@ -122,8 +122,32 @@ Map user intent to CLI args:
 - `--bt2`: short summary title（see "Per-Platform Field Semantics" below — **mandatory for 视频号**)
 - `--tags`, `--bq`: video tags（space-separated; `#` prefix semantics vary per platform)
 - `--address`: location field (Baidu use case)
+- `--publish-at`: one-time scheduled publish time, format `YYYY-MM-DD HH:mm:ss`
 - `--show`: show automation window
 - `--no-close-window`: keep window open when `--show` is enabled
+
+## Scheduled Publish
+
+Use `--publish-at "YYYY-MM-DD HH:mm:ss"` for one-time scheduled publishing. The command must include the real video file and text fields; do not create empty placeholder tasks.
+
+```bash
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/absolute/path/to/video.mp4" \
+  -t "视频标题" \
+  --bt2 "短标题" \
+  --tags "#标签1 #标签2" \
+  --publish-at "2026-05-05 20:30:00"
+```
+
+Rules:
+
+1. Only explicit year-month-day hour-minute-second is supported. Do not generate daily, weekly, monthly, or cron-style schedules.
+2. The scheduled task is written to publish history immediately with status `scheduled`.
+3. If MatrixMedia is closed and misses the time, the next startup marks the task as `expired`; do not auto-republish expired tasks.
+4. Failed or expired scheduled tasks can be republished from GUI history because the record stores the real file path, platform, account, title, short title, tags, and address.
+5. If `--publish-at` is in the past or uses an invalid format, treat it as an argument error and ask the user for a future time.
 
 ## Per-Platform Field Semantics
 
