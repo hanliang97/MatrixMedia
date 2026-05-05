@@ -80,35 +80,7 @@ jobs:
       - name: Generate release notes
         env:
           VERSION: ${{ steps.ver.outputs.version }}
-        shell: bash
-        run: |
-          CURRENT_TAG="v${VERSION}"
-          RANGE_START=""
-          mapfile -t TAGS < <(git tag --sort=-version:refname 'v*')
-          for TAG in "${TAGS[@]}"; do
-            if [ "$TAG" != "$CURRENT_TAG" ]; then
-              RANGE_START="$TAG"
-              break
-            fi
-          done
-
-          if [ -n "$RANGE_START" ]; then
-            RANGE_LABEL="${RANGE_START}..HEAD"
-            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
-          else
-            RANGE_LABEL="无可对比标签"
-            COMMITS="- 无更新记录"
-          fi
-          if [ -z "$COMMITS" ]; then
-            COMMITS="- 无更新记录"
-          fi
-          {
-            echo "## 更新记录"
-            echo
-            echo "对比范围: ${RANGE_LABEL}"
-            echo
-            echo "$COMMITS"
-          } > release-notes.md
+        run: node scripts/gen-release-notes.js
       - name: Download build artifacts
         uses: actions/download-artifact@v4
         with:
@@ -128,8 +100,10 @@ jobs:
 
   release-gitee:
     # 同步 Windows 安装包、macOS DMG（注意 Gitee 单文件约 100MB 上限）
-    needs: [build-windows, build-mac]
+    needs: [release-github]
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -152,38 +126,11 @@ jobs:
           merge-multiple: true
       - name: Install dependencies
         run: yarn
-      - name: Generate release notes
+      - name: Sync GitHub release notes
         env:
+          GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.ver.outputs.version }}
-        shell: bash
-        run: |
-          CURRENT_TAG="v${VERSION}"
-          RANGE_START=""
-          mapfile -t TAGS < <(git tag --sort=-version:refname 'v*')
-          for TAG in "${TAGS[@]}"; do
-            if [ "$TAG" != "$CURRENT_TAG" ]; then
-              RANGE_START="$TAG"
-              break
-            fi
-          done
-
-          if [ -n "$RANGE_START" ]; then
-            RANGE_LABEL="${RANGE_START}..HEAD"
-            COMMITS=$(git log "${RANGE_START}..HEAD" --pretty=format:"- %s (%h)" --grep='^chore(release): v' --invert-grep)
-          else
-            RANGE_LABEL="无可对比标签"
-            COMMITS="- 无更新记录"
-          fi
-          if [ -z "$COMMITS" ]; then
-            COMMITS="- 无更新记录"
-          fi
-          {
-            echo "## 更新记录"
-            echo
-            echo "对比范围: ${RANGE_LABEL}"
-            echo
-            echo "$COMMITS"
-          } > release-notes.md
+        run: gh api "repos/${{ github.repository }}/releases/tags/v${VERSION}" --jq '.body // ""' > release-notes.md
       - name: Upload to Gitee Release
         shell: bash
         run: |

@@ -10,13 +10,13 @@ const https = require('https')
 const version = require('../../../package.json').version
 console.log(version, '-------')
 import fs from 'fs'
-// 获取托管在 gitee 的 pubtw 仓库 Releases。
-// 公开仓库的 Release 列表可匿名调用 API，无需 access_token，避免把可写 token 打进开源客户端。
-function getAllReleases() {
+// 获取托管在 Gitee 的 pubtw 仓库 Release 信息。
+// 公开仓库可匿名调用 API，无需 access_token，避免把可写 token 打进开源客户端。
+function requestGiteeJson(path, fallback) {
   return new Promise(resolve => {
     const options = {
       hostname: 'gitee.com',
-      path: `/api/v5/repos/gzlingyi_0/pubtw/releases?page=1&per_page=20&direction=desc`,
+      path,
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',
@@ -32,21 +32,38 @@ function getAllReleases() {
       })
 
       res.on('end', () => {
-        if (data.indexOf('{') != -1) {
-          console.log(JSON.parse(data), 'JSON.parse(data)')
+        try {
           resolve(JSON.parse(data))
-        } else {
-          resolve([])
+        } catch (error) {
+          console.error('Error parsing Gitee release:', error)
+          resolve(fallback)
         }
       })
     })
 
     req.on('error', error => {
       console.error('Error fetching releases:', error)
+      resolve(fallback)
     })
 
     req.end()
   })
+}
+
+async function getLatestRelease() {
+  const latest = await requestGiteeJson(
+    '/api/v5/repos/gzlingyi_0/pubtw/releases/latest',
+    null
+  )
+  if (latest && latest.id) {
+    return latest
+  }
+
+  const list = await requestGiteeJson(
+    '/api/v5/repos/gzlingyi_0/pubtw/releases?page=1&per_page=20&direction=desc',
+    []
+  )
+  return Array.isArray(list) && list.length > 0 ? list[0] : null
 }
 
 /** 解析 v0.9.7 / 0.9.7 为可比较的数字（按段比较，避免 0.9.10 与 parseInt 拼接错误） */
@@ -107,11 +124,10 @@ export default {
   async Mainfunc(IsUseSysTitle) {
     // Always register the check-for-updates handler first
     ipcMain.handle('check-for-updates', async event => {
-      let datas = await getAllReleases()
-      if (!Array.isArray(datas) || datas.length === 0) {
-        return false
+      const lastData = await getLatestRelease()
+      if (!lastData) {
+        return { hasUpdate: false }
       }
-      const lastData = datas[0]
       const remoteVer =
         (lastData.tag_name && String(lastData.tag_name).replace(/^v/i, '')) ||
         (lastData.name && String(lastData.name).replace(/^v/i, ''))
@@ -129,7 +145,9 @@ export default {
           downloadURL
         )
       }
-      return false
+      return {
+        hasUpdate: Boolean(downloadURL && cmp > 0)
+      }
     })
 
     // Windows：先启动安装包再退出应用，避免 NSIS 无法结束正在运行的 矩媒.exe

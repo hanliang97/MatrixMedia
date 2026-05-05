@@ -20,18 +20,26 @@
       </div>
     </div>
     <el-dialog title="自动更新" :visible.sync="dialogVisible" :show-close="false" :close-on-press-escape="false" :close-on-click-modal="false" center width="60%" top="10vh">
-      <div style='color:red' >
-        提示未知来源请手动允许安装！！
-      </div>
-      <div>
-        <el-image 
-        style="width: 50%;"
-        v-for="(item, index) in srcList" :key="index"
-        :src="item" 
-        z-index="999999999"
-        :preview-src-list="srcList">
-      </el-image>
-      </div>
+      <el-tabs v-model="activeUpdateTab">
+        <el-tab-pane label="更新记录" name="releaseNotes">
+          <div v-if="releaseNoteTitle" class="release-notes-title">{{ releaseNoteTitle }}</div>
+          <pre class="release-notes-body">{{ releaseNoteBody || "暂无更新记录" }}</pre>
+        </el-tab-pane>
+        <el-tab-pane label="安装提示" name="installTips">
+          <div style='color:red' >
+            提示未知来源请手动允许安装！！
+          </div>
+          <div>
+            <el-image
+            style="width: 50%;"
+            v-for="(item, index) in srcList" :key="index"
+            :src="item"
+            z-index="999999999"
+            :preview-src-list="srcList">
+          </el-image>
+          </div>
+        </el-tab-pane>
+      </el-tabs>
      
       <div v-if="percentage == 100" >等待文件处理就绪...</div>
       <div class="conten">
@@ -50,6 +58,9 @@ export default {
     isNotMac: process.platform !== "darwin",
     IsWeb: process.env.IS_WEB,
     dialogVisible: false,
+    activeUpdateTab: "releaseNotes",
+    releaseNoteTitle: "",
+    releaseNoteBody: "",
     progressStaus: null,
     filePath: "",
     srcList: process.platform === "darwin"
@@ -73,7 +84,8 @@ export default {
 
   components: {},
   created() {
-    ipcRenderer.invoke("check-for-updates");
+    this.fetchReleaseNotes();
+    this.checkForUpdates();
     ipcRenderer.invoke("IsUseSysTitle").then(res => {
       this.IsUseSysTitle = res;
     });
@@ -94,6 +106,25 @@ export default {
   },
 
   methods: {
+    fetchReleaseNotes() {
+      fetch("https://gitee.com/api/v5/repos/gzlingyi_0/pubtw/releases/latest")
+        .then(res => res.json())
+        .then(res => {
+          this.releaseNoteTitle = res.name || res.tag_name || "";
+          this.releaseNoteBody = res.body || "";
+        })
+        .catch(() => {
+          this.releaseNoteTitle = "";
+          this.releaseNoteBody = "";
+        });
+    },
+    checkForUpdates() {
+      ipcRenderer.invoke("check-for-updates").then(res => {
+        if (res && res.hasUpdate) {
+          this.activeUpdateTab = "releaseNotes";
+        }
+      });
+    },
     _defaultProgressColors() {
       return [
         { color: "#f56c6c", percentage: 20 },
@@ -127,7 +158,8 @@ export default {
           confirmButtonText: "重试",
           callback: () => {
             this.resetDownloadUi();
-            ipcRenderer.invoke("check-for-updates");
+            this.fetchReleaseNotes();
+            this.checkForUpdates();
           },
         });
       }
@@ -212,5 +244,26 @@ export default {
       color: #fff;
     }
   }
+}
+.release-notes-title {
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.release-notes-body {
+  box-sizing: border-box;
+  width: 100%;
+  max-height: 240px;
+  padding: 12px;
+  margin: 0;
+  overflow: auto;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+  background: #f7f8fa;
+  border: 1px solid #e4e7ed;
+  border-radius: 4px;
+  color: #303133;
+  font-family: inherit;
 }
 </style>

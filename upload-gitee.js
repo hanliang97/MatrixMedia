@@ -99,6 +99,58 @@ function collectExistingAssetNames(assets) {
   return assets.map(a => a && a.name).filter(Boolean)
 }
 
+function patchReleaseBody(releaseId, done) {
+  const fromCi =
+    typeof releaseBodyFromEnv === 'string' && releaseBodyFromEnv.trim()
+  if (!fromCi) {
+    done()
+    return
+  }
+  const payload = JSON.stringify({
+    access_token,
+    tag_name: 'v' + name,
+    tag: 'v' + name,
+    name: 'v' + name,
+    body: releaseBody,
+    target_commitish
+  })
+  const options = {
+    hostname: baseUrl,
+    path: `${createReleaseApi}/${releaseId}`,
+    method: 'PATCH',
+    agent,
+    headers: {
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(payload),
+      'User-Agent': 'Node.js'
+    }
+  }
+  const req = https.request(options, res => {
+    let buf = ''
+    res.on('data', chunk => {
+      buf += chunk
+    })
+    res.on('end', () => {
+      if (res.statusCode === 200) {
+        console.log('已更新 Gitee Release 说明文案')
+      } else {
+        console.error(
+          '更新 Release 说明失败:',
+          res.statusCode,
+          buf.slice(0, 500)
+        )
+      }
+      done()
+    })
+  })
+  req.on('error', err => {
+    console.error('PATCH release body:', err.message)
+    done()
+  })
+  req.write(payload)
+  req.end()
+}
+
 async function uploadAllFiles(releaseId, existingAssets) {
   const existingNames = new Set(collectExistingAssetNames(existingAssets))
   let paths
@@ -153,12 +205,13 @@ function createRelease() {
       } else {
         console.error('创建失败:', res.statusCode, data, options)
         if (data.indexOf('该标签已经存在发行版') != -1) {
-          // 通过tag_name 获取release_id
           tgaGetRelease(releaseData => {
             console.log('获取release_id', releaseData.id)
-            uploadAllFiles(releaseData.id, releaseData.assets).catch(err => {
-              console.error('上传附件失败:', err.message || err)
-              process.exitCode = 1
+            patchReleaseBody(releaseData.id, () => {
+              uploadAllFiles(releaseData.id, releaseData.assets).catch(err => {
+                console.error('上传附件失败:', err.message || err)
+                process.exitCode = 1
+              })
             })
           })
         }
