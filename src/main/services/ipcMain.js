@@ -6,6 +6,7 @@ import { winURL } from '../config/StaticPath'
 import downloadFile from './downloadFile'
 import { registerPuppeteerIpc } from './puppeteerFile'
 import { registerScheduledPublishIpc } from './scheduledPublish'
+import { createLaunchInstallerHandler } from './launchInstaller'
 
 const https = require('https')
 const version = require('../../../package.json').version
@@ -151,19 +152,13 @@ export default {
       }
     })
 
-    // Windows：先启动安装包再退出应用，避免 NSIS 无法结束正在运行的 矩媒.exe
-    ipcMain.handle('launch-installer', async (event, installerPath) => {
-      if (!installerPath || typeof installerPath !== 'string') {
-        return { ok: false }
-      }
-      if (process.platform === 'win32') {
-        spawn(installerPath, [], { detached: true, stdio: 'ignore' }).unref()
-        electronApp.quit()
-      } else {
-        await shell.openPath(installerPath)
-      }
-      return { ok: true }
-    })
+    // 先启动安装包再退出应用，避免安装器处理正在运行的主程序时失败。
+    ipcMain.handle('launch-installer', createLaunchInstallerHandler({
+      platform: process.platform,
+      spawn,
+      shell,
+      electronApp
+    }))
 
     // puppeteerFile 上传文件发布，获取登录状态
     registerPuppeteerIpc()
