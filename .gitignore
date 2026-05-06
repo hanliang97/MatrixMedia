@@ -136,3 +136,4 @@ dist
 .worktrees/
 
 /src/main/server/data
+.claude/
