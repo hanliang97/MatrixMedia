@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
 
@@ -65,14 +66,16 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入标签失败", e);
   }
 
-  // 封面设置
+  // 封面：尽力自动选择首帧，失败不阻断流程（用户可在发布窗口自行处理）
   try {
-    await page.waitForSelector(".file-item-content-status .success", { timeout: 1000 * 60 * 2 });
-    await page.waitForSelector(".cover-main-img .buttons", { timeout: 1000 * 60 * 1 });
+    await page.waitForSelector(".file-item-content-status .success", { timeout: WAIT_UPLOAD_PROCESSING_MS });
+    await page.waitForSelector(".cover-main-img .buttons", { timeout: 60 * 60 * 1000 });
     await page.click(".cover-main .buttons span:first-child", { delay: 200 });
     await page.waitForSelector(".cover-select-footer-pick>button:last-child", { timeout: 5000 });
     await page.click(".cover-select-footer-pick>button:last-child", { delay: 200 });
-  } catch (e) {}
+  } catch (e) {
+    console.warn("哔哩哔哩封面自动选择未完成（可忽略，发布失败时再在窗口内处理）:", e?.message || e);
+  }
 
   try {
     await page.waitForTimeout(500);

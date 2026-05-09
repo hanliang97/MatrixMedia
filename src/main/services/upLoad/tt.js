@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
 
@@ -61,7 +62,7 @@ export default async function (page, data, window,event) {
         let els = document.querySelector(".basic-info  .m-right-btn .btn");
         return els && els.textContent.trim() === "重新上传";
       },
-      { timeout: 1000 * 60 * 5 }
+      { timeout: WAIT_UPLOAD_PROCESSING_MS }
     );
     await page.click(".video-batch-footer .submit", { delay: 200 });
     console.log("✅ 头条号视频上传成功");

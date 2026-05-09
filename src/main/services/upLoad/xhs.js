@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 function normalizeTagList(rawTagText = "") {
   return String(rawTagText)
@@ -24,7 +25,7 @@ export default async function (page, data, window, event) {
 
   try {
     const titleSelector = ".edit-container .d-input input.d-text";
-    await page.waitForSelector(titleSelector, { timeout: 1000 * 60 * 2 });
+    await page.waitForSelector(titleSelector, { timeout: WAIT_UPLOAD_PROCESSING_MS });
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
     const titleText = (data.data?.bt1 || data.data?.bt2 || "").trim();
@@ -68,7 +69,7 @@ export default async function (page, data, window, event) {
         const src = video.getAttribute("src") || video.currentSrc || "";
         return String(src).trim().length > 0;
       },
-      { timeout: 1000 * 60 * 5 }
+      { timeout: WAIT_UPLOAD_PROCESSING_MS }
     );
 
     const clicked = await page.evaluate(() => {

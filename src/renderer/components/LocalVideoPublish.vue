@@ -487,17 +487,20 @@ export default {
 
       const hasBlbl = platforms.some(p => String(p.pt || "").includes("哔哩哔哩"));
       if (hasBlbl && !this.scheduledPublish) {
-        this.$alert("哔哩哔哩发布需要手动上传封面，请在弹出的发布窗口中完成封面上传。", "封面提示", {
-          confirmButtonText: "我知道了",
-          type: "warning",
-        });
+        this.$alert(
+          "哔哩哔哩可能自动完成封面；若发布失败或状态异常，请自行打开发布窗口查看（含封面、稿件信息等）。",
+          "发布提示",
+          {
+            confirmButtonText: "我知道了",
+            type: "warning",
+          },
+        );
       }
 
       for (let p of platforms) {
-        const isBlbl = String(p.pt || "").includes("哔哩哔哩");
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
         const taskId = Date.now() + Math.random();
-        const shouldShow = isBlbl ? true : this.thisShow;
+        const shouldShow = this.thisShow;
         const shouldCloseWindowAfterPublish = shouldShow ? this.closeWindow : true;
         if (this.scheduledPublish) {
           dataRequest({
@@ -541,7 +544,6 @@ export default {
           textOtherName: video.data.textOtherName,
           selectedFile,
           url: this.ptConfig[p.pt].upload,
-          // 哔哩哔哩需要人工上传封面，强制打开窗口以便用户操作
           show: shouldShow,
           closeWindowAfterPublish: shouldCloseWindowAfterPublish,
           useragent: this.ptConfig[p.pt].useragent,

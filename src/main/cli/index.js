@@ -13,6 +13,7 @@ import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
+import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
 
 export {
   isCliMode,
@@ -135,7 +136,6 @@ export async function runCliMain(argv = process.argv) {
     };
 
     const taskId = taskPayload.taskId;
-    const CLI_PUBLISH_TIMEOUT_MS = 35 * 60 * 1000;
 
     // 与 GUI LocalVideoPublish.buildVideoPayload / handleBatchPublish 的 pushData 写入保持一致，
     // 使 cli publish 的记录同时出现在 GUI 视频管理与 `cli history`。
@@ -254,8 +254,9 @@ export async function runCliMain(argv = process.argv) {
       };
 
       const timer = setTimeout(() => {
-        console.error("CLI publish 超时（35 分钟），请检查网络或登录态");
-        updateRecord("failed", "CLI publish 超时 35 分钟");
+        const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
+        console.error(`CLI publish 超时（${min} 分钟），请检查网络或登录态`);
+        updateRecord("failed", `CLI publish 超时 ${min} 分钟`);
         finish(1);
       }, CLI_PUBLISH_TIMEOUT_MS);
 

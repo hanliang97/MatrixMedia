@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
 
@@ -28,7 +29,7 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入标签失败", e);
   }
   try {
-    await page.waitForSelector("#preview-tours video", { timeout: 1000 * 60 * 5 });
+    await page.waitForSelector("#preview-tours video", { timeout: WAIT_UPLOAD_PROCESSING_MS });
     await page.waitForFunction(
       () => {
         const bar = document.querySelector("#setting-tours + div");

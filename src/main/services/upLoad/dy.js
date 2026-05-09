@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
 
@@ -42,7 +43,7 @@ export default async function (page, data, window,event) {
         }
         return false;
       },
-      { timeout: 1000 * 60 * 5 }
+      { timeout: WAIT_UPLOAD_PROCESSING_MS }
     );
 
     // 「保存权限」区域往往在预览视频就绪后才挂载；放在预览等待之后，并放宽文案/控件匹配

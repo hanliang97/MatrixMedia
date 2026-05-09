@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event,onFinish) {
 
@@ -86,7 +87,7 @@ export default async function (page, data, window,event,onFinish) {
         const tag = app.shadowRoot.querySelector(".tag-inner");
         return tag && tag.textContent.trim() === "删除";
       },
-      { timeout: 1000 * 60 * 5 }
+      { timeout: WAIT_UPLOAD_PROCESSING_MS }
     );
 
     await page.waitForTimeout(2000);

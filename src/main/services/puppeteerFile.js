@@ -1,10 +1,12 @@
 "use strict";
 
-import { ipcMain, app, BrowserWindow } from "electron";
+import { ipcMain, app, BrowserWindow, dialog } from "electron";
 import puppeteerCore from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
 import pie from "puppeteer-in-electron";
 import Type from "./Type";
+import { UPLOAD_WINDOW_AUTO_CLOSE_MS } from "./upLoad/uploadTimeouts.js";
+import { skipCloseConfirmation } from "./upLoad/closeWindow.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -114,6 +116,11 @@ async function doUpload(data, transport, queueDone) {
     if (queueDone) queueDone();
   };
 
+  const closePublishWinProgrammatically = win => {
+    skipCloseConfirmation(win);
+    if (win && !win.isDestroyed()) win.close();
+  };
+
   const createWindowAndAttempt = async () => {
     if (finished) return;
     currentAttempt++;
@@ -147,12 +154,33 @@ async function doUpload(data, transport, queueDone) {
       activeWin = win;
       page = await pie.getPage(browser, win);
 
-      const AUTO_CLOSE_DELAY = 10 * 60 * 1000;
-      autoCloseTimer = setTimeout(() => {
-        console.log(`窗口 ${data.partition} 已自动关闭（10分钟超时）`);
-        if (win && !win.isDestroyed()) {
-          win.close();
+      // 站点在上传中常注册 beforeunload；用户主动关窗时二次确认，程序自动关窗见 skipCloseConfirmation。
+      win.webContents.on("will-prevent-unload", event => {
+        if (win._mmAllowCloseWithoutConfirm) {
+          win._mmAllowCloseWithoutConfirm = false;
+          event.preventDefault();
+          return;
         }
+        if (win.isDestroyed()) return;
+        const choice = dialog.showMessageBoxSync(win, {
+          type: "warning",
+          title: "关闭发布窗口",
+          message:
+            "当前页面可能正在上传或已暂停，关闭将放弃未完成的操作。\n\n确定要关闭吗？",
+          buttons: ["仍要关闭", "取消"],
+          defaultId: 1,
+          cancelId: 1,
+          noLink: true,
+        });
+        if (choice === 0) {
+          event.preventDefault();
+        }
+      });
+
+      const AUTO_CLOSE_DELAY = UPLOAD_WINDOW_AUTO_CLOSE_MS;
+      autoCloseTimer = setTimeout(() => {
+        console.log(`窗口 ${data.partition} 已自动关闭（${Math.round(AUTO_CLOSE_DELAY / 60000)} 分钟兜底超时）`);
+        closePublishWinProgrammatically(win);
       }, AUTO_CLOSE_DELAY);
 
       if (data.pt.indexOf("视频") !== -1) {
@@ -222,7 +250,7 @@ async function doUpload(data, transport, queueDone) {
             console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
             if (win && !win.isDestroyed()) {
               win._mmRetryAfterClose = true;
-              win.close();
+              closePublishWinProgrammatically(win);
             }
           }
         } catch (err) {
@@ -233,13 +261,13 @@ async function doUpload(data, transport, queueDone) {
               status: false,
               message: "执行失败",
             });
-            if (win && !win.isDestroyed()) win.close();
+            if (win && !win.isDestroyed()) closePublishWinProgrammatically(win);
             finishOnce();
             return;
           }
           if (win && !win.isDestroyed()) {
             win._mmRetryAfterClose = true;
-            win.close();
+            closePublishWinProgrammatically(win);
           }
         }
       }, 3000);
@@ -247,7 +275,7 @@ async function doUpload(data, transport, queueDone) {
       console.log(`尝试${currentAttempt}发生错误:`, error);
       if (win && !win.isDestroyed()) {
         win._mmRetryAfterClose = true;
-        win.close();
+        closePublishWinProgrammatically(win);
       }
       if (browser) browser.disconnect();
       if (finished) return;

@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   // 使用try-catch包装所有可能出错的操作
@@ -42,7 +43,7 @@ export default async function (page, data, window,event) {
   // 点击提交按钮
   try {
     // 等待 .upload-step-progress  .progress-container.uploading 消失
-    await page.waitForSelector(".upload-step-progress  .progress-container.uploading", { hidden: true, timeout: 1000 * 60 * 5 });
+    await page.waitForSelector(".upload-step-progress  .progress-container.uploading", { hidden: true, timeout: WAIT_UPLOAD_PROCESSING_MS });
     await page.waitForTimeout(1000);
     await page.click("#new-operator-content  button.cheetah-btn-primary.cheetah-btn-solid", { delay: 200 });
     console.log("✅ 百家号视频上传成功");
