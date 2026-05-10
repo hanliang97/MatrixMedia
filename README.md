@@ -38,6 +38,62 @@
 
 典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 仅用于完成 **抖音** 的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对全部 6 个平台一致可用。终端二维码与无头模式等行为见各子命令 `--help`。
 
+### MCP Server（Claude Desktop / Cursor / Cline 原生接入）
+
+仓库内置 `mcp/` 子包，实现了 [Model Context Protocol](https://modelcontextprotocol.io) Server，让支持 MCP 的 AI 工具**无需 shell 调用**即可直接操作 MatrixMedia。
+
+**第一步：构建 MCP Server**
+
+```bash
+cd mcp && npm install && npm run build
+```
+
+**第二步：配置 AI 工具**
+
+以下配置适用于 Claude Desktop、Cursor、Cline 等支持 MCP stdio transport 的工具。
+将 `MATRIXMEDIA_DIR` 设为本仓库根目录的绝对路径。
+
+_Claude Desktop_（`~/Library/Application Support/Claude/claude_desktop_config.json`）：
+
+```json
+{
+  "mcpServers": {
+    "matrixmedia": {
+      "command": "node",
+      "args": ["<MATRIXMEDIA_DIR>/mcp/dist/index.js"],
+      "env": {
+        "MATRIXMEDIA_DIR": "<MATRIXMEDIA_DIR>"
+      }
+    }
+  }
+}
+```
+
+_Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
+
+```json
+{
+  "mcpServers": {
+    "matrixmedia": {
+      "command": "node",
+      "args": ["<MATRIXMEDIA_DIR>/mcp/dist/index.js"],
+      "env": {
+        "MATRIXMEDIA_DIR": "<MATRIXMEDIA_DIR>"
+      }
+    }
+  }
+}
+```
+
+重启 AI 工具后，以下 4 个 tool 即可在对话中直接调用：
+
+| Tool | 说明 |
+|---|---|
+| `list_accounts` | 列出本机已登录账号，支持按平台过滤 |
+| `list_history` | 查询本机发布记录，支持按平台 / 状态 / 天数过滤 |
+| `publish_video` | 发布视频到指定平台（最长 35 分钟，支持定时发布） |
+| `login_douyin` | 抖音扫码登录（仅抖音，其它平台请在 GUI 完成登录） |
+
 ## 目前可以一键发布视频的平台有
 
 1. 抖音
