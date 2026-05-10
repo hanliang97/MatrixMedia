@@ -121,6 +121,18 @@ async function doUpload(data, transport, queueDone) {
     if (win && !win.isDestroyed()) win.close();
   };
 
+  const createAttemptTransport = () => ({
+    reply(channel, ...args) {
+      const payload = args[0];
+      if (channel === "puppeteerFile-done" && payload && payload.status === false) {
+        const err = new Error(payload.message || "平台上传失败");
+        err._mmUploadFailurePayload = payload;
+        throw err;
+      }
+      return transport.reply(channel, ...args);
+    },
+  });
+
   const createWindowAndAttempt = async () => {
     if (finished) return;
     currentAttempt++;
@@ -245,7 +257,7 @@ async function doUpload(data, transport, queueDone) {
             if (typeof action !== "function") {
               throw new Error(`未找到平台处理器: ${data.pt}`);
             }
-            await action(page, data, win, transport, finishOnce);
+            await action(page, data, win, createAttemptTransport(), finishOnce);
           } else {
             console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
             if (win && !win.isDestroyed()) {
@@ -255,11 +267,13 @@ async function doUpload(data, transport, queueDone) {
           }
         } catch (err) {
           console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
+          const failurePayload = err && err._mmUploadFailurePayload;
           if (currentAttempt >= maxRetries) {
             safeReply("puppeteerFile-done", {
               ...data,
+              ...failurePayload,
               status: false,
-              message: "执行失败",
+              message: (failurePayload && failurePayload.message) || "执行失败",
             });
             if (win && !win.isDestroyed()) closePublishWinProgrammatically(win);
             finishOnce();

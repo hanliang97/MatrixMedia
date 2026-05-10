@@ -3,6 +3,7 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event,onFinish) {
+  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
 
   console.log(data);
   await page.waitForTimeout(1000 * 5);
@@ -91,17 +92,23 @@ export default async function (page, data, window,event,onFinish) {
     );
 
     await page.waitForTimeout(2000);
-    const publishBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:last-child button", { timeout: 5000 });
-    await publishBtn.click({ delay: 200 });
-    await page.waitForTimeout(1000);
-    await publishBtn.click({ delay: 200 });
-    console.log("✅ 视频号视频上传成功");
+    // 发布到草稿 第一个按钮
+    const publishDraftBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:first-child button", { timeout: 5000 });
+    await publishDraftBtn.click({ delay: 200 });
+    if (!isDraftMode) {
+      // 发布最后一个按钮
+      const publishBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:last-child button", { timeout: 5000 });
+      await publishBtn.click({ delay: 200 });
+      await page.waitForTimeout(1000);
+      await publishBtn.click({ delay: 200 });
+    }
+    console.log(isDraftMode ? "✅ 视频号视频已保存草稿" : "✅ 视频号视频上传成功");
     setTimeout(() => {
       onFinish && onFinish();
       event.reply("puppeteerFile-done", {
         ...data,
         status: true,
-        message: "上传成功",
+        message: isDraftMode ? "保存草稿成功" : "上传成功",
       });
       maybeClosePublishWindow(data, window);
     }, 5000);

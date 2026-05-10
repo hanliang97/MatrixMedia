@@ -18,12 +18,21 @@
         </el-form-item>
         
         <el-form-item label="视频标签">
-          <el-input v-model="form.bq" placeholder="视频标签" />
+          <el-select
+            v-model="bqTags"
+            multiple
+            filterable
+            allow-create
+            default-first-option
+            no-data-text="请输入标签"
+            placeholder="输入标签，回车添加为条目"
+            style="width: 100%"
+          ></el-select>
         </el-form-item>
         <el-form-item label="概括短标题">
           <el-input v-model="form.bt2" placeholder="选填，建议 6～16 字" />
           <p class="bt2-tip">
-            仅<strong>微信视频号</strong>会用到本项：对应发布页「概括视频主要内容」。选择视频号时本项必填，长度需为 6～16 字，且不能包含特殊标点符号。
+            <strong>微信视频号</strong>会将本项用于「概括视频主要内容」，选择视频号时必填，长度需为 6～16 字，且不能包含特殊标点符号；<br /><strong>小红书</strong>会将本项作为正文内容。
           </p>
         </el-form-item>
         <el-form-item label="地址"> 
@@ -90,6 +99,7 @@
       <div slot="footer" class="dialog-footer">
         <el-button @click="platformVisible = false">取消</el-button>
         <el-button type="primary" @click="handleBatchPublish">发布</el-button>
+        <el-button type="primary" @click="handleBatchPublishToDraft">发布到草稿</el-button>
       </div>
 
       <el-dialog
@@ -142,6 +152,13 @@ function fileStem(p) {
   return i > 0 ? b.slice(0, i) : b;
 }
 
+function parseBqToTags(raw) {
+  return String(raw || "")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
 export default {
   name: "LocalVideoPublish",
   data() {
@@ -150,11 +167,11 @@ export default {
       metaVisible: false,
       platformVisible: false,
       localFilePath: "",
+      bqTags: [],
       form: {
         title: "",
         bt1: "",
         bt2: "",
-        bq: "",
         address: "",
       },
       thisShow: false,
@@ -199,7 +216,8 @@ export default {
       if (!filePath) return;
       this.localFilePath = filePath;
       const defaultTitle = fileStem(filePath);
-      this.form = { title: defaultTitle, bt1: "", bt2: "", bq: "", address: "" };
+      this.bqTags = [];
+      this.form = { title: defaultTitle, bt1: "", bt2: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -221,9 +239,9 @@ export default {
         title: (form.title || defaultTitle || "").trim(),
         bt1: (form.bt1 || "").trim(),
         bt2: (form.bt2 || "").trim(),
-        bq: (form.bq || "").trim(),
         address: (form.address || "").trim(),
       };
+      this.bqTags = parseBqToTags(form.bq);
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -283,7 +301,7 @@ export default {
           textOtherName: this.republishTextOtherName || fileStem(this.localFilePath),
           bt1,
           bt2,
-          bq: (this.form.bq || "").trim(),
+          bq: this.bqTags.map(t => String(t).trim()).filter(Boolean).join(" "),
           bdText: "",
           address: this.form.address.trim(),
         },
@@ -350,7 +368,8 @@ export default {
 
     resetState() {
       this.localFilePath = "";
-      this.form = { title: "", bt1: "", bt2: "", bq: "", address: "" };
+      this.bqTags = [];
+      this.form = { title: "", bt1: "", bt2: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -450,6 +469,15 @@ export default {
     },
 
     async handleBatchPublish() {
+      return this.submitBatchPublish("publish");
+    },
+
+    async handleBatchPublishToDraft() {
+      return this.submitBatchPublish("draft");
+    },
+
+    async submitBatchPublish(mode = "publish") {
+      const isDraftMode = mode === "draft";
       if (!this.localFilePath) {
         this.$message.warning("未选择视频文件");
         return;
@@ -460,6 +488,14 @@ export default {
         this.$message.warning("请至少选择一个平台");
         return;
       }
+      if (isDraftMode && platforms.some(p => String(p.pt || "").includes("头条"))) {
+        this.$message.warning("暂无头条草稿");
+        return;
+      }
+      if (isDraftMode && this.scheduledPublish) {
+        this.$message.warning("发布到草稿不支持定时发布，请关闭定时发布后再试");
+        return;
+      }
       const hasVideohao = platforms.some(this.isVideohaoPlatform);
       if (hasVideohao) {
         const bt2Error = this.validateVideohaoBt2(this.form.bt2);
@@ -468,10 +504,12 @@ export default {
           return;
         }
       }
-      const publishAtError = this.validatePublishAt();
-      if (publishAtError) {
-        this.$message.warning(publishAtError);
-        return;
+      if (!isDraftMode) {
+        const publishAtError = this.validatePublishAt();
+        if (publishAtError) {
+          this.$message.warning(publishAtError);
+          return;
+        }
       }
       const video = this.buildVideoPayload();
       const selectedFile = fileBaseName(this.localFilePath);
@@ -486,7 +524,7 @@ export default {
       });
 
       const hasBlbl = platforms.some(p => String(p.pt || "").includes("哔哩哔哩"));
-      if (hasBlbl && !this.scheduledPublish) {
+      if (hasBlbl && !this.scheduledPublish && !isDraftMode) {
         this.$alert(
           "哔哩哔哩可能自动完成封面；若发布失败或状态异常，请自行打开发布窗口查看（含封面、稿件信息等）。",
           "发布提示",
@@ -502,7 +540,7 @@ export default {
         const taskId = Date.now() + Math.random();
         const shouldShow = this.thisShow;
         const shouldCloseWindowAfterPublish = shouldShow ? this.closeWindow : true;
-        if (this.scheduledPublish) {
+        if (this.scheduledPublish && !isDraftMode) {
           dataRequest({
             type: "add",
             fileName: "pushData",
@@ -543,6 +581,8 @@ export default {
           ...video,
           textOtherName: video.data.textOtherName,
           selectedFile,
+          publishMode: isDraftMode ? "draft" : "publish",
+          publishToDraft: isDraftMode,
           url: this.ptConfig[p.pt].upload,
           show: shouldShow,
           closeWindowAfterPublish: shouldCloseWindowAfterPublish,
@@ -575,8 +615,9 @@ export default {
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
               republishCount: oldRepublish + 1,
-              publishStatus: "publishing",
-              lastPublishMessage: "等待发布结果",
+              publishMode: isDraftMode ? "draft" : "publish",
+              publishStatus: isDraftMode ? "drafting" : "publishing",
+              lastPublishMessage: isDraftMode ? "等待保存草稿结果" : "等待发布结果",
               lastPublishAt: Date.now(),
             },
           });
@@ -600,12 +641,13 @@ export default {
               partition,
               url: this.ptConfig[p.pt].listIndex,
               date: currentDate,
+              publishMode: isDraftMode ? "draft" : "publish",
               publishAttemptCount: 1,
               republishCount: 0,
               publishSuccessCount: 0,
               publishFailCount: 0,
-              publishStatus: "publishing",
-              lastPublishMessage: "等待发布结果",
+              publishStatus: isDraftMode ? "drafting" : "publishing",
+              lastPublishMessage: isDraftMode ? "等待保存草稿结果" : "等待发布结果",
               lastPublishAt: Date.now(),
             },
           });
@@ -616,10 +658,16 @@ export default {
         }
       }
 
-      if (this.scheduledPublish) {
+      if (this.scheduledPublish && !isDraftMode) {
         ipcRenderer.send("scheduledPublish:refresh");
       }
-      this.$message.success(this.scheduledPublish ? `已创建 ${platforms.length} 个平台定时发布任务` : `已提交 ${platforms.length} 个平台发布`);
+      let successMessage = `已提交 ${platforms.length} 个平台发布`;
+      if (isDraftMode) {
+        successMessage = `已提交 ${platforms.length} 个平台保存草稿`;
+      } else if (this.scheduledPublish) {
+        successMessage = `已创建 ${platforms.length} 个平台定时发布任务`;
+      }
+      this.$message.success(successMessage);
       this.platformVisible = false;
       this.resetState();
       this.$emit("published");

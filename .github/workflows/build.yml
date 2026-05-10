@@ -61,8 +61,26 @@ jobs:
           name: mac-dmg
           path: build/*.dmg
 
+  build-linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.15.1'
+      - name: Install dependencies
+        run: yarn
+      - name: Build Electron app (Linux x64 AppImage)
+        run: yarn build:linux
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-appimage
+          path: build/*.AppImage
+
   release-github:
-    needs: [build-windows, build-mac]
+    needs: [build-windows, build-mac, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -95,11 +113,13 @@ jobs:
           files: |
             dist-gh/**/*.exe
             dist-gh/**/*.dmg
+            dist-gh/**/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-gitee:
-    # 同步 Windows 安装包、macOS DMG（注意 Gitee 单文件约 100MB 上限）
+    # 仅同步 Windows 安装包、macOS DMG（注意 Gitee 单文件约 100MB 上限）。
+    # Linux AppImage 仅在 GitHub Release 提供，不上传 Gitee（见下方 find 过滤）。
     needs: [release-github]
     runs-on: ubuntu-latest
     permissions:

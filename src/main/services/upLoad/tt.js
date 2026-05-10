@@ -3,6 +3,16 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
+  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
+  if (isDraftMode) {
+    event.reply("puppeteerFile-done", {
+      ...data,
+      status: false,
+      message: "暂无头条草稿",
+    });
+    maybeClosePublishWindow(data, window);
+    return;
+  }
 
   console.log(data);
   try {

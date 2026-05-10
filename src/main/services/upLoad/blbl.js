@@ -3,6 +3,7 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
+  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
 
   console.log(data);
   try {
@@ -82,14 +83,21 @@ export default async function (page, data, window,event) {
     // 点击一下空白的区域
     await page.click("body", { delay: 200 });
     await page.waitForSelector(".submit-container .submit-add", { timeout: 10000 });
-    await page.click(".submit-add", { clickCount: 2, delay: 200 });
+    // 存到草稿
+    await page.waitForSelector(".submit-draft", { timeout: 200 });
+    if (isDraftMode) {
+      await page.click(".submit-draft", { delay: 200 });
+    } else {
+      // 发布
+      await page.click(".submit-add", { clickCount: 2, delay: 200 });
+    }
     // 检测._phone-label_1eni7_34 消失
-    console.log("✅ 哔哩哔哩视频上传成功");
+    console.log(isDraftMode ? "✅ 哔哩哔哩视频已保存草稿" : "✅ 哔哩哔哩视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,
         status: true,
-        message: "上传成功",
+        message: isDraftMode ? "保存草稿成功" : "上传成功",
       });
       maybeClosePublishWindow(data, window);
     }, 5000);

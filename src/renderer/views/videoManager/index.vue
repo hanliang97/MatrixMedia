@@ -152,6 +152,7 @@ export default {
       if (status === "success") return "success";
       if (status === "fail" || status === "failed" || status === "expired") return "danger";
       if (status === "scheduled") return "info";
+      if (status === "draft") return "info";
       return "warning";
     },
     publishStatusText(status) {
@@ -159,6 +160,8 @@ export default {
       if (status === "fail" || status === "failed") return "失败";
       if (status === "scheduled") return "等待定时发布";
       if (status === "expired") return "任务过期";
+      if (status === "draft") return "已保存草稿";
+      if (status === "drafting") return "保存草稿中";
       return "发布中";
     },
     isPublishFailed(row) {
@@ -294,6 +297,7 @@ export default {
       if (!target || !target.row || !target.row.id) return;
       const row = this.fillPublishStats(target.row);
       const success = !!donePayload.status;
+      const isDraftMode = donePayload.publishMode === "draft" || donePayload.publishToDraft === true;
       await dataRequest({
         type: "update",
         fileName: "pushData",
@@ -302,8 +306,9 @@ export default {
           date: target.date,
           publishSuccessCount: success ? row.publishSuccessCount + 1 : row.publishSuccessCount,
           publishFailCount: success ? row.publishFailCount : row.publishFailCount + 1,
-          publishStatus: success ? "success" : "failed",
-          lastPublishMessage: donePayload.message || (success ? "发布成功" : "发布失败"),
+          publishMode: isDraftMode ? "draft" : row.publishMode || "publish",
+          publishStatus: success ? (isDraftMode ? "draft" : "success") : "failed",
+          lastPublishMessage: donePayload.message || (success ? (isDraftMode ? "保存草稿成功" : "发布成功") : "发布失败"),
           lastPublishAt: Date.now(),
         },
       });

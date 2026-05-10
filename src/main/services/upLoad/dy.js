@@ -3,6 +3,7 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
+  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
 
   try {
     // 等待 name=upload-btn 的 input 出现
@@ -86,15 +87,15 @@ export default async function (page, data, window,event) {
       return false;
     });
     if (!saved) throw new Error("未找到保存权限-不允许");
-
-    // 如果出现点击
-    await page.click("#popover-tip-container");
-    console.log("✅ 抖音视频上传成功");
+    const submitSelector = isDraftMode ? "#popover-tip-container+button" : "#popover-tip-container";
+    const submitBtn = await page.waitForSelector(submitSelector, { timeout: 5000 });
+    await submitBtn.click({ delay: 200 });
+    console.log(isDraftMode ? "✅ 抖音视频已保存草稿" : "✅ 抖音视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,
         status: true,
-        message: "上传成功",
+        message: isDraftMode ? "保存草稿成功" : "上传成功",
       });
       maybeClosePublishWindow(data, window);
     }, 5000);

@@ -11,7 +11,8 @@
     "rm:build": "node scripts/rm-build-dir.js",
     "build": "yarn rm:build && yarn build:dir && electron-builder --win --x64",
     "build:mac": "yarn rm:build && yarn build:dir && electron-builder --mac --x64 --arm64",
-    "build:all": "yarn rm:build && yarn build:dir && electron-builder --win --x64 --mac --x64 --arm64",
+    "build:linux": "yarn rm:build && yarn build:dir && electron-builder --linux --x64",
+    "build:all": "yarn rm:build && yarn build:dir && electron-builder --win --x64 --mac --x64 --arm64 --linux --x64",
     "dep:upgrade": "yarn upgrade-interactive --latest",
     "postinstall": "electron-builder install-app-deps",
     "pushall": "node pushall.js",
@@ -67,6 +68,14 @@
     },
     "dmg": {
       "format": "ULFO"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ],
+      "category": "Utility",
+      "icon": "lib/icons/icon.png",
+      "maintainer": "lhl"
     }
   },
   "dependencies": {

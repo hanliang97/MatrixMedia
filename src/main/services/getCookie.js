@@ -7,6 +7,13 @@ export default function () {
       const cookies = await ses.cookies.get({ url: args.url });
       let result = "";
       let loginExpiresAtMs = null;
+      const xhsLoginCookieNames = [
+        "access-token-creator.xiaohongshu.com",
+        "customer-sso-sid",
+        "galaxy_creator_session_id",
+        "x-user-id-creator.xiaohongshu.com",
+      ];
+      const xhsLoginCookies = new Map();
 
       cookies.forEach(cookie => {
         const expMs =
@@ -33,7 +40,17 @@ export default function () {
           result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
           loginExpiresAtMs = expMs;
         }
+
+        if (args.pt == "小红书" && xhsLoginCookieNames.includes(cookie.name) && cookie.value && expMs) {
+          xhsLoginCookies.set(cookie.name, expMs);
+        }
       });
+
+      if (args.pt == "小红书" && xhsLoginCookieNames.every(name => xhsLoginCookies.has(name))) {
+        loginExpiresAtMs = Math.min(...xhsLoginCookies.values());
+        result = `${args.name}=true; expires=${new Date(loginExpiresAtMs).toUTCString()}; path=/`;
+      }
+
       event.reply("getCookie-done", {
         taskId: args.taskId,
         success: true,

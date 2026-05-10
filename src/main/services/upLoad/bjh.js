@@ -3,6 +3,7 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
+  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
   // 使用try-catch包装所有可能出错的操作
   try {
      await page.waitForTimeout(2000);
@@ -45,13 +46,18 @@ export default async function (page, data, window,event) {
     // 等待 .upload-step-progress  .progress-container.uploading 消失
     await page.waitForSelector(".upload-step-progress  .progress-container.uploading", { hidden: true, timeout: WAIT_UPLOAD_PROCESSING_MS });
     await page.waitForTimeout(1000);
-    await page.click("#new-operator-content  button.cheetah-btn-primary.cheetah-btn-solid", { delay: 200 });
-    console.log("✅ 百家号视频上传成功");
+    // 发布到草稿 第一个按钮.cheetah-btn
+    await page.click("#new-operator-content .op-list-right button.cheetah-btn:first-child", { delay: 200 });
+    if (!isDraftMode) {
+      // 发布
+      await page.click("#new-operator-content  button.cheetah-btn-primary.cheetah-btn-solid", { delay: 200 });
+    }
+    console.log(isDraftMode ? "✅ 百家号视频已保存草稿" : "✅ 百家号视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,
         status: true,
-        message: "上传成功",
+        message: isDraftMode ? "保存草稿成功" : "上传成功",
       });
       maybeClosePublishWindow(data, window);
     }, 5000);
