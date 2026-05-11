@@ -7,7 +7,6 @@ import {
 import { listAccountsTool, handleListAccounts } from './tools/accounts.js';
 import { listHistoryTool, handleListHistory } from './tools/history.js';
 import { publishVideoTool, handlePublishVideo } from './tools/publish.js';
-import { loginDouyinTool, handleLoginDouyin } from './tools/login.js';
 
 const server = new Server(
   { name: 'matrixmedia', version: '0.1.0' },
@@ -15,7 +14,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: [listAccountsTool, listHistoryTool, publishVideoTool, loginDouyinTool] };
+  return { tools: [listAccountsTool, listHistoryTool, publishVideoTool] };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -42,10 +41,6 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
               }
             : undefined
         );
-        break;
-      }
-      case 'login_douyin': {
-        result = await handleLoginDouyin(args);
         break;
       }
       default:
