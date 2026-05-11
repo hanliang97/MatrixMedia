@@ -16,8 +16,10 @@ const version = require("../../../package.json").version;
 
 function resolveWindowsWindowIcon() {
   if (!platform().includes("win32")) return undefined;
-  const packaged = path.join(process.resourcesPath, "matrixmedia.ico");
-  if (fs.existsSync(packaged)) return packaged;
+  const nextToExe = path.join(path.dirname(process.execPath), "matrixmedia.ico");
+  if (fs.existsSync(nextToExe)) return nextToExe;
+  const inResources = path.join(process.resourcesPath, "matrixmedia.ico");
+  if (fs.existsSync(inResources)) return inResources;
   const dev = path.join(__dirname, "../../lib/icons/icon.ico");
   if (fs.existsSync(dev)) return dev;
   return undefined;

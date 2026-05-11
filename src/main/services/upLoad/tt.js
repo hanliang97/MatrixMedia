@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
@@ -67,12 +67,13 @@ export default async function (page, data, window,event) {
     await page.waitForSelector(".video-batch-footer .action-footer-btn", { timeout: 10000 });
     await page.waitForTimeout(3000);
     
-    await page.waitForFunction(
+    await pollPageUntil(
+      page,
       () => {
-        let els = document.querySelector(".basic-info  .m-right-btn .btn");
-        return els && els.textContent.trim() === "重新上传";
+        const els = document.querySelector(".basic-info  .m-right-btn .btn");
+        return !!(els && els.textContent.trim() === "重新上传");
       },
-      { timeout: WAIT_UPLOAD_PROCESSING_MS }
+      WAIT_UPLOAD_PROCESSING_MS
     );
     await page.click(".video-batch-footer .submit", { delay: 200 });
     console.log("✅ 头条号视频上传成功");

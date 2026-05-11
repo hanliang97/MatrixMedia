@@ -1,6 +1,73 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+
+const SEL_ORIGINAL_CHECKBOX =
+  "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
+const SEL_ORIGINAL_DIALOG_CHECK =
+  "wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog label.ant-checkbox-wrapper";
+const SEL_ORIGINAL_DIALOG_OK =
+  "wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog button.weui-desktop-btn_primary";
+
+/**
+ * 声明原创：部分账号/版本无入口或已默认处理，失败不影响后续发布。
+ */
+async function tryDeclareOriginal(page) {
+  let yInput;
+  try {
+    yInput = await page.waitForSelector(SEL_ORIGINAL_CHECKBOX, { timeout: 3000 });
+  } catch (_) {
+    console.log("声明原创：未找到勾选入口，跳过");
+    return;
+  }
+
+  try {
+    await yInput.click();
+  } catch (e) {
+    console.warn("声明原创：勾选入口点击失败，跳过", e && e.message ? e.message : e);
+    return;
+  }
+
+  try {
+    await page.waitForSelector(
+      "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text",
+      { timeout: 2500 }
+    );
+    const protocol = await page.$(
+      "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text"
+    );
+    if (protocol) await protocol.click();
+    await page.waitForTimeout(300);
+    const clicked = await page.evaluate(() => {
+      const app = document.querySelector("wujie-app.wujie_iframe");
+      if (!app || !app.shadowRoot) return false;
+      const bodies = app.shadowRoot.querySelectorAll(".weui-desktop-dialog__bd");
+      for (const body of bodies) {
+        const dlg = body.closest(".weui-desktop-dialog") || body.parentElement;
+        const btns = (dlg || body).querySelectorAll("button.weui-desktop-btn_primary");
+        for (const btn of btns) {
+          if (String(btn.textContent || "").trim().includes("声明原创")) {
+            btn.click();
+            return true;
+          }
+        }
+      }
+      return false;
+    });
+    if (clicked) await page.waitForTimeout(800);
+  } catch (_) {
+    /* 非首次账号或协议弹窗未出现 */
+  }
+
+  try {
+    const cBox = await page.waitForSelector(SEL_ORIGINAL_DIALOG_CHECK, { timeout: 3000 });
+    await cBox.click();
+    const aBtn = await page.waitForSelector(SEL_ORIGINAL_DIALOG_OK, { timeout: 3000 });
+    await aBtn.click();
+  } catch (_) {
+    console.log("声明原创：未出现后续确认框或已完成，跳过");
+  }
+}
 
 export default async function (page, data, window,event,onFinish) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
@@ -33,62 +100,21 @@ export default async function (page, data, window,event,onFinish) {
   } catch (err) {
     console.error("❌ 输入失败:", err);
   }
-  try {
-    const yInput = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper", { timeout: 5000 });
-    // 传统input/textarea的操作
-    await yInput.click();
 
-    // 首次使用账号：视频号会先弹一个「声明原创协议」弹窗
-    // （.weui-desktop-dialog__bd 里含 .protocol-text + 文本"声明原创"的 primary 按钮），
-    // 需要先勾协议再确认，之后才会进入常规的声明原创勾选 dialog。
-    // 非首次账号不弹此弹窗，整段需容错、非阻塞：短超时 + 吞错，不影响主流程。
-    try {
-      await page.waitForSelector(
-        "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text",
-        { timeout: 2500 }
-      );
-      const protocol = await page.$("wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text");
-      if (protocol) await protocol.click();
-      await page.waitForTimeout(300);
-      const clicked = await page.evaluate(() => {
-        const app = document.querySelector("wujie-app.wujie_iframe");
-        if (!app || !app.shadowRoot) return false;
-        const bodies = app.shadowRoot.querySelectorAll(".weui-desktop-dialog__bd");
-        for (const body of bodies) {
-          const dlg = body.closest(".weui-desktop-dialog") || body.parentElement;
-          const btns = (dlg || body).querySelectorAll("button.weui-desktop-btn_primary");
-          for (const btn of btns) {
-            if (String(btn.textContent || "").trim().includes("声明原创")) {
-              btn.click();
-              return true;
-            }
-          }
-        }
-        return false;
-      });
-      if (clicked) await page.waitForTimeout(800);
-    } catch (_) {
-      // 非首次账号或协议弹窗未出现，直接继续
-    }
-
-    let cBox = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog label.ant-checkbox-wrapper", { timeout: 5000 });
-    await cBox.click();
-    let aBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog button.weui-desktop-btn_primary", { timeout: 5000 });
-    await aBtn.click();
-  } catch (err) {
-    console.error("❌ 声明原创失败:", err);
-  }
+  await tryDeclareOriginal(page);
 
   try {
-    // 等待 .tag-inner 内容变为“删除”
-    await page.waitForFunction(
+    await pollPageUntil(
+      page,
       () => {
         const app = document.querySelector("wujie-app.wujie_iframe");
         if (!app || !app.shadowRoot) return false;
         const tag = app.shadowRoot.querySelector(".tag-inner");
-        return tag && tag.textContent.trim() === "删除";
+        return !!(tag && tag.textContent.trim() === "删除");
       },
-      { timeout: WAIT_UPLOAD_PROCESSING_MS }
+      WAIT_UPLOAD_PROCESSING_MS,
+      2000,
+      "等待视频处理超时（未出现「删除」标签）"
     );
 
     await page.waitForTimeout(2000);
@@ -113,14 +139,23 @@ export default async function (page, data, window,event,onFinish) {
       maybeClosePublishWindow(data, window);
     }, 5000);
   } catch (err) {
+    const detail =
+      (err && err.message) || (typeof err === "string" ? err : String(err));
+    console.error("❌ 视频号发布失败:", err);
     onFinish && onFinish();
-    event.reply("puppeteerFile-done", {
-      ...data,
-      status: false,
-      message: "上传失败",
-    });
-     maybeClosePublishWindow(data, window);
-    console.error("❌ 发布失败:", err);
+    try {
+      event.reply("puppeteerFile-done", {
+        ...data,
+        status: false,
+        message:
+          detail && detail.length > 400
+            ? `${detail.slice(0, 400)}…`
+            : detail || "上传失败",
+      });
+    } catch (_) {
+      /* createAttemptTransport 在失败时会 throw，避免吞掉上面的日志 */
+    }
+    maybeClosePublishWindow(data, window);
   }
   
 }

@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
@@ -32,7 +32,8 @@ export default async function (page, data, window,event) {
   }
   try {
     // 不依赖会随打包变化的 container-xxx：等预览区 video（抖音 CDN）与同容器内的 rc 进度条同时出现
-    await page.waitForFunction(
+    await pollPageUntil(
+      page,
       () => {
         for (const v of document.querySelectorAll("video")) {
           const src = v.currentSrc || v.getAttribute("src") || "";
@@ -44,7 +45,7 @@ export default async function (page, data, window,event) {
         }
         return false;
       },
-      { timeout: WAIT_UPLOAD_PROCESSING_MS }
+      WAIT_UPLOAD_PROCESSING_MS
     );
 
     // 「保存权限」区域往往在预览视频就绪后才挂载；放在预览等待之后，并放宽文案/控件匹配

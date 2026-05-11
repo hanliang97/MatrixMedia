@@ -1,7 +1,7 @@
 import path from "path";
 import { clipboard } from "electron";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 function normalizeTagList(rawTagText = "") {
   const tagText = String(rawTagText).trim();
@@ -179,18 +179,20 @@ export default async function (page, data, window, event) {
   }
 
   try {
-    await page.waitForFunction(
+    await pollPageUntil(
+      page,
       () => {
         const video = document.querySelector(".video-area video");
         if (!video) return false;
         const src = video.getAttribute("src") || video.currentSrc || "";
         return String(src).trim().length > 0;
       },
-      { timeout: WAIT_UPLOAD_PROCESSING_MS }
+      WAIT_UPLOAD_PROCESSING_MS
     );
 
     if (!isDraftMode) {
-      await page.waitForFunction(
+      await pollPageUntil(
+        page,
         () => {
           const norm = text => String(text || "").replace(/\s+/g, "").trim();
           const bar = document.querySelector(".publish-page-publish-btn");
@@ -203,7 +205,7 @@ export default async function (page, data, window, event) {
             && publishBtn.getAttribute("aria-disabled") !== "true"
             && !String(publishBtn.className || "").includes("disabled");
         },
-        { timeout: WAIT_UPLOAD_PROCESSING_MS }
+        WAIT_UPLOAD_PROCESSING_MS
       );
     }
     
