@@ -13,7 +13,7 @@
 | 子命令 | 支持平台 | 用途 |
 |--------|----------|------|
 | `cli login` | **仅抖音**（`-p dy`） | 抖音扫码登录 / puppeteer 无头登录 |
-| `cli publish` | **全部 6 个平台**（`dy \| tt \| ks \| blbl \| bjh \| sph`） | 发布本地视频（与 GUI「本地视频发布」等价） |
+| `cli publish` | **全部 7 个平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`） | 发布本地视频（与 GUI「本地视频发布」等价） |
 | `cli accounts` | 全平台 | 列出所有账号并实时检测 cookie 登录态 |
 | `cli history` | 全平台 | 读取 `pushData` 发布记录，支持平台/手机号/状态/时间过滤 |
 

@@ -145,6 +145,27 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
 })();
 
 (() => {
+  const r = parsePublishArgs([
+    "-p",
+    "xhs",
+    "--phone",
+    "13800138000",
+    "-f",
+    "./v.mp4",
+    "-t",
+    "标题",
+    "--bt2",
+    "正文",
+    "--tags",
+    "减脂 健身",
+  ]);
+  assert.strictEqual(r.ok, true);
+  assert.strictEqual(r.value.platform, "小红书");
+  assert.strictEqual(r.value.partition, "persist:13800138000小红书");
+  assert.strictEqual(r.value.bq, "减脂 健身");
+})();
+
+(() => {
   assert.ok(publishHelpText().includes("--publish-at"));
 })();
 

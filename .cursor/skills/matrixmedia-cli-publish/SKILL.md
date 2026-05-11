@@ -10,7 +10,7 @@ description: Run MatrixMedia in CLI mode for login, video publishing, account st
 | Subcommand | Platform coverage | Purpose | Writes state? |
 |------------|-------------------|---------|---------------|
 | `cli login` | **Douyin only** (`-p dy`) | Scan-to-login via terminal QR or headless puppeteer | yes (session cookies) |
-| `cli publish` | **All 6 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph`) | Publish a local video via puppeteer automation | yes (pushData log) |
+| `cli publish` | **All 7 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`) | Publish a local video via puppeteer automation | yes (pushData log) |
 | `cli accounts` | All platforms | List all accounts from the GUI account tree and report current login state | no |
 | `cli history` | All platforms | Read local publish records (pushData) with platform/phone/status filters | no |
 
@@ -161,7 +161,7 @@ Each platform consumes `bt1` / `bt2` / `bq` differently — this is the single m
 | **哔哩哔哩** (blbl) | Submission title | unused | **Independent tag widget.** Code does `split(/\s+/)` then strips leading `#`, types each tag followed by Enter. Leading `#` is harmless but redundant. |
 | **百家号** (bjh) | Article title | unused | **unused by current automation** — tags won't be written regardless. |
 | **头条** (tt) | Up to 30 chars | unused | **unused** — a fixed category checkbox is auto-selected instead. |
-| **小红书** (xhs, experimental) | Title (falls back to `bt2`) | Body fallback (falls back to `bdText`) | `normalizeTagList` splits `\s+`, strips leading `#`, then re-inserts each as `#tag` in the body. |
+| **小红书** (xhs) | Title (falls back to `bt2`) | Body fallback (falls back to `bdText`) | `normalizeTagList` splits `\s+`, strips leading `#`, then re-inserts each as `#tag` in the body. |
 
 ### 视频号短标生成规则（最常踩坑）
 

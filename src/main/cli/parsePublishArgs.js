@@ -17,6 +17,9 @@ const PLATFORM_ALIASES = {
   ks: "快手",
   kuaishou: "快手",
   快手: "快手",
+  xhs: "小红书",
+  xiaohongshu: "小红书",
+  小红书: "小红书",
 };
 
 /**
@@ -79,7 +82,7 @@ export function parsePublishArgs(subArgv) {
   const raw = String(out.platform).trim();
   const lower = raw.toLowerCase();
   const pt = PLATFORM_ALIASES[raw] || PLATFORM_ALIASES[lower] || raw;
-  const canonical = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手"];
+  const canonical = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手", "小红书"];
   if (!canonical.includes(pt)) {
     return { ok: false, error: `未知平台: ${out.platform}` };
   }
@@ -170,7 +173,7 @@ export function publishHelpText() {
 字段与 GUI「本地视频发布」弹窗一致（见 LocalVideoPublish buildVideoPayload）：
 
 选项:
-  -p, --platform <id>   平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号
+  -p, --platform <id>   平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号、xhs|小红书
   -f, --file <path>     本地视频文件路径
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000抖音
