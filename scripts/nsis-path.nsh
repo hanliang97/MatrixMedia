@@ -8,13 +8,28 @@
   ; 通知系统刷新环境变量（新开的终端可立即读取）
   System::Call 'user32::SendMessageTimeoutW(p 0xffff, i ${WM_SETTINGCHANGE}, p 0, w "Environment", i 0, i 5000, *p .r0)'
 
-  ; 与 matrixmedia.exe 同目录的 matrixmedia.ico（extraFiles），快捷方式显式绑定，避免只认 resources\ 时找不到
+  ; 覆盖 installer 已创建的桌面快捷方式（$newDesktopLink），图标用 exe 旁 matrixmedia.ico 或 resources 下副本
   !ifndef BUILD_UNINSTALLER
-  IfFileExists "$INSTDIR\matrixmedia.ico" mmWriteDesktopIcon
+  !ifndef DO_NOT_CREATE_DESKTOP_SHORTCUT
+  StrCpy $R9 ""
+  IfFileExists "$INSTDIR\matrixmedia.ico" mmIcoRoot
+  IfFileExists "$INSTDIR\resources\matrixmedia.ico" mmIcoRes
+  Goto mmIcoChosen
+  mmIcoRoot:
+    StrCpy $R9 "$INSTDIR\matrixmedia.ico"
+    Goto mmIcoChosen
+  mmIcoRes:
+    StrCpy $R9 "$INSTDIR\resources\matrixmedia.ico"
+  mmIcoChosen:
+  StrCmp $R9 "" mmAfterDesktopIcon
+  IfFileExists "$newDesktopLink" mmPatchLnk
   Goto mmAfterDesktopIcon
-  mmWriteDesktopIcon:
-    CreateShortCut "$DESKTOP\${SHORTCUT_NAME}.lnk" "$INSTDIR\${APP_EXECUTABLE_FILENAME}" "" "$INSTDIR\matrixmedia.ico" 0
+  mmPatchLnk:
+    CreateShortCut "$newDesktopLink" "$appExe" "" "$R9" 0
+    ClearErrors
+    WinShell::SetLnkAUMI "$newDesktopLink" "${APP_ID}"
   mmAfterDesktopIcon:
+  !endif
   !endif
 !macroend
 
