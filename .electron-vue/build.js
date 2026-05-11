@@ -19,7 +19,14 @@ if (process.env.BUILD_TARGET === 'web') web()
 else build()
 
 function clean() {
-  del.sync(['dist/electron/*', 'build/*', '!build/icons', '!build/lib', '!build/lib/electron-build.*', '!build/icons/icon.*'])
+  /* 不再保留 build/icons：旧版 electron-vue 留下的默认 icon.ico 会干扰 Windows 安装包/快捷方式图标 */
+  del.sync(['build/icons'])
+  del.sync([
+    'dist/electron/*',
+    'build/*',
+    '!build/lib',
+    '!build/lib/electron-build.*'
+  ])
   console.log(`\n${doneLog}clear done`)
   if (process.env.BUILD_TARGET === 'onlyClean') process.exit()
 }

@@ -1,4 +1,6 @@
 import { BrowserWindow, Menu, app as electronApp } from "electron";
+import fs from "fs";
+import path from "path";
 import { platform } from "os";
 import getCookie from "./getCookie";
 import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
@@ -12,6 +14,15 @@ setIpc.Mainfunc(IsUseSysTitle);
 // 版本以package.json为基准。
 const version = require("../../../package.json").version;
 
+function resolveWindowsWindowIcon() {
+  if (!platform().includes("win32")) return undefined;
+  const packaged = path.join(process.resourcesPath, "matrixmedia.ico");
+  if (fs.existsSync(packaged)) return packaged;
+  const dev = path.join(__dirname, "../../lib/icons/icon.ico");
+  if (fs.existsSync(dev)) return dev;
+  return undefined;
+}
+
 function createMainWindow(fn) {
   const menuconfig = Array.isArray(baseMenu) ? [...baseMenu] : [];
   /**
@@ -24,6 +35,7 @@ function createMainWindow(fn) {
     minWidth: 1000,
     show: false,
     frame: IsUseSysTitle,
+    icon: resolveWindowsWindowIcon(),
     titleBarStyle: platform().includes("win32") ? "default" : "hidden",
     webPreferences: {
       contextIsolation: false, //

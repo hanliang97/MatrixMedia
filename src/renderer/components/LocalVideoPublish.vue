@@ -11,12 +11,15 @@
       <p class="file-line"><strong>已选文件：</strong>{{ displayFileName }}</p>
       <el-form label-width="88px" class="meta-form">
         <el-form-item label="名称">
-          <el-input v-model="form.title" placeholder="默认与视频文件名一致，可改" />
+          <el-input
+            v-model="form.title"
+            placeholder="默认与视频文件名一致，可改"
+          />
         </el-form-item>
         <el-form-item label="视频标题">
           <el-input v-model="form.bt1" placeholder="发布时使用的标题" />
         </el-form-item>
-        
+
         <el-form-item label="视频标签">
           <el-select
             v-model="bqTags"
@@ -32,16 +35,24 @@
         <el-form-item label="概括短标题">
           <el-input v-model="form.bt2" placeholder="选填，建议 6～16 字" />
           <p class="bt2-tip">
-            <strong>微信视频号</strong>会将本项用于「概括视频主要内容」，选择视频号时必填，长度需为 6～16 字，且不能包含特殊标点符号；<br /><strong>小红书</strong>会将本项作为正文内容。
+            <strong>微信视频号</strong
+            >会将本项用于「概括视频主要内容」，选择视频号时必填，长度需为 6～16
+            字，且不能包含特殊标点符号；<br /><strong>小红书</strong
+            >会将本项作为正文内容。
           </p>
         </el-form-item>
-        <el-form-item label="地址"> 
-          <el-input v-model="form.address" placeholder="选填" /> 
+        <el-form-item label="地址">
+          <el-input v-model="form.address" placeholder="选填" />
           <p class="bt2-tip">
             仅<strong>百家号</strong>会用到本项：对应发布页「地址」。其它平台忽略；若不填则不填写。
-          </p> </el-form-item>
+          </p>
+        </el-form-item>
         <el-form-item label="定时发布">
-          <el-switch v-model="scheduledPublish" active-text="定时" inactive-text="立即" />
+          <el-switch
+            v-model="scheduledPublish"
+            active-text="定时"
+            inactive-text="立即"
+          />
         </el-form-item>
         <el-form-item v-if="scheduledPublish" label="发布时间">
           <el-date-picker
@@ -51,7 +62,9 @@
             placeholder="选择年月日时分秒"
             style="width: 260px"
           />
-          <p class="bt2-tip">定时任务会立即进入发布历史，到点后自动发布；如果程序关闭错过时间，会显示任务过期。</p>
+          <p class="bt2-tip">
+            定时任务会立即进入发布历史，到点后自动发布；如果程序关闭错过时间，会显示任务过期。
+          </p>
         </el-form-item>
       </el-form>
       <div slot="footer" class="dialog-footer">
@@ -70,36 +83,68 @@
     >
       <el-form class="video-form">
         <el-form-item label="是否显示自动化发布过程">
-          <el-switch v-model="thisShow" active-text="显示" inactive-text="不显示" />
+          <el-switch
+            v-model="thisShow"
+            active-text="显示"
+            inactive-text="不显示"
+          />
         </el-form-item>
         <el-form-item v-if="thisShow" label="发布完是否关闭窗口">
-          <el-switch v-model="closeWindow" active-text="关闭" inactive-text="不关闭" />
+          <el-switch
+            v-model="closeWindow"
+            active-text="关闭"
+            inactive-text="不关闭"
+          />
         </el-form-item>
       </el-form>
 
       <el-divider content-position="left">账号平台选择</el-divider>
 
-      <el-tree v-if="treeData.length > 0" ref="tree" :data="treeData" node-key="id" show-checkbox default-expand-all :props="defaultProps">
+      <el-tree
+        v-if="treeData.length > 0"
+        ref="tree"
+        :data="treeData"
+        node-key="id"
+        show-checkbox
+        default-expand-all
+        :props="defaultProps"
+      >
         <span class="custom-tree-node" slot-scope="{ data }">
           <template v-if="!data.url">
             <span>{{ data.title }}</span>
-            <el-button size="mini" type="text" style="margin-left: 5px" @click.stop="verifyLogin(data)">验证登录</el-button>
+            <el-button
+              size="mini"
+              type="text"
+              style="margin-left: 5px"
+              @click.stop="verifyLogin(data)"
+              >验证登录</el-button
+            >
           </template>
           <template v-else>
             <span>{{ data.pt }}</span>
-            <span style="margin-left: 5px" :style="{ color: data.loggedIn ? 'green' : 'red' }">
-              <span v-if="data.loggedIn" class="login-ok" @click="reLogin(data)">登录√</span>
+            <span
+              style="margin-left: 5px"
+              :style="{ color: data.loggedIn ? 'green' : 'red' }"
+            >
+              <span v-if="data.loggedIn" class="login-ok" @click="reLogin(data)"
+                >登录√</span
+              >
               <span v-else @click="reLogin(data)">❌重新登录</span>
             </span>
           </template>
         </span>
       </el-tree>
-      <el-empty v-if="treeData.length === 0" description="请先在右上角添加媒体平台账号" />
+      <el-empty
+        v-if="treeData.length === 0"
+        description="请先在右上角添加媒体平台账号"
+      />
 
       <div slot="footer" class="dialog-footer">
         <el-button @click="platformVisible = false">取消</el-button>
         <el-button type="primary" @click="handleBatchPublish">发布</el-button>
-        <el-button type="primary" @click="handleBatchPublishToDraft">发布到草稿</el-button>
+        <el-button type="primary" @click="handleBatchPublishToDraft"
+          >发布到草稿</el-button
+        >
       </div>
 
       <el-dialog
@@ -157,6 +202,15 @@ function parseBqToTags(raw) {
     .trim()
     .split(/\s+/)
     .filter(Boolean);
+}
+
+/** 话题平台依赖「#词」；标签多选无 # 时自动补上，已带 # 的不重复添加 */
+function formatBqFromTags(tags) {
+  return (Array.isArray(tags) ? tags : [])
+    .map((t) => String(t).trim())
+    .filter(Boolean)
+    .map((t) => (t.startsWith("#") ? t : `#${t}`))
+    .join(" ");
 }
 
 export default {
@@ -249,13 +303,17 @@ export default {
       this.republishTextOtherName = payload.textOtherName || fileStem(filePath);
       this.republishContext = {
         records: Array.isArray(payload.records) ? payload.records : [],
-        failedTargets: Array.isArray(payload.failedTargets) ? payload.failedTargets : [],
+        failedTargets: Array.isArray(payload.failedTargets)
+          ? payload.failedTargets
+          : [],
       };
       this.metaVisible = false;
       this.loadAccounts();
       this.platformVisible = true;
       this.$nextTick(() => {
-        const checkedKeys = this.resolveRepublishCheckedKeys(this.republishContext.failedTargets);
+        const checkedKeys = this.resolveRepublishCheckedKeys(
+          this.republishContext.failedTargets
+        );
         if (this.$refs.tree) {
           this.$refs.tree.setCheckedKeys(checkedKeys);
         }
@@ -263,14 +321,22 @@ export default {
       return true;
     },
     resolveRepublishCheckedKeys(failedTargets = []) {
-      if (!Array.isArray(failedTargets) || failedTargets.length === 0) return [];
+      if (!Array.isArray(failedTargets) || failedTargets.length === 0)
+        return [];
       const keys = [];
       const targetSet = new Set(
-        failedTargets.map(v => `${String(v.pt || "").trim()}__${String(v.phone || "").split("-")[0]}`)
+        failedTargets.map(
+          (v) =>
+            `${String(v.pt || "").trim()}__${
+              String(v.phone || "").split("-")[0]
+            }`
+        )
       );
-      (this.treeData || []).forEach(group => {
-        (group.children || []).forEach(child => {
-          const key = `${String(child.pt || "").trim()}__${String(child.phone || "").split("-")[0]}`;
+      (this.treeData || []).forEach((group) => {
+        (group.children || []).forEach((child) => {
+          const key = `${String(child.pt || "").trim()}__${
+            String(child.phone || "").split("-")[0]
+          }`;
           if (targetSet.has(key)) {
             keys.push(child.id);
           }
@@ -279,10 +345,16 @@ export default {
       return keys;
     },
     findRepublishRecord(pt, phone) {
-      if (!this.republishContext || !Array.isArray(this.republishContext.records)) return null;
+      if (
+        !this.republishContext ||
+        !Array.isArray(this.republishContext.records)
+      )
+        return null;
       const p = String(phone || "").split("-")[0];
       return this.republishContext.records.find(
-        item => String(item.pt || "") === String(pt || "") && String(item.phone || "").split("-")[0] === p
+        (item) =>
+          String(item.pt || "") === String(pt || "") &&
+          String(item.phone || "").split("-")[0] === p
       );
     },
 
@@ -291,17 +363,19 @@ export default {
     },
 
     buildVideoPayload() {
-      const bookName = (this.form.title && this.form.title.trim()) || this.defaultBookName();
+      const bookName =
+        (this.form.title && this.form.title.trim()) || this.defaultBookName();
       const bt1 = this.form.bt1.trim();
       const bt2 = (this.form.bt2 && this.form.bt2.trim()) || bt1;
       return {
         bookName,
         textType: "local",
         data: {
-          textOtherName: this.republishTextOtherName || fileStem(this.localFilePath),
+          textOtherName:
+            this.republishTextOtherName || fileStem(this.localFilePath),
           bt1,
           bt2,
-          bq: this.bqTags.map(t => String(t).trim()).filter(Boolean).join(" "),
+          bq: formatBqFromTags(this.bqTags),
           bdText: "",
           address: this.form.address.trim(),
         },
@@ -390,19 +464,21 @@ export default {
     },
 
     formatAccountTree(rawTree) {
-      return Object.keys(rawTree).map(phone => {
+      return Object.keys(rawTree).map((phone) => {
         const node = rawTree[phone];
         return {
           id: phone,
           title: phone,
-          children: (node.children || []).map(child => ({
+          children: (node.children || []).map((child) => ({
             id: child.meta.id,
             pt: child.meta.pt,
             phone: child.meta.phone.split("-")[0],
             date: child.meta.date,
             url: child.meta.url,
             loggedIn: (() => {
-              const name = `${child.meta.phone.split("-")[0]}${child.meta.pt}登录`;
+              const name = `${child.meta.phone.split("-")[0]}${
+                child.meta.pt
+              }登录`;
               if (isAccountLoginFlagSet(name)) return true;
               const cookies = document.cookie.split(";");
               for (const c of cookies) {
@@ -418,7 +494,7 @@ export default {
 
     verifyLogin(parent) {
       const children = parent.children || [];
-      children.forEach(child => {
+      children.forEach((child) => {
         this.checkLoginStatus(child);
       });
     },
@@ -433,7 +509,7 @@ export default {
         pt: i.pt,
         name: `${i.phone.split("-")[0]}${i.pt}登录`,
       });
-      this.taskHandlers.set(taskId, data => {
+      this.taskHandlers.set(taskId, (data) => {
         const flagName = data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
         if (data.success) {
           if (data.result) {
@@ -448,7 +524,10 @@ export default {
           }
         } else {
           clearAccountLoginFlag(flagName);
-          console.error(`[${i.phone.split("-")[0]}${i.pt}] 登录状态失败:`, data.error);
+          console.error(
+            `[${i.phone.split("-")[0]}${i.pt}] 登录状态失败:`,
+            data.error
+          );
         }
       });
       setTimeout(() => {
@@ -464,7 +543,10 @@ export default {
     },
 
     reLogin(item) {
-      this.loginData = { ...item, partition: "persist:" + item.phone.split("-")[0] + item.pt };
+      this.loginData = {
+        ...item,
+        partition: "persist:" + item.phone.split("-")[0] + item.pt,
+      };
       this.showLoginDialog = true;
     },
 
@@ -483,12 +565,15 @@ export default {
         return;
       }
       const checked = this.$refs.tree.getCheckedNodes(true);
-      const platforms = checked.filter(item => item.url);
+      const platforms = checked.filter((item) => item.url);
       if (platforms.length === 0) {
         this.$message.warning("请至少选择一个平台");
         return;
       }
-      if (isDraftMode && platforms.some(p => String(p.pt || "").includes("头条"))) {
+      if (
+        isDraftMode &&
+        platforms.some((p) => String(p.pt || "").includes("头条"))
+      ) {
         this.$message.warning("暂无头条草稿");
         return;
       }
@@ -515,7 +600,9 @@ export default {
       const selectedFile = fileBaseName(this.localFilePath);
       const currentDate = moment().format("YYYY-MM-DD");
       const scheduledAtText = String(this.publishAt || "").trim();
-      const scheduledAtMs = this.scheduledPublish ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf() : null;
+      const scheduledAtMs = this.scheduledPublish
+        ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf()
+        : null;
 
       platforms.sort((a, b) => {
         if (a.pt.includes("视频号")) return -1;
@@ -523,7 +610,9 @@ export default {
         return 0;
       });
 
-      const hasBlbl = platforms.some(p => String(p.pt || "").includes("哔哩哔哩"));
+      const hasBlbl = platforms.some((p) =>
+        String(p.pt || "").includes("哔哩哔哩")
+      );
       if (hasBlbl && !this.scheduledPublish && !isDraftMode) {
         this.$alert(
           "哔哩哔哩可能自动完成封面；若发布失败或状态异常，请自行打开发布窗口查看（含封面、稿件信息等）。",
@@ -531,7 +620,7 @@ export default {
           {
             confirmButtonText: "我知道了",
             type: "warning",
-          },
+          }
         );
       }
 
@@ -539,7 +628,9 @@ export default {
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
         const taskId = Date.now() + Math.random();
         const shouldShow = this.thisShow;
-        const shouldCloseWindowAfterPublish = shouldShow ? this.closeWindow : true;
+        const shouldCloseWindowAfterPublish = shouldShow
+          ? this.closeWindow
+          : true;
         if (this.scheduledPublish && !isDraftMode) {
           dataRequest({
             type: "add",
@@ -617,7 +708,9 @@ export default {
               republishCount: oldRepublish + 1,
               publishMode: isDraftMode ? "draft" : "publish",
               publishStatus: isDraftMode ? "drafting" : "publishing",
-              lastPublishMessage: isDraftMode ? "等待保存草稿结果" : "等待发布结果",
+              lastPublishMessage: isDraftMode
+                ? "等待保存草稿结果"
+                : "等待发布结果",
               lastPublishAt: Date.now(),
             },
           });
@@ -647,14 +740,16 @@ export default {
               publishSuccessCount: 0,
               publishFailCount: 0,
               publishStatus: isDraftMode ? "drafting" : "publishing",
-              lastPublishMessage: isDraftMode ? "等待保存草稿结果" : "等待发布结果",
+              lastPublishMessage: isDraftMode
+                ? "等待保存草稿结果"
+                : "等待发布结果",
               lastPublishAt: Date.now(),
             },
           });
         }
 
         if (p.pt === "视频号") {
-          await new Promise(resolve => setTimeout(resolve, 4000));
+          await new Promise((resolve) => setTimeout(resolve, 4000));
         }
       }
 

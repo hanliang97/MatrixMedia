@@ -91,14 +91,22 @@ export function parsePublishArgs(subArgv) {
 
   if (!out.partition) {
     if (!out.phone) {
-      return { ok: false, error: "缺少 --phone 或完整 --partition（与 GUI 一致，如 persist:13800138000抖音）" };
+      return {
+        ok: false,
+        error:
+          "缺少 --phone 或完整 --partition（与 GUI 一致，如 persist:13800138000抖音）",
+      };
     }
     const phoneSeg = String(out.phone).split("-")[0];
     out.partition = `persist:${phoneSeg}${out.platform}`;
   }
 
   if (!out.title || !String(out.title).trim()) {
-    return { ok: false, error: "缺少 --title（或 -t）视频标题（与 GUI「视频标题」一致，写入 data.bt1）" };
+    return {
+      ok: false,
+      error:
+        "缺少 --title（或 -t）视频标题（与 GUI「视频标题」一致，写入 data.bt1）",
+    };
   }
 
   if (out.show) {
@@ -144,12 +152,11 @@ export function parsePublishArgs(subArgv) {
     }
     const hashtagPlatforms = new Set(["视频号", "抖音", "快手"]);
     if (hashtagPlatforms.has(out.platform)) {
-      const withoutHash = tags.filter(t => !t.startsWith("#"));
-      if (withoutHash.length > 0) {
-        console.warn(
-          `MatrixMedia: 平台 ${out.platform} 会把 --tags 原样拼进描述；${withoutHash.length} 个标签缺少 # 前缀（${withoutHash.join(" ")}），不会被识别为话题，仅作为普通文字。`
-        );
-      }
+      out.bq = tags
+        .map((t) =>
+          String(t).startsWith("#") ? String(t) : `#${String(t).trim()}`
+        )
+        .join(" ");
     }
   }
 
@@ -176,8 +183,7 @@ export function publishHelpText() {
                             哔哩哔哩/百家号/头条/快手当前不使用。
       --tags <text>     视频标签 → data.bq（同 --bq）。多个标签用【空格】分隔，例如 "减脂 健身 教程"。
                             【上限 4 个话题】：超过 4 个会触发 warn，agent 生成时请按相关性裁到 ≤ 4。
-                            • 视频号/抖音/快手：整串拼进描述末尾，**必须带 # 前缀**成为话题
-                              （如 "#减脂 #健身 #新手 #跑步"），缺 # 会被识别为普通尾缀文字。
+                            • 视频号/抖音/快手：整串拼进描述末尾；未写 # 的标签会自动补上（与 GUI 标签多选一致）。
                             • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离，可省。
                             • 百家号/头条：当前代码不消费 bq，无需填。
       --address <text>  地址 → data.address；仅百家号

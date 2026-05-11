@@ -17,7 +17,7 @@ if (typeof electron !== "object" || !electron.app) {
   process.exit(1);
 }
 const app = electron.app;
-const { Tray, nativeImage, Menu, dialog, screen } = electron;
+const { Tray, nativeImage, Menu, dialog, screen, shell } = electron;
 
 import initWindow from "./services/windowManager";
 import DisableButton from "./config/DisableButton";
@@ -25,8 +25,18 @@ import path from "path";
 import pie from "puppeteer-in-electron";
 import { isCliMode, runCliMain } from "./cli";
 import { startScheduledPublishScheduler } from "./services/scheduledPublish";
+import {
+  installMainProcessLogFile,
+  getMainProcessLogFilePath,
+  clearMainProcessLogFile,
+} from "./services/mainProcessLogFile";
 
 const cliMode = isCliMode(process.argv);
+installMainProcessLogFile(app);
+
+if (process.platform === "win32") {
+  app.setAppUserModelId("com.matrix.video");
+}
 
 if (!cliMode) {
   const gotTheLock = app.requestSingleInstanceLock();
@@ -49,10 +59,10 @@ pie.initialize(app).then(() => {
   if (cliMode) {
     const startCli = () => {
       runCliMain(process.argv)
-        .then(code => {
+        .then((code) => {
           app.exit(typeof code === "number" ? code : 0);
         })
-        .catch(err => {
+        .catch((err) => {
           console.error(err);
           app.exit(1);
         });
@@ -71,7 +81,7 @@ pie.initialize(app).then(() => {
 
 function onAppReady() {
   startScheduledPublishScheduler();
-  initWindow(win => {
+  initWindow((win) => {
     const iconPath = path.join(__static, "logo.png");
     console.log(iconPath);
     let icon = nativeImage.createFromPath(iconPath);
@@ -108,11 +118,59 @@ function onAppReady() {
               message: "是否重启应用？",
               buttons: ["是", "否"],
             })
-            .then(result => {
+            .then((result) => {
               if (result.response === 0) {
                 win.reload();
               }
             });
+        },
+      },
+      {
+        label: "打开日志文件",
+        click: () => {
+          const logPath = getMainProcessLogFilePath(app);
+          shell.openPath(logPath).then((errMsg) => {
+            if (errMsg) {
+              dialog.showErrorBox("无法打开日志文件", errMsg);
+            }
+          });
+        },
+      },
+      {
+        label: "清除日志",
+        click: async () => {
+          const first = await dialog.showMessageBox(win, {
+            type: "warning",
+            title: "清除日志",
+            message: "将清空主进程日志文件（matrixmedia-main.log）的全部内容，且不可恢复。是否继续？",
+            buttons: ["继续", "取消"],
+            defaultId: 1,
+            cancelId: 1,
+          });
+          if (first.response !== 0) return;
+          const second = await dialog.showMessageBox(win, {
+            type: "warning",
+            title: "再次确认",
+            message: "请再次确认：确定要清除所有已写入的日志吗？",
+            buttons: ["清除", "取消"],
+            defaultId: 1,
+            cancelId: 1,
+          });
+          if (second.response !== 0) return;
+          try {
+            clearMainProcessLogFile(app);
+            await dialog.showMessageBox(win, {
+              type: "info",
+              title: "清除日志",
+              message: "日志已清除。",
+              buttons: ["确定"],
+            });
+          } catch (e) {
+            dialog.showErrorBox(
+              "清除失败",
+              e && e.message ? e.message : String(e)
+            );
+          }
         },
       },
       {
@@ -124,7 +182,7 @@ function onAppReady() {
     ]);
 
     tray.setContextMenu(contextMenu);
-    tray.setToolTip("推推达人");
+    tray.setToolTip("矩媒");
     tray.on("click", () => {
       win.isVisible() ? win.hide() : win.show();
     });
@@ -135,10 +193,15 @@ function onAppReady() {
   DisableButton.Disablef12();
   if (process.env.NODE_ENV === "development") {
     try {
-      const { default: installExtension, VUEJS_DEVTOOLS } = require("electron-devtools-installer");
+      const {
+        default: installExtension,
+        VUEJS_DEVTOOLS,
+      } = require("electron-devtools-installer");
       installExtension(VUEJS_DEVTOOLS)
-        .then(name => console.log(`installed: ${name}`))
-        .catch(err => console.log("Unable to install `vue-devtools`: \n", err));
+        .then((name) => console.log(`installed: ${name}`))
+        .catch((err) =>
+          console.log("Unable to install `vue-devtools`: \n", err)
+        );
     } catch (err) {
       console.log("electron-devtools-installer 加载失败:", err);
     }

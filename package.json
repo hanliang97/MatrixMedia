@@ -28,6 +28,12 @@
       "zh-CN"
     ],
     "extraFiles": [],
+    "extraResources": [
+      {
+        "from": "lib/icons/icon.ico",
+        "to": "matrixmedia.ico"
+      }
+    ],
     "publish": [
       {
         "provider": "generic",
