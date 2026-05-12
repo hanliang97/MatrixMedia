@@ -50,6 +50,20 @@ function processNextTask() {
   doUpload(next.data, next.transport, queueDone);
 }
 
+function isExpectedPublishUrl(data, currentUrl) {
+  if (currentUrl === data.url) return true;
+  if (data && data.pt === "掘金") {
+    try {
+      const current = new URL(currentUrl);
+      const expected = new URL(data.url);
+      return current.origin === expected.origin && current.pathname.indexOf("/editor/drafts") === 0;
+    } catch (_) {
+      return String(currentUrl || "").indexOf("https://juejin.cn/editor/drafts") === 0;
+    }
+  }
+  return false;
+}
+
 /**
  * 注册渲染进程 `puppeteerFile` IPC，与历史行为一致
  */
@@ -252,7 +266,7 @@ async function doUpload(data, transport, queueDone) {
             throw new Error("页面对象不可用");
           }
           const currentUrl = page.url();
-          if (currentUrl === data.url) {
+          if (isExpectedPublishUrl(data, currentUrl)) {
             const action = Type[data.pt];
             if (typeof action !== "function") {
               throw new Error(`未找到平台处理器: ${data.pt}`);

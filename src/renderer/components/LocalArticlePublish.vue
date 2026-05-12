@@ -185,6 +185,7 @@ import { ipcRenderer } from "electron";
 import moment from "moment";
 import dataRequest from "@/utils/dataRequest";
 import ptConfig from "@/utils/configUrl";
+import { buildArticleRepublishState } from "@/utils/articleRepublish";
 import {
   setAccountLoginFlag,
   clearAccountLoginFlag,
@@ -235,6 +236,7 @@ export default {
       loginData: {},
       treeData: [],
       taskHandlers: new Map(),
+      republishContext: null,
       defaultProps: {
         children: "children",
         label: "title",
@@ -269,6 +271,37 @@ export default {
     open() {
       this.resetState();
       this.metaVisible = true;
+    },
+
+    openRepublish(payload = {}) {
+      const sample = payload.sample || {};
+      const state = buildArticleRepublishState(sample);
+      this.articleFilePath = state.articleFilePath;
+      this.coverPath = state.coverPath;
+      this.form = state.form;
+      this.tags = state.tags;
+      this.thisShow = false;
+      this.closeWindow = true;
+      this.scheduledPublish = false;
+      this.publishAt = "";
+      this.republishContext = {
+        records: Array.isArray(payload.records) ? payload.records : [],
+        failedTargets: Array.isArray(payload.failedTargets)
+          ? payload.failedTargets
+          : [],
+      };
+      this.metaVisible = false;
+      this.loadAccounts();
+      this.platformVisible = true;
+      this.$nextTick(() => {
+        const checkedKeys = this.resolveRepublishCheckedKeys(
+          this.republishContext.failedTargets
+        );
+        if (this.$refs.tree) {
+          this.$refs.tree.setCheckedKeys(checkedKeys);
+        }
+      });
+      return true;
     },
 
     async selectArticleFile() {
@@ -373,6 +406,7 @@ export default {
       this.publishAt = "";
       this.showLoginDialog = false;
       this.loginData = {};
+      this.republishContext = null;
     },
 
     loadAccounts() {
@@ -484,6 +518,45 @@ export default {
       this.showLoginDialog = true;
     },
 
+    resolveRepublishCheckedKeys(failedTargets = []) {
+      if (!Array.isArray(failedTargets) || failedTargets.length === 0)
+        return [];
+      const targetSet = new Set(
+        failedTargets.map(
+          (v) =>
+            `${String(v.pt || "").trim()}__${
+              String(v.phone || "").split("-")[0]
+            }`
+        )
+      );
+      const keys = [];
+      (this.treeData || []).forEach((group) => {
+        (group.children || []).forEach((child) => {
+          const key = `${String(child.pt || "").trim()}__${
+            String(child.phone || "").split("-")[0]
+          }`;
+          if (targetSet.has(key)) {
+            keys.push(child.id);
+          }
+        });
+      });
+      return keys;
+    },
+
+    findRepublishRecord(pt, phone) {
+      if (
+        !this.republishContext ||
+        !Array.isArray(this.republishContext.records)
+      )
+        return null;
+      const p = String(phone || "").split("-")[0];
+      return this.republishContext.records.find(
+        (item) =>
+          String(item.pt || "") === String(pt || "") &&
+          String(item.phone || "").split("-")[0] === p
+      );
+    },
+
     buildPushRecord(article, p, partition, currentDate, extra = {}) {
       return {
         bookName: article.bookName,
@@ -577,11 +650,44 @@ export default {
           date: currentDate,
         });
 
-        dataRequest({
-          type: "add",
-          fileName: "pushData",
-          item: this.buildPushRecord(article, p, partition, currentDate),
-        });
+        const republishRecord = this.findRepublishRecord(p.pt, p.phone);
+        if (republishRecord && republishRecord.id && republishRecord.date) {
+          const oldAttempt = Number(republishRecord.publishAttemptCount) || 1;
+          let oldRepublish = Number(republishRecord.republishCount);
+          if (!Number.isFinite(oldRepublish) || oldRepublish < 0) {
+            oldRepublish = Math.max(0, oldAttempt - 1);
+          }
+          dataRequest({
+            type: "update",
+            fileName: "pushData",
+            item: {
+              id: republishRecord.id,
+              date: republishRecord.date,
+              bookName: article.bookName,
+              textOtherName: article.textOtherName,
+              selectedFile: article.selectedFile,
+              bt: article.data.title,
+              bq: article.data.tags,
+              content: article.data.content,
+              articleFilePath: article.data.articleFilePath,
+              coverPath: article.data.coverPath,
+              category: article.data.category,
+              summary: article.data.summary,
+              publishAttemptCount: oldAttempt + 1,
+              republishCount: oldRepublish + 1,
+              publishMode: "publish",
+              publishStatus: "publishing",
+              lastPublishMessage: "等待发布结果",
+              lastPublishAt: Date.now(),
+            },
+          });
+        } else {
+          dataRequest({
+            type: "add",
+            fileName: "pushData",
+            item: this.buildPushRecord(article, p, partition, currentDate),
+          });
+        }
       }
 
       if (this.scheduledPublish) {

@@ -69,7 +69,7 @@
                   <el-button slot="reference" type="danger" size="mini">删除</el-button>
                 </el-popconfirm>
                 <el-button
-                  v-if="scope.row.textType === 'local'"
+                  v-if="canRepublish(scope.row)"
                   type="warning"
                   size="mini"
                   class="mb8"
@@ -193,10 +193,39 @@ export default {
       if (String(row.lastPublishMessage || "").includes("过期")) return true;
       return false;
     },
+    canRepublish(row) {
+      return row && (row.textType === "local" || row.textType === "article");
+    },
     async handleRepublish(row) {
       const details = (row && row.showAlltype) || [];
       if (!details.length) {
         this.$message.warning("当前记录没有可重发的平台");
+        return;
+      }
+      if (row.textType === "article") {
+        const sample = details[0] || {};
+        const failedTargets = details
+          .filter(this.isPublishFailed)
+          .map(v => ({
+            pt: v.pt,
+            phone: String(v.phone || "").split("-")[0],
+          }));
+        const ok = this.$refs.articlePublishRef.openRepublish({
+          sample,
+          records: details.map(v => ({
+            id: v.id,
+            date: v.date,
+            pt: v.pt,
+            phone: String(v.phone || "").split("-")[0],
+            publishAttemptCount: Number(v.publishAttemptCount) || 1,
+            republishCount: Number(v.republishCount),
+          })),
+          failedTargets,
+        });
+        if (!ok) return;
+        if (failedTargets.length === 0) {
+          this.$message.info("未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。");
+        }
         return;
       }
       let filePath = details.map(v => v && v.filePath).find(Boolean);

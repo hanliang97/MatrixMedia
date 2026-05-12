@@ -5,6 +5,8 @@ import maybeClosePublishWindow from "./closeWindow.js";
 import { WAIT_SELECTOR_APPEAR_MS } from "./uploadTimeouts.js";
 
 const TITLE_SELECTOR = ".header .title-input";
+const CODEMIRROR_SELECTOR = ".bytemd-editor .CodeMirror";
+const CODEMIRROR_LINES_SELECTOR = ".bytemd-editor .CodeMirror-lines";
 const EDITOR_SELECTOR = ".bytemd-editor .CodeMirror-code .CodeMirror-line";
 const COVER_INPUT_SELECTOR = ".coverselector_container input[type='file']";
 const PUBLISH_BUTTON_SELECTOR = ".right-box button.xitu-btn";
@@ -67,6 +69,44 @@ async function pasteText(page, text) {
   } finally {
     await page.keyboard.up(modifierKey).catch(() => {});
     clipboard.writeText(originalClipboardText);
+  }
+}
+
+async function setCodeMirrorContent(page, content) {
+  await page.waitForSelector(CODEMIRROR_SELECTOR, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
+  const result = await page.evaluate((selector, text) => {
+    const wrapper = document.querySelector(selector);
+    const cm = wrapper && wrapper.CodeMirror;
+    if (!cm || typeof cm.setValue !== "function") return false;
+    cm.focus();
+    cm.setValue(text);
+    if (typeof cm.setCursor === "function") {
+      const lastLine = Math.max(0, cm.lineCount() - 1);
+      cm.setCursor(lastLine, cm.getLine(lastLine).length);
+    }
+    if (typeof cm.refresh === "function") cm.refresh();
+    return true;
+  }, CODEMIRROR_SELECTOR, content);
+
+  if (!result) {
+    await page.waitForSelector(CODEMIRROR_LINES_SELECTOR, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.click(CODEMIRROR_LINES_SELECTOR, { clickCount: 2 });
+    await pasteText(page, content);
+  }
+
+  await page.waitForTimeout(500);
+  const hasContent = await page.evaluate((selector, expectedText) => {
+    const wrapper = document.querySelector(selector);
+    const cm = wrapper && wrapper.CodeMirror;
+    const value = cm && typeof cm.getValue === "function"
+      ? cm.getValue()
+      : String(document.querySelector(".bytemd-editor .CodeMirror-code")?.textContent || "");
+    const probe = String(expectedText || "").trim().slice(0, 20);
+    return value.trim().length > 0 && (!probe || value.indexOf(probe) !== -1);
+  }, CODEMIRROR_SELECTOR, content);
+
+  if (!hasContent) {
+    throw new Error("正文写入后未检测到内容");
   }
 }
 
@@ -199,9 +239,7 @@ export default async function (page, data, window, event) {
 
     publishStage = "填写正文";
     await page.waitForSelector(EDITOR_SELECTOR, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
-    await page.click(EDITOR_SELECTOR, { clickCount: 2 });
-    await pasteText(page, content);
-    await page.waitForTimeout(1000);
+    await setCodeMirrorContent(page, content);
 
     const coverPath = article.coverPath || data.coverPath;
     if (coverPath) {

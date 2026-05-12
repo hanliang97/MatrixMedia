@@ -18,7 +18,8 @@
     "postinstall": "electron-builder install-app-deps",
     "pushall": "node pushall.js",
     "test:cli-login": "node scripts/test-cli-login.js",
-    "test:publish-article-args": "node scripts/test-publish-article-args.js"
+    "test:publish-article-args": "node scripts/test-publish-article-args.js",
+    "test:article-republish": "node scripts/test-article-republish.js"
   },
   "build": {
     "forceCodeSigning": false,
