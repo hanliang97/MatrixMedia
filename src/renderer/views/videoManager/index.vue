@@ -1,8 +1,11 @@
 <template>
   <div class="container-box">
     <div class="toolbar">
-      <el-button type="primary" @click="selectVideoFile">选择视频发布</el-button>
-      <el-button type="success" @click="openArticlePublish">发布文章</el-button>
+      <div class="toolbar-left">
+        <el-button type="primary" @click="selectVideoFile">选择视频发布</el-button>
+        <el-button type="success" @click="openArticlePublish">发布文章</el-button>
+      </div>
+
       <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
     </div>
 
@@ -534,6 +537,12 @@ export default {
   display: flex;
   justify-content: space-between;
   align-items: center;
+}
+
+.toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .info-box {
