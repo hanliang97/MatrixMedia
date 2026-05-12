@@ -1,13 +1,13 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
   // 使用try-catch包装所有可能出错的操作
   try {
      await page.waitForTimeout(2000);
-    await page.waitForSelector('.video-main-container input[type="file"]', { timeout: 5000 });
+    await page.waitForSelector('.video-main-container input[type="file"]', { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInputs = await page.$$('.video-main-container input[type="file"]');
     const uploadFileHandle = uploadInputs[0];
     await uploadFileHandle.uploadFile(path.resolve(data.filePath));
@@ -19,7 +19,7 @@ export default async function (page, data, window,event) {
   try {
     await page.waitForTimeout(5000);
     const selector = 'input[placeholder="添加标题获得更多推荐"]';
-    await page.waitForSelector(selector, { timeout: 1000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     // 获取元素句柄
     const input = await page.$(selector);
     // 点击并清空内容

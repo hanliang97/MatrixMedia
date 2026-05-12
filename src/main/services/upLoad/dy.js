@@ -1,13 +1,13 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
 
   try {
     // 等待 name=upload-btn 的 input 出现
-    await page.waitForSelector('input[name="upload-btn"]', { timeout: 5000 });
+    await page.waitForSelector('input[name="upload-btn"]', { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInputs = await page.$$('input[name="upload-btn"]');
     // 取最后一个 input 元素
     const uploadFileHandle = uploadInputs[uploadInputs.length - 1];
@@ -16,7 +16,7 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入文件失败", e);
   }
   try {
-    await page.waitForSelector(".semi-input", { timeout: 1000 });
+    await page.waitForSelector(".semi-input", { timeout: WAIT_SELECTOR_APPEAR_MS });
     // 获取元素句柄
     const input = await page.$(".semi-input");
     // 点击并清空内容
@@ -89,7 +89,7 @@ export default async function (page, data, window,event) {
     });
     if (!saved) throw new Error("未找到保存权限-不允许");
     const submitSelector = isDraftMode ? "#popover-tip-container+button" : "#popover-tip-container";
-    const submitBtn = await page.waitForSelector(submitSelector, { timeout: 5000 });
+    const submitBtn = await page.waitForSelector(submitSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     await submitBtn.click({ delay: 200 });
     console.log(isDraftMode ? "✅ 抖音视频已保存草稿" : "✅ 抖音视频上传成功");
     setTimeout(() => {

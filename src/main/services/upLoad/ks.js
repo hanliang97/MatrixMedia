@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
@@ -9,7 +9,7 @@ export default async function (page, data, window,event) {
   console.log(data);
   try {
     let sel = '#joyride-wrapper input[type="file"]';
-    await page.waitForSelector(sel, { timeout: 5000 });
+    await page.waitForSelector(sel, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInputs = await page.$(sel);
     await uploadInputs.uploadFile(path.resolve(data.filePath));
   } catch (err) {
@@ -18,7 +18,7 @@ export default async function (page, data, window,event) {
 
   try {
     const selector = "#work-description-edit";
-    await page.waitForSelector(selector, { timeout: 1000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
     await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });

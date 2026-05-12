@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 import ttPublishMode from "./ttPublishMode.js";
 
 const {
@@ -42,7 +42,7 @@ async function tryClickOptional(page, selector, timeout = 1200) {
   }
 }
 
-async function clickReadyElement(page, selector, label, timeout = 10000) {
+async function clickReadyElement(page, selector, label, timeout = WAIT_SELECTOR_APPEAR_MS) {
   await page.waitForFunction(
     sel => {
       const element = document.querySelector(sel);
@@ -75,7 +75,7 @@ async function clickReadyElement(page, selector, label, timeout = 10000) {
 async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
   const coverMode = getToutiaoCoverMode({ hasTagSelector });
   const coverItemSelector = getToutiaoCoverItemSelector();
-  await page.waitForSelector(coverItemSelector, { visible: true, timeout: 1000 * 60 * 10 });
+  await page.waitForSelector(coverItemSelector, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
   const coverItems = await page.$$(coverItemSelector);
   if (!coverItems.length) throw new Error("未找到头条封面候选图");
   await coverItems[0].evaluate(element => {
@@ -88,7 +88,7 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
     page,
     "body .Dialog-container .m-poster-upgrade .footer .m-button",
     "头条封面下一步按钮",
-    30000
+    WAIT_SELECTOR_APPEAR_MS
   );
   setPublishStage("确认系统封面");
   console.log("确认系统封面");
@@ -96,16 +96,16 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
   setPublishStage("点击裁剪");
   console.log("点击裁剪");
   if (shouldClickToutiaoCoverClip({ hasTagSelector })) {
-    await clickReadyElement(page, ".base-content-wrap .clip-btn", "头条封面裁剪按钮", 10000);
+    await clickReadyElement(page, ".base-content-wrap .clip-btn", "头条封面裁剪按钮");
     await page.waitForTimeout(500);
     setPublishStage("裁剪完成");
     console.log("裁剪完成");
   }
   setPublishStage("点击确认");
-  await clickReadyElement(page, ".base-content-wrap .btn-sure", "头条封面确认按钮", 10000);
+  await clickReadyElement(page, ".base-content-wrap .btn-sure", "头条封面确认按钮");
   await page.waitForTimeout(1000);
   setPublishStage("确认封面弹窗");
-  await clickReadyElement(page, ".Dialog-container .footer .m-button.red", "头条封面弹窗确认按钮", 10000);
+  await clickReadyElement(page, ".Dialog-container .footer .m-button.red", "头条封面弹窗确认按钮");
   setPublishStage("封面设置完成");
 }
 
@@ -163,7 +163,7 @@ async function waitForToutiaoUploadProgressComplete(page) {
 async function openToutiaoCoverDialog(page) {
   const triggerSelector = getToutiaoCoverTriggerSelector();
   const dialogSelector = getToutiaoPosterDialogSelector();
-  const trigger = await page.waitForSelector(triggerSelector, { visible: true, timeout: 10000 });
+  const trigger = await page.waitForSelector(triggerSelector, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
   await trigger.evaluate(element => {
     element.scrollIntoView({ block: "center", inline: "center" });
   });
@@ -175,7 +175,7 @@ async function openToutiaoCoverDialog(page) {
     return true;
   }, triggerSelector);
   if (!clicked) throw new Error("未找到头条封面入口");
-  await page.waitForSelector(dialogSelector, { visible: true, timeout: 10000 });
+  await page.waitForSelector(dialogSelector, { visible: true, timeout: WAIT_SELECTOR_APPEAR_MS });
 }
 
 export default async function (page, data, window, event) {
@@ -185,7 +185,7 @@ export default async function (page, data, window, event) {
 
   console.log(data);
   try {
-    await page.waitForSelector('.byte-upload input[type="file"]', { timeout: 5000 });
+    await page.waitForSelector('.byte-upload input[type="file"]', { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInputs = await page.$$('.byte-upload input[type="file"]');
     const uploadFileHandle = uploadInputs[0];
     await uploadFileHandle.uploadFile(path.resolve(data.filePath));
@@ -195,7 +195,7 @@ export default async function (page, data, window, event) {
 
   try {
     const selector = 'input[placeholder="请输入 0～30 个字符"]';
-    await page.waitForSelector(selector, { timeout: 1000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     // 获取元素句柄
     const input = await page.$(selector);
     // 点击并清空内容
@@ -225,7 +225,7 @@ export default async function (page, data, window, event) {
     await page.waitForTimeout(1000);
 
     publishStage = "等待发布按钮";
-    await page.waitForSelector(".video-batch-footer .action-footer-btn", { timeout: 20000 });
+    await page.waitForSelector(".video-batch-footer .action-footer-btn", { timeout: WAIT_SELECTOR_APPEAR_MS });
     await page.waitForTimeout(3000);
 
     publishStage = "等待视频处理完成";
@@ -245,11 +245,11 @@ export default async function (page, data, window, event) {
     await page.waitForTimeout(6000);
     if (shouldSaveDraft) {
       publishStage = "点击保存草稿";
-      await clickReadyElement(page, ".video-batch-footer .draft", "头条保存草稿按钮", 20000);
+      await clickReadyElement(page, ".video-batch-footer .draft", "头条保存草稿按钮");
     } else {
       // 发布
       publishStage = "点击发布";
-      await clickReadyElement(page, ".video-batch-footer .submit", "头条发布按钮", 20000);
+      await clickReadyElement(page, ".video-batch-footer .submit", "头条发布按钮");
     }
     console.log(shouldSaveDraft ? "✅ 头条号视频已保存草稿" : "✅ 头条号视频上传成功");
     setTimeout(() => {

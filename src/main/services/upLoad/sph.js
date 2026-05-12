@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 const SEL_ORIGINAL_CHECKBOX =
   "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
@@ -77,7 +77,7 @@ export default async function (page, data, window,event,onFinish) {
   try {
     const sel = 'wujie-app.wujie_iframe >>> input[type="file"]';
 
-    const uploadInput = await page.waitForSelector(sel, { timeout: 1000 * 5 });
+    const uploadInput = await page.waitForSelector(sel, { timeout: WAIT_SELECTOR_APPEAR_MS });
     if (!uploadInput) throw new Error("上传 input 不存在");
     await uploadInput.uploadFile(path.resolve(data.filePath));
     await uploadInput.evaluate(el => {
@@ -88,12 +88,12 @@ export default async function (page, data, window,event,onFinish) {
   }
 
   try {
-    const titleInput = await page.waitForSelector("wujie-app.wujie_iframe >>> .post-desc-box .input-editor", { timeout: 5000 });
+    const titleInput = await page.waitForSelector("wujie-app.wujie_iframe >>> .post-desc-box .input-editor", { timeout: WAIT_SELECTOR_APPEAR_MS });
     // 传统input/textarea的操作
     await titleInput.click();
     await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });
     const sel2 = 'wujie-app.wujie_iframe >>> input[placeholder="概括视频主要内容，字数建议6-16个字符"]';
-    const uploadInput2 = await page.waitForSelector(sel2, { timeout: 10000 });
+    const uploadInput2 = await page.waitForSelector(sel2, { timeout: WAIT_SELECTOR_APPEAR_MS });
     await uploadInput2.click();
     let newBt = data.data.bt2.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, ' ');
     await page.keyboard.type(newBt, { delay: 50 });
@@ -119,11 +119,11 @@ export default async function (page, data, window,event,onFinish) {
 
     await page.waitForTimeout(2000);
     // 发布到草稿 第一个按钮
-    const publishDraftBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:first-child button", { timeout: 5000 });
+    const publishDraftBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:first-child button", { timeout: WAIT_SELECTOR_APPEAR_MS });
     await publishDraftBtn.click({ delay: 200 });
     if (!isDraftMode) {
       // 发布最后一个按钮
-      const publishBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:last-child button", { timeout: 5000 });
+      const publishBtn = await page.waitForSelector("wujie-app.wujie_iframe >>> .form-btns>div:last-child button", { timeout: WAIT_SELECTOR_APPEAR_MS });
       await publishBtn.click({ delay: 200 });
       await page.waitForTimeout(1000);
       await publishBtn.click({ delay: 200 });

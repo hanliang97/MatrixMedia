@@ -1,6 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
 
 export default async function (page, data, window,event) {
   const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
@@ -8,7 +8,7 @@ export default async function (page, data, window,event) {
   console.log(data);
   try {
     let sel = '.bcc-upload input[type="file"]';
-    await page.waitForSelector(sel, { timeout: 5000 });
+    await page.waitForSelector(sel, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInputs = await page.$(sel);
     await uploadInputs.uploadFile(path.resolve(data.filePath));
   } catch (err) {
@@ -17,7 +17,7 @@ export default async function (page, data, window,event) {
 
   try {
     const selector = '.input-instance input[placeholder="请输入稿件标题"]';
-    await page.waitForSelector(selector, { timeout: 5000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click({ clickCount: 3 }); // 三击全选
     await page.keyboard.press("Backspace"); // 删除内容
@@ -28,10 +28,10 @@ export default async function (page, data, window,event) {
 
   try {
     const selector = ".video-human-type .select-container";
-    await page.waitForSelector(selector, { timeout: 5000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
-    await page.waitForSelector(".human-type-list", { timeout: 5000 });
+    await page.waitForSelector(".human-type-list", { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input2 = await page.$('.human-type-list div[title="影视"]');
     await input2.click();
   } catch (e) {
@@ -39,7 +39,7 @@ export default async function (page, data, window,event) {
   }
   try {
     const selector = ".desc-container .ql-editor";
-    await page.waitForSelector(selector, { timeout: 1000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
     await page.keyboard.type(data.data.bdText);
@@ -52,7 +52,7 @@ export default async function (page, data, window,event) {
       .split(/\s+/)
       .map(tag => tag.replace(/^#/, ""));
     const selector = ".tag-container .input-instance input";
-    await page.waitForSelector(selector, { timeout: 5000 });
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.focus();
     // 标签规则是输入一个词后按回车
@@ -70,9 +70,9 @@ export default async function (page, data, window,event) {
   // 封面：尽力自动选择首帧，失败不阻断流程（用户可在发布窗口自行处理）
   try {
     await page.waitForSelector(".file-item-content-status .success", { timeout: WAIT_UPLOAD_PROCESSING_MS });
-    await page.waitForSelector(".cover-main-img .buttons", { timeout: 60 * 60 * 1000 });
+    await page.waitForSelector(".cover-main-img .buttons", { timeout: WAIT_SELECTOR_APPEAR_MS });
     await page.click(".cover-main .buttons span:first-child", { delay: 200 });
-    await page.waitForSelector(".cover-select-footer-pick>button:last-child", { timeout: 5000 });
+    await page.waitForSelector(".cover-select-footer-pick>button:last-child", { timeout: WAIT_SELECTOR_APPEAR_MS });
     await page.click(".cover-select-footer-pick>button:last-child", { delay: 200 });
   } catch (e) {
     console.warn("哔哩哔哩封面自动选择未完成（可忽略，发布失败时再在窗口内处理）:", e?.message || e);
@@ -82,9 +82,9 @@ export default async function (page, data, window,event) {
     await page.waitForTimeout(500);
     // 点击一下空白的区域
     await page.click("body", { delay: 200 });
-    await page.waitForSelector(".submit-container .submit-add", { timeout: 10000 });
+    await page.waitForSelector(".submit-container .submit-add", { timeout: WAIT_SELECTOR_APPEAR_MS });
     // 存到草稿
-    await page.waitForSelector(".submit-draft", { timeout: 200 });
+    await page.waitForSelector(".submit-draft", { timeout: WAIT_SELECTOR_APPEAR_MS });
     if (isDraftMode) {
       await page.click(".submit-draft", { delay: 200 });
     } else {

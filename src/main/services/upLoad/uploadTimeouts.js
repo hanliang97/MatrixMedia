@@ -6,6 +6,9 @@
  */
 export const WAIT_UPLOAD_PROCESSING_MS = 3 * 60 * 60 * 1000;
 
+/** 弱网或页面资源加载慢时，等待必需 DOM 节点出现的统一上限。 */
+export const WAIT_SELECTOR_APPEAR_MS = 5 * 60 * 1000;
+
 /**
  * 发布用 BrowserWindow 兜底自动关闭：必须大于弱网下大文件上传所需时间，
  * 否则定时关窗会中断仍在进行的浏览器上传。

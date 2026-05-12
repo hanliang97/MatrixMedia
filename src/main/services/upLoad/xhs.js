@@ -1,7 +1,7 @@
 import path from "path";
 import { clipboard } from "electron";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 function normalizeTagList(rawTagText = "") {
   const tagText = String(rawTagText).trim();
@@ -20,7 +20,7 @@ export default async function (page, data, window, event) {
 
   try {
     const uploadSelector = "input.upload-input[type='file']";
-    await page.waitForSelector(uploadSelector, { timeout: 10000 });
+    await page.waitForSelector(uploadSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const uploadInput = await page.$(uploadSelector);
     if (!uploadInput) throw new Error("未找到上传 input");
     await uploadInput.uploadFile(path.resolve(data.filePath));
@@ -30,7 +30,7 @@ export default async function (page, data, window, event) {
 
   try {
     const titleSelector = ".publish-page-content-base .edit-container .d-input input.d-text";
-    await page.waitForSelector(titleSelector, { timeout: WAIT_UPLOAD_PROCESSING_MS });
+    await page.waitForSelector(titleSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
     const titleText = (data.data?.bt1 || data.data?.bt2 || "").trim();
@@ -47,7 +47,7 @@ export default async function (page, data, window, event) {
 
   try {
     const editorSelector = ".tiptap.ProseMirror";
-    await page.waitForSelector(editorSelector, { timeout: 10000 });
+    await page.waitForSelector(editorSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const editor = await page.$(editorSelector);
     if (!editor) throw new Error("未找到正文编辑器");
 
