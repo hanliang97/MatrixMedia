@@ -5,6 +5,7 @@ import  sph from "./sph.js";
 import  tt from "./tt.js";
 import  ks from "./ks.js";
 import  xhs from "./xhs.js";
+import  juejin from "./juejin.js";
 
 // 添加默认导出
 export default {
@@ -14,5 +15,6 @@ export default {
   sph,
   tt,
   ks,
-  xhs
+  xhs,
+  juejin
 };

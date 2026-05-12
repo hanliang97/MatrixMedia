@@ -624,6 +624,7 @@ export default {
         );
       }
 
+      const scheduledWriteTasks = [];
       for (let p of platforms) {
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
         const taskId = Date.now() + Math.random();
@@ -632,38 +633,40 @@ export default {
           ? this.closeWindow
           : true;
         if (this.scheduledPublish && !isDraftMode) {
-          dataRequest({
-            type: "add",
-            fileName: "pushData",
-            item: {
-              bookName: video.bookName,
-              textOtherName: video.data.textOtherName,
-              textType: video.textType,
-              pt: p.pt,
-              selectedFile,
-              bt: video.data.bt1,
-              bt2: video.data.bt2,
-              bq: video.data.bq,
-              address: video.data.address,
-              filePath: this.localFilePath,
-              useragent: this.ptConfig[p.pt].useragent,
-              phone: p.phone,
-              partition,
-              url: this.ptConfig[p.pt].listIndex,
-              uploadUrl: this.ptConfig[p.pt].upload,
-              date: currentDate,
-              scheduledTask: true,
-              scheduledPublishAt: scheduledAtMs,
-              scheduledPublishAtText: scheduledAtText,
-              publishAttemptCount: 1,
-              republishCount: 0,
-              publishSuccessCount: 0,
-              publishFailCount: 0,
-              publishStatus: "scheduled",
-              lastPublishMessage: "等待定时发布",
-              lastPublishAt: Date.now(),
-            },
-          });
+          scheduledWriteTasks.push(
+            dataRequest({
+              type: "add",
+              fileName: "pushData",
+              item: {
+                bookName: video.bookName,
+                textOtherName: video.data.textOtherName,
+                textType: video.textType,
+                pt: p.pt,
+                selectedFile,
+                bt: video.data.bt1,
+                bt2: video.data.bt2,
+                bq: video.data.bq,
+                address: video.data.address,
+                filePath: this.localFilePath,
+                useragent: this.ptConfig[p.pt].useragent,
+                phone: p.phone,
+                partition,
+                url: this.ptConfig[p.pt].listIndex,
+                uploadUrl: this.ptConfig[p.pt].upload,
+                date: currentDate,
+                scheduledTask: true,
+                scheduledPublishAt: scheduledAtMs,
+                scheduledPublishAtText: scheduledAtText,
+                publishAttemptCount: 1,
+                republishCount: 0,
+                publishSuccessCount: 0,
+                publishFailCount: 0,
+                publishStatus: "scheduled",
+                lastPublishMessage: "等待定时发布",
+                lastPublishAt: Date.now(),
+              },
+            })
+          );
           continue;
         }
         ipcRenderer.send("puppeteerFile", {
@@ -754,6 +757,7 @@ export default {
       }
 
       if (this.scheduledPublish && !isDraftMode) {
+        await Promise.all(scheduledWriteTasks);
         ipcRenderer.send("scheduledPublish:refresh");
       }
       let successMessage = `已提交 ${platforms.length} 个平台发布`;

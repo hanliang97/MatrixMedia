@@ -6,6 +6,7 @@ import {
 } from '@modelcontextprotocol/sdk/types.js';
 import { listAccountsTool, handleListAccounts } from './tools/accounts.js';
 import { listHistoryTool, handleListHistory } from './tools/history.js';
+import { publishArticleTool, handlePublishArticle } from './tools/publishArticle.js';
 import { publishVideoTool, handlePublishVideo } from './tools/publish.js';
 
 const server = new Server(
@@ -14,7 +15,7 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: [listAccountsTool, listHistoryTool, publishVideoTool] };
+  return { tools: [listAccountsTool, listHistoryTool, publishVideoTool, publishArticleTool] };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -43,6 +44,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         );
         break;
       }
+      case 'publish_article':
+        result = await handlePublishArticle(args);
+        break;
       default:
         throw new Error('Unknown tool: ' + name);
     }

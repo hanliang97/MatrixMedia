@@ -1,4 +1,4 @@
-import { dy, bjh, blbl, sph, tt, ks, xhs } from "./upLoad";
+import { dy, bjh, blbl, sph, tt, ks, xhs, juejin } from "./upLoad";
 import zt from "./zt";
 
 
@@ -11,6 +11,7 @@ export default {
   头条: tt,
   快手: ks,
   小红书: xhs,
+  掘金: juejin,
   // 获取发布状态
   抖音状态: zt.dy,
   百家号状态: zt.bjh,
@@ -19,4 +20,5 @@ export default {
   头条状态: zt.tt,
   快手状态: zt.ks,
   小红书状态: zt.xhs,
+  掘金状态: zt.juejin,
 };

@@ -253,6 +253,52 @@ export default {
       return result.filePaths[0]
     })
 
+    ipcMain.handle('dialog:openArticleFile', async event => {
+      const result = await dialog.showOpenDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        {
+          properties: ['openFile'],
+          filters: [
+            {
+              name: 'Article',
+              extensions: ['md', 'txt']
+            }
+          ]
+        }
+      )
+      if (
+        result.canceled ||
+        !result.filePaths ||
+        result.filePaths.length === 0
+      ) {
+        return undefined
+      }
+      return result.filePaths[0]
+    })
+
+    ipcMain.handle('dialog:openImageFile', async event => {
+      const result = await dialog.showOpenDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        {
+          properties: ['openFile'],
+          filters: [
+            {
+              name: 'Image',
+              extensions: ['jpg', 'jpeg', 'png', 'webp']
+            }
+          ]
+        }
+      )
+      if (
+        result.canceled ||
+        !result.filePaths ||
+        result.filePaths.length === 0
+      ) {
+        return undefined
+      }
+      return result.filePaths[0]
+    })
+
     ipcMain.handle('statr-server', async () => {
       try {
         const serveStatus = await Server.StatrServer()

@@ -79,6 +79,38 @@ function generateId() {
   return Date.now() + "" + Math.floor(Math.random() * 1000);
 }
 
+function recordValue(value) {
+  return String(value || "");
+}
+
+function articleTagsValue(item) {
+  return recordValue(item.bq || item.tags);
+}
+
+function isSamePushDataRecord(existingItem, newItem) {
+  if (
+    existingItem.textOtherName !== newItem.textOtherName ||
+    existingItem.pt !== newItem.pt ||
+    existingItem.textType !== newItem.textType
+  ) {
+    return false;
+  }
+
+  if (newItem.textType === "article") {
+    return (
+      recordValue(existingItem.partition) === recordValue(newItem.partition) &&
+      recordValue(existingItem.articleFilePath) === recordValue(newItem.articleFilePath) &&
+      recordValue(existingItem.content) === recordValue(newItem.content) &&
+      recordValue(existingItem.coverPath) === recordValue(newItem.coverPath) &&
+      recordValue(existingItem.category) === recordValue(newItem.category) &&
+      articleTagsValue(existingItem) === articleTagsValue(newItem) &&
+      recordValue(existingItem.summary) === recordValue(newItem.summary)
+    );
+  }
+
+  return existingItem.selectedFile === newItem.selectedFile;
+}
+
 // 核心 CRUD
 /**
  * @param {Object} item 数据对象，可包含部分字段
@@ -141,10 +173,7 @@ function changeData({ item, fileName, type }) {
           existingItem =>
             !existingItem.scheduledTask &&
             !newItem.scheduledTask &&
-            existingItem.textOtherName === newItem.textOtherName &&
-            existingItem.pt === newItem.pt &&
-            existingItem.selectedFile === newItem.selectedFile &&
-            existingItem.textType === newItem.textType
+            isSamePushDataRecord(existingItem, newItem)
         );
         const isDuplicate = duplicateIndex !== -1;
         console.log("isDuplicate是否存在相同的数据", isDuplicate);

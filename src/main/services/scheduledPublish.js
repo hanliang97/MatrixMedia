@@ -85,6 +85,34 @@ export function isExpiredScheduledRecord(record, nowMs = Date.now()) {
 
 export function buildTaskPayloadFromRecord(record) {
   const cfg = ptConfig[record.pt] || {};
+  if (record.textType === "article") {
+    return {
+      taskId: Date.now() + Math.random(),
+      bookName: record.bookName || record.textOtherName || "",
+      textType: "article",
+      data: {
+        title: record.bt || record.textOtherName || "",
+        content: record.content || "",
+        articleFilePath: record.articleFilePath || record.filePath || "",
+        coverPath: record.coverPath || "",
+        category: record.category || "前端",
+        tags: record.bq || record.tags || "前端 electron",
+        summary: record.summary || "",
+      },
+      textOtherName: record.textOtherName || record.bt || "",
+      selectedFile: record.selectedFile || path.basename(record.articleFilePath || record.filePath || ""),
+      url: record.uploadUrl || cfg.upload || record.url,
+      show: false,
+      mmCliSuppressWindow: true,
+      closeWindowAfterPublish: true,
+      useragent: record.useragent || cfg.useragent,
+      partition: record.partition,
+      pt: record.pt,
+      phone: record.phone,
+      date: record.date,
+      coverPath: record.coverPath || "",
+    };
+  }
   return {
     taskId: Date.now() + Math.random(),
     bookName: record.bookName || record.textOtherName || "",
@@ -159,11 +187,24 @@ function finishScheduledRecord(record, payload) {
 
 function executeScheduledRecord(record) {
   if (!record || !record.id) return;
-  if (!record.filePath || !fs.existsSync(record.filePath)) {
+  if (record.textType !== "article" && (!record.filePath || !fs.existsSync(record.filePath))) {
     updateRecord(record, {
       publishStatus: "failed",
       publishFailCount: 1,
       lastPublishMessage: "本地视频文件不存在",
+      lastPublishAt: Date.now(),
+    });
+    return;
+  }
+  if (
+    record.textType === "article" &&
+    !String(record.content || "").trim() &&
+    (!record.articleFilePath || !fs.existsSync(record.articleFilePath))
+  ) {
+    updateRecord(record, {
+      publishStatus: "failed",
+      publishFailCount: 1,
+      lastPublishMessage: "文章正文文件不存在",
       lastPublishAt: Date.now(),
     });
     return;

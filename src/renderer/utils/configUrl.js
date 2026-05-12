@@ -49,5 +49,12 @@ export default {
     useragent: "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
     listIndex: "https://creator.xiaohongshu.com/new/note-manager",
   },
+  掘金: {
+    index: "https://juejin.cn/login",
+    upload: "https://juejin.cn/editor/drafts/new",
+    useragent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    listIndex: "https://juejin.cn/creator/content/article/essays?status=published",
+  },
 
 };

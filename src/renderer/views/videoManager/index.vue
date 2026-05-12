@@ -2,10 +2,12 @@
   <div class="container-box">
     <div class="toolbar">
       <el-button type="primary" @click="selectVideoFile">选择视频发布</el-button>
+      <el-button type="success" @click="openArticlePublish">发布文章</el-button>
       <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
     </div>
 
     <LocalVideoPublish ref="localPublishRef" @published="loadRecords" />
+    <LocalArticlePublish ref="articlePublishRef" @published="loadRecords" />
 
     <div class="info-box">
       <template v-for="(item, index) in dataList">
@@ -17,7 +19,7 @@
           <el-table :data="item" border style="width: 100%">
             <el-table-column prop="textOtherName" label="名称" width="120" />
             <el-table-column prop="bt" label="标题" width="160" />
-            <el-table-column prop="selectedFile" label="视频文件" width="140" />
+            <el-table-column prop="selectedFile" label="文件" width="140" />
             <el-table-column label="平台审核状态" width="200">
               <template slot-scope="scope">
                 <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="status-row">
@@ -43,11 +45,14 @@
               </template>
             </el-table-column>
             <el-table-column label="来源" width="72">
-              <template>本地</template>
+              <template slot-scope="scope">
+                {{ scope.row.textType === "article" ? "文章" : "本地" }}
+              </template>
             </el-table-column>
             <el-table-column label="操作" width="260">
               <template slot-scope="scope">
                 <el-button
+                  v-if="canGetStatus(scope.row)"
                   type="primary"
                   size="mini"
                   class="mb8"
@@ -60,7 +65,13 @@
                 <el-popconfirm confirm-button-text="删除" cancel-button-text="取消" icon="el-icon-info" icon-color="red" title="确定删除这条记录吗？" @confirm="handleDelete(scope.row, index, scope.$index)">
                   <el-button slot="reference" type="danger" size="mini">删除</el-button>
                 </el-popconfirm>
-                <el-button type="warning" size="mini" class="mb8" @click="handleRepublish(scope.row)">
+                <el-button
+                  v-if="scope.row.textType === 'local'"
+                  type="warning"
+                  size="mini"
+                  class="mb8"
+                  @click="handleRepublish(scope.row)"
+                >
                   重新发布
                 </el-button>
               </template>
@@ -82,11 +93,13 @@ import dataRequest from "@/utils/dataRequest";
 import copyToClipboard from "@/utils/copy";
 import ptConfig from "@/utils/configUrl";
 import LocalVideoPublish from "@/components/LocalVideoPublish.vue";
+import LocalArticlePublish from "@/components/LocalArticlePublish.vue";
 
 export default {
   name: "VideoManager",
   components: {
     LocalVideoPublish,
+    LocalArticlePublish,
   },
   data() {
     return {
@@ -130,7 +143,7 @@ export default {
       return !!this.statusLoadingMap[key];
     },
     async handleGetStatus(row) {
-      if (!row || this.isStatusLoading(row)) return;
+      if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
       const key = this.getStatusRowKey(row);
       this.$set(this.statusLoadingMap, key, true);
       this.getStatus(row.showAlltype).catch(err => {
@@ -143,6 +156,11 @@ export default {
           type: "warning",
         });
       }, 10000);
+    },
+    canGetStatus(row) {
+      if (!row) return false;
+      if (row.textType !== "article") return true;
+      return (row.showAlltype || [row]).some(item => item && item.textType === "article" && item.pt === "掘金");
     },
     normalizeCount(v) {
       const n = Number(v);
@@ -264,7 +282,43 @@ export default {
       copyRow.publishStatus = copyRow.publishStatus || "publishing";
       return copyRow;
     },
+    recordValue(value) {
+      return String(value || "");
+    },
+    getRecordPhone(row) {
+      return String((row && row.phone) || "").split("-")[0];
+    },
+    getArticleField(row, key) {
+      if (!row) return "";
+      if (row[key] !== undefined && row[key] !== null) return this.recordValue(row[key]);
+      const data = row.data || {};
+      return this.recordValue(data[key]);
+    },
+    getArticleTags(row) {
+      if (!row) return "";
+      const data = row.data || {};
+      return this.recordValue(row.bq || row.tags || data.bq || data.tags);
+    },
+    buildArticleMergeKey(row) {
+      return [
+        this.recordValue(row && row.textOtherName),
+        this.recordValue(row && row.textType),
+        this.getRecordPhone(row),
+        this.recordValue(row && row.partition),
+        this.recordValue(row && row.selectedFile),
+        this.getArticleField(row, "content"),
+        this.getArticleField(row, "articleFilePath"),
+        this.getArticleField(row, "coverPath"),
+        this.getArticleField(row, "category"),
+        this.getArticleTags(row),
+        this.getArticleField(row, "summary"),
+      ].join("\u0001");
+    },
+    isSameArticlePublishRecord(record, target) {
+      return this.buildArticleMergeKey(record) === this.buildArticleMergeKey(target);
+    },
     findLocalPublishRecord(donePayload) {
+      const textType = donePayload.textType || "local";
       const textOtherName = donePayload.textOtherName || (donePayload.data && donePayload.data.textOtherName) || "";
       const selectedFile = donePayload.selectedFile || this.getFileName(donePayload.filePath);
       const pt = donePayload.pt;
@@ -276,8 +330,18 @@ export default {
           const details = row.showAlltype || [];
           for (const sub of details) {
             const subPhone = String(sub.phone || "").split("-")[0];
+            if (textType === "article") {
+              if (
+                sub.textType === "article" &&
+                sub.pt === pt &&
+                this.isSameArticlePublishRecord(sub, donePayload)
+              ) {
+                return { date: dateKey, row: sub };
+              }
+              continue;
+            }
             if (
-              sub.textType === "local" &&
+              sub.textType === textType &&
               sub.pt === pt &&
               sub.textOtherName === textOtherName &&
               sub.selectedFile === selectedFile &&
@@ -291,7 +355,7 @@ export default {
       return null;
     },
     async syncPublishProgress(donePayload) {
-      if (!donePayload || donePayload.textType !== "local") return;
+      if (!donePayload || !["local", "article"].includes(donePayload.textType)) return;
       if (!donePayload.pt || String(donePayload.pt).includes("状态") || String(donePayload.pt).includes("登录")) return;
       const target = this.findLocalPublishRecord(donePayload);
       if (!target || !target.row || !target.row.id) return;
@@ -323,6 +387,9 @@ export default {
         this.$refs.localPublishRef.open(path);
       }
     },
+    openArticlePublish() {
+      this.$refs.articlePublishRef.open();
+    },
 
     loadRecords() {
       dataRequest({
@@ -340,8 +407,10 @@ export default {
         const tempData = {};
         const list = data[key] || [];
         list.forEach(row => {
-          if (row.textType !== "local") return;
-          const mergeKey = row.textOtherName + "-" + row.textType + row.phone.split("-")[0] + row.selectedFile;
+          if (!["local", "article"].includes(row.textType)) return;
+          const mergeKey = row.textType === "article"
+            ? this.buildArticleMergeKey(row)
+            : row.textOtherName + "-" + row.textType + this.getRecordPhone(row) + row.selectedFile;
           if (!tempData[mergeKey]) {
             const copyRow = this.fillPublishStats(JSON.parse(JSON.stringify(row)));
             copyRow.showAlltype = [this.fillPublishStats(JSON.parse(JSON.stringify(row)))];
@@ -366,27 +435,31 @@ export default {
     },
 
     getStatus(arr) {
+      const isJuejinArticle = item => item && item.textType === "article" && item.pt === "掘金";
+      const targets = (arr || []).filter(item => item && (item.textType !== "article" || isJuejinArticle(item)));
       const arrAll = new Promise(resolve => {
         let acLen = 0;
         let acLen2 = 0;
-        const total = arr.length;
+        const total = targets.length;
         if (total === 0) {
           resolve();
           return;
         }
-        arr.forEach(item => {
+        targets.forEach(item => {
           if (!item.videoLink) {
             const taskId = Date.now() + Math.random();
             ipcRenderer.send("puppeteerFile", {
               show: false,
               taskId,
               ...item,
+              title: item.title || item.bt || item.textOtherName || "",
               pt: item.pt + "状态",
               statusCalss: (this.statusCalss || "").trim(),
             });
             this.taskHandlers.set(taskId, data => {
               acLen++;
-              if (data.url && data.status) {
+              const statusUrl = data.url || (isJuejinArticle(item) && this.ptConfig[item.pt] ? this.ptConfig[item.pt].listIndex : "");
+              if (statusUrl && data.status) {
                 acLen2++;
                 const payload = JSON.parse(JSON.stringify(item));
                 delete payload.showAlltype;
@@ -395,8 +468,8 @@ export default {
                   fileName: "pushData",
                   item: {
                     ...payload,
-                    status: !!data.url,
-                    videoLink: data.url,
+                    status: true,
+                    videoLink: statusUrl,
                   },
                 });
               } else {
