@@ -96,7 +96,7 @@ export function buildTaskPayloadFromRecord(record) {
         articleFilePath: record.articleFilePath || record.filePath || "",
         coverPath: record.coverPath || "",
         category: record.category || "前端",
-        tags: record.bq || record.tags || "前端 electron",
+        tags: record.bq || record.tags || "前端 Electron",
         summary: record.summary || "",
       },
       textOtherName: record.textOtherName || record.bt || "",

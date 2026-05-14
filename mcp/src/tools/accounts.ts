@@ -10,9 +10,9 @@ export const listAccountsTool: Tool = {
     properties: {
       platform: {
         type: 'string',
-        enum: ['dy', 'ks', 'blbl', 'bjh', 'tt', 'sph', 'xhs'],
+        enum: ['dy', 'ks', 'blbl', 'bjh', 'tt', 'sph', 'xhs', 'juejin'],
         description:
-          'Optional platform filter. dy=Douyin ks=Kuaishou blbl=Bilibili bjh=Baijiahao tt=Toutiao sph=Shipinhao xhs=Xiaohongshu',
+          'Optional platform filter. dy=Douyin ks=Kuaishou blbl=Bilibili bjh=Baijiahao tt=Toutiao sph=Shipinhao xhs=Xiaohongshu juejin=Juejin',
       },
     },
     required: [],

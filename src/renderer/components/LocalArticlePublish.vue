@@ -170,7 +170,6 @@
           :httpreferrer="loginData.url"
           nodeintegrationinsubframes
           disablewebsecurity
-          allowpopups
           :partition="loginData.partition.split('-')[0]"
           :key="loginData.partition.split('-')[0]"
           :useragent="ptConfig[loginData.pt].useragent"
@@ -227,7 +226,7 @@ export default {
         category: "前端",
         summary: "",
       },
-      tags: ["前端", "electron"],
+      tags: ["前端", "Electron"],
       thisShow: false,
       closeWindow: true,
       scheduledPublish: false,
@@ -399,7 +398,7 @@ export default {
         category: "前端",
         summary: "",
       };
-      this.tags = ["前端", "electron"];
+      this.tags = ["前端", "Electron"];
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;

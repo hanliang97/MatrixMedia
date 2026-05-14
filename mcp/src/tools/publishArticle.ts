@@ -25,6 +25,18 @@ function getCliMessage(result: { lastJson: unknown; stderr: string }, fallback: 
   return stderr.length > 0 ? stderr.slice(0, 300) : fallback;
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object';
+}
+
+function isScheduledResult(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && value.scheduled === true;
+}
+
+function isPuppeteerDoneResult(value: unknown): value is Record<string, unknown> {
+  return isObject(value) && value.channel === 'puppeteerFile-done';
+}
+
 export const publishArticleTool: Tool = {
   name: 'publish_article',
   description: '发布掘金文章，需要已登录掘金账号。账号会通过 phone 自动推导 session partition。',
@@ -130,18 +142,23 @@ export async function handlePublishArticle(args: Record<string, unknown>): Promi
 
   if (result.exitCode === 0) {
     const lastJson = result.lastJson;
-    if (
-      lastJson !== null &&
-      typeof lastJson === 'object' &&
-      (lastJson as { scheduled?: unknown }).scheduled === true
-    ) {
+    if (isScheduledResult(lastJson)) {
       return JSON.stringify({
         status: 'scheduled',
-        id: (lastJson as { id?: unknown }).id ?? null,
-        publishAt: (lastJson as { publishAt?: unknown }).publishAt ?? null,
-        message: (lastJson as { message?: unknown }).message ?? '定时文章发布任务已创建',
+        id: lastJson.id ?? null,
+        publishAt: lastJson.publishAt ?? null,
+        message: lastJson.message ?? '定时文章发布任务已创建',
       });
     }
+
+    if (!isPuppeteerDoneResult(lastJson)) {
+      throw new Error('CLI 未返回发布结果（缺少 puppeteerFile-done）');
+    }
+
+    if (lastJson.status !== true) {
+      throw new Error(getCliMessage(result, '文章发布失败'));
+    }
+
     return JSON.stringify({
       status: 'success',
       message: getCliMessage(result, '文章发布成功'),

@@ -48,7 +48,7 @@ export function parsePublishArticleArgs(subArgv) {
     phone: null,
     partition: null,
     category: "前端",
-    tags: "前端 electron",
+    tags: "前端 Electron",
     summary: "",
     publishAt: null,
     show: false,
@@ -169,7 +169,7 @@ export function publishArticleHelpText() {
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000掘金
       --category <name> 分类，默认 "前端"
-      --tags <text>     标签，默认 "前端 electron"，多个标签用空格分隔
+      --tags <text>     标签，默认 "前端 Electron"，多个标签用空格分隔
       --summary <text>  文章摘要
       --publish-at <t>  一次性定时发布，格式 "YYYY-MM-DD HH:mm:ss"
       --show            （已忽略）CLI 不显示浏览器窗口
@@ -178,7 +178,7 @@ export function publishArticleHelpText() {
 
 示例:
   matrixmedia cli publish-article -p juejin --phone 13800138000 -t "标题" --content "正文"
-  matrixmedia cli publish-article -p jj --phone 13800138000 -t "标题" -f ./article.md --tags "前端 electron"
+  matrixmedia cli publish-article -p jj --phone 13800138000 -t "标题" -f ./article.md --tags "前端 Electron"
   matrixmedia cli publish-article -p 掘金 --partition persist:13800138000掘金 -t "标题" --content "正文" --publish-at "2026-05-13 10:00:00"
 `.trim();
 }

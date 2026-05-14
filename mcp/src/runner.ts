@@ -13,6 +13,19 @@ const VERSION_NOISE = /^\d+\.\d+\.\d+/;
 const DEVTOOLS_NOISE = /^DevTools listening/;
 const TIMEOUT_MS = 2400000;
 
+function isNoiseLine(line: string): boolean {
+  const trimmed = line.trim();
+  return VERSION_NOISE.test(trimmed) || DEVTOOLS_NOISE.test(trimmed);
+}
+
+function stripNoiseLines(raw: string): string {
+  return raw
+    .split('\n')
+    .filter(line => !isNoiseLine(line))
+    .join('\n')
+    .trim();
+}
+
 export interface RunCliOptions {
   onProgress?: (elapsed: number) => void;
   progressIntervalMs?: number; // default 30000
@@ -84,8 +97,7 @@ export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliR
     const processLine = (line: string): void => {
       const trimmed = line.trim();
       if (trimmed.length === 0) return;
-      if (VERSION_NOISE.test(trimmed)) return;
-      if (DEVTOOLS_NOISE.test(trimmed)) return;
+      if (isNoiseLine(trimmed)) return;
       try {
         const parsed: unknown = JSON.parse(trimmed);
         jsonLines.push(parsed);
@@ -99,11 +111,7 @@ export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliR
     // Falls back to per-line parsing if whole-buffer parse fails.
     const processFullOutput = (raw: string): void => {
       // Strip noise lines before attempting whole-buffer parse
-      const cleaned = raw
-        .split('\n')
-        .filter(l => !VERSION_NOISE.test(l.trim()) && !DEVTOOLS_NOISE.test(l.trim()))
-        .join('\n')
-        .trim();
+      const cleaned = stripNoiseLines(raw);
       if (cleaned.length === 0) return;
       try {
         const parsed: unknown = JSON.parse(cleaned);
@@ -139,7 +147,7 @@ export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliR
       clearTimeout(timer);
       if (interval) clearInterval(interval);
       stderr += String(err.message);
-      resolve({ exitCode: 1, jsonLines, stderr, lastJson });
+      resolve({ exitCode: 1, jsonLines, stderr: stripNoiseLines(stderr), lastJson });
     });
 
     child.on('close', (code: number | null) => {
@@ -159,7 +167,7 @@ export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliR
       resolve({
         exitCode: typeof code === 'number' ? code : 1,
         jsonLines,
-        stderr,
+        stderr: stripNoiseLines(stderr),
         lastJson,
       });
     });

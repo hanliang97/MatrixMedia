@@ -39,6 +39,13 @@ export default function () {
         } else if (cookie.name === "userId" && args.pt == "快手" && cookie.value) {
           result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
           loginExpiresAtMs = expMs;
+        } else if (cookie.name === "passport_csrf_token" && args.pt == "掘金" && cookie.value && cookie.value.length > 10) {
+          const fallbackExpMs = Date.now() + 90 * 24 * 60 * 60 * 1000;
+          const expMs = (cookie.expirationDate != null && !Number.isNaN(cookie.expirationDate))
+            ? Math.floor(cookie.expirationDate * 1000)
+            : fallbackExpMs;
+          result = `${args.name}=true; expires=${new Date(expMs).toUTCString()}; path=/`;
+          loginExpiresAtMs = expMs;
         }
 
         if (args.pt == "小红书" && xhsLoginCookieNames.includes(cookie.name) && cookie.value && expMs) {

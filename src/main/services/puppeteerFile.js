@@ -180,6 +180,9 @@ async function doUpload(data, transport, queueDone) {
       activeWin = win;
       page = await pie.getPage(browser, win);
 
+      // Block any window.open() calls from the publish page (e.g. Juejin OAuth popups)
+      win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
+
       // 站点在上传中常注册 beforeunload；用户主动关窗时二次确认，程序自动关窗见 skipCloseConfirmation。
       win.webContents.on("will-prevent-unload", event => {
         if (win._mmAllowCloseWithoutConfirm) {

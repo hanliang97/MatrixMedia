@@ -17,9 +17,12 @@ const PLATFORM_ALIASES = {
   ks: "快手",
   kuaishou: "快手",
   快手: "快手",
+  juejin: "掘金",
+  jj: "掘金",
+  掘金: "掘金",
 };
 
-const CANONICAL = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手"];
+const CANONICAL = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手", "掘金"];
 
 export function parseAccountsArgs(subArgv) {
   const args = Array.isArray(subArgv) ? subArgv : [];
@@ -76,7 +79,7 @@ export function accountsHelpText() {
 数据来源：<Documents>/MatrixMedia/data/account/*.json（与 GUI 共用）。
 
 选项:
-  -p, --platform <id>   仅列某个平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号
+  -p, --platform <id>   仅列某个平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号、juejin|掘金
       --phone <id>      仅列某个手机号（支持前缀匹配完整 phone 字段）
       --logged-in       仅显示已登录账号
       --logged-out      仅显示未登录/已失效账号

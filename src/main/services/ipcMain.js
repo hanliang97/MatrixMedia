@@ -52,12 +52,22 @@ function requestGiteeJson(path, fallback) {
   })
 }
 
+// Cache Gitee release result for 1 hour to avoid rate-limit (403) on repeated calls
+let _releaseCache = null;
+let _releaseCacheAt = 0;
+const RELEASE_CACHE_TTL_MS = 60 * 60 * 1000;
+
 async function getLatestRelease() {
+  if (_releaseCache !== null && Date.now() - _releaseCacheAt < RELEASE_CACHE_TTL_MS) {
+    return _releaseCache;
+  }
   const latest = await requestGiteeJson(
     '/api/v5/repos/gzlingyi_0/pubtw/releases/latest',
     null
   )
   if (latest && latest.id) {
+    _releaseCache = latest;
+    _releaseCacheAt = Date.now();
     return latest
   }
 
@@ -65,7 +75,12 @@ async function getLatestRelease() {
     '/api/v5/repos/gzlingyi_0/pubtw/releases?page=1&per_page=20&direction=desc',
     []
   )
-  return Array.isArray(list) && list.length > 0 ? list[0] : null
+  const result = Array.isArray(list) && list.length > 0 ? list[0] : null;
+  if (result) {
+    _releaseCache = result;
+    _releaseCacheAt = Date.now();
+  }
+  return result;
 }
 
 /** 解析 v0.9.7 / 0.9.7 为可比较的数字（按段比较，避免 0.9.10 与 parseInt 拼接错误） */

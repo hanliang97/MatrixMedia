@@ -15,6 +15,6 @@ export function buildArticleRepublishState(record = {}) {
       category: (record.category || "前端").trim() || "前端",
       summary: (record.summary || "").trim(),
     },
-    tags: parseArticleTags(record.bq || record.tags || "前端 electron"),
+    tags: parseArticleTags(record.bq || record.tags || "前端 Electron"),
   };
 }
