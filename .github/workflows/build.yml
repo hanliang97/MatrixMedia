@@ -116,4 +116,15 @@ jobs:
             dist-gh/**/*.AppImage
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    outputs:
+      version: ${{ steps.ver.outputs.version }}
+
+  # 把 GitHub Release 同步到 Gitee。不会重新打包,只下载 GitHub Release 的产物再上传 Gitee。
+  sync-gitee:
+    needs: [release-github]
+    uses: ./.github/workflows/sync-gitee.yml
+    with:
+      tag: v${{ needs.release-github.outputs.version }}
+    secrets:
+      GITEE_ACCESS_TOKEN: ${{ secrets.GITEE_ACCESS_TOKEN }}
 

@@ -1,7 +1,18 @@
 name: Sync Release To Gitee
 
 on:
-  # GitHub Release 发布后自动触发
+  # 由 build.yml 在 GitHub Release 发布完成后直接调用(关键:解决 GITHUB_TOKEN 创建 Release 不触发 release 事件的问题)
+  workflow_call:
+    inputs:
+      tag:
+        description: 'GitHub Release tag to sync (e.g. v0.6.0)'
+        required: false
+        type: string
+        default: ''
+    secrets:
+      GITEE_ACCESS_TOKEN:
+        required: true
+  # 手动 UI 上发 Release 时也能自动触发
   release:
     types: [published]
   # 支持手动触发,指定 tag(例如 v0.6.0)从 GitHub Release 下载并同步到 Gitee
