@@ -26,20 +26,11 @@ jobs:
         run: yarn
       - name: Build Electron app (Windows)
         run: yarn build
-      - name: Rename Windows installer
-        shell: pwsh
-        run: |
-          $pkg = Get-Content -Raw -Encoding UTF8 package.json | ConvertFrom-Json
-          $v = $pkg.version
-          $p = $pkg.build.productName
-          $from = Join-Path 'build' ($p + ' Setup ' + $v + '.exe')
-          $to = Join-Path 'build' ('Setup-' + $v + '-win-x64.exe')
-          Move-Item -LiteralPath $from -Destination $to
       - name: Upload Windows artifact
         uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: build/Setup-*-win-x64.exe
+          path: build/MatrixMedia-*-win-*.exe
 
   build-mac:
     runs-on: macos-latest
@@ -59,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: mac-dmg
-          path: build/*.dmg
+          path: build/MatrixMedia-*-mac-*.dmg
 
   build-linux:
     runs-on: ubuntu-latest
@@ -77,7 +68,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
-          path: build/*.AppImage
+          path: build/MatrixMedia-*-linux-*.AppImage
 
   release-github:
     needs: [build-windows, build-mac, build-linux]

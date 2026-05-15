@@ -105,34 +105,43 @@ function compareSemver(remoteRaw, localRaw) {
 }
 
 /**
- * 与 CI 产物一致：
- * Win: Setup-0.9.7-win-x64.exe
- * Mac ARM: 矩媒-0.9.7-arm64.dmg（Apple Silicon 时 process.arch === "arm64"）
- * Intel Mac: 矩媒-0.9.7.dmg（文件名不含 -arm64 的普通 dmg）
+ * 与 CI 产物命名规则一致（v0.6.1 起 artifactName 统一为 MatrixMedia-${version}-${os}-${arch}.${ext}）：
+ *   Win x64:      MatrixMedia-0.6.1-win-x64.exe
+ *   Mac Intel:    MatrixMedia-0.6.1-mac-x64.dmg
+ *   Mac Silicon:  MatrixMedia-0.6.1-mac-arm64.dmg
+ *   Linux x64:    MatrixMedia-0.6.1-linux-x64.AppImage（不发 Gitee）
+ *
+ * 兼容历史命名（旧 Release 包仍可正常升级）：
+ *   旧 Win: Setup-0.6.0-win-x64.exe
+ *   旧 Mac: 矩媒-0.6.0-arm64.dmg / 矩媒-0.6.0.dmg
  */
 function pickReleaseInstaller(assets) {
   const list = assets || []
   const platform = process.platform
   if (platform === 'win32') {
     return (
-      list.find(a => /Setup-[\d.]+-win-x64\.exe$/i.test(a.name)) ||
-      list.find(a => /-win-x64\.exe$/i.test(a.name)) ||
+      list.find(a => /-win-x64\.exe$/i.test(a.name)) || // 新命名 + 旧 Setup-*-win-x64.exe 都能命中
       list.find(a => /\.exe$/i.test(a.name))
     )
   }
-  if (platform === "darwin") {
-    const dmgs = list.filter(a => /\.dmg$/i.test(a.name));
-    const isAppleSilicon = process.arch === "arm64";
-    const armDmg = dmgs.find(a => /-arm64\.dmg$/i.test(a.name));
-    const x64Dmg = dmgs.find(a => /-x64\.dmg$/i.test(a.name));
-    const universalDmg = dmgs.find(a => /-universal\.dmg$/i.test(a.name));
-    const plainDmg = dmgs.find(a => !/-arm64\.dmg$/i.test(a.name) && !/-x64\.dmg$/i.test(a.name) && !/-universal\.dmg$/i.test(a.name));
+  if (platform === 'darwin') {
+    const dmgs = list.filter(a => /\.dmg$/i.test(a.name))
+    const isAppleSilicon = process.arch === 'arm64'
+    const armDmg = dmgs.find(a => /-arm64\.dmg$/i.test(a.name))
+    const x64Dmg = dmgs.find(a => /-(mac-)?x64\.dmg$/i.test(a.name))
+    const universalDmg = dmgs.find(a => /-universal\.dmg$/i.test(a.name))
+    // 旧版裸命名(如 矩媒-0.6.0.dmg)做最后兜底
+    const plainDmg = dmgs.find(
+      a =>
+        !/-arm64\.dmg$/i.test(a.name) &&
+        !/-(mac-)?x64\.dmg$/i.test(a.name) &&
+        !/-universal\.dmg$/i.test(a.name)
+    )
 
     if (isAppleSilicon) {
-      return armDmg || universalDmg || plainDmg || null;
-    } else {
-      return x64Dmg || universalDmg || plainDmg || null;
+      return armDmg || universalDmg || plainDmg || null
     }
+    return x64Dmg || universalDmg || plainDmg || null
   }
   return null
 }

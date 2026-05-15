@@ -44,6 +44,7 @@
     ],
     "productName": "矩媒",
     "executableName": "matrixmedia",
+    "artifactName": "MatrixMedia-${version}-${os}-${arch}.${ext}",
     "appId": "com.matrix.video",
     "directories": {
       "output": "build",
