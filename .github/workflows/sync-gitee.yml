@@ -1,0 +1,76 @@
+name: Sync Release To Gitee
+
+on:
+  # GitHub Release 发布后自动触发
+  release:
+    types: [published]
+  # 支持手动触发,指定 tag(例如 v0.6.0)从 GitHub Release 下载并同步到 Gitee
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'GitHub Release tag to sync (e.g. v0.6.0)。留空则使用 package.json 当前版本'
+        required: false
+        default: ''
+
+jobs:
+  sync-gitee:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20.15.1'
+
+      - name: Resolve target tag & version
+        id: ver
+        shell: bash
+        run: |
+          if [ -n "${{ github.event.release.tag_name }}" ]; then
+            TAG="${{ github.event.release.tag_name }}"
+          elif [ -n "${{ inputs.tag }}" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="v$(node -p "require('./package.json').version")"
+          fi
+          VERSION="${TAG#v}"
+          echo "tag=$TAG"     >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Target tag: $TAG (version: $VERSION)"
+
+      - name: Install dependencies
+        run: yarn
+
+      - name: Download assets from GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: |
+          mkdir -p dist-release
+          # 仅下载 exe / dmg(Gitee 单文件 100MB 限制,Linux AppImage 不上传)
+          gh release download "$TAG" \
+            --repo "${{ github.repository }}" \
+            --dir dist-release \
+            --pattern '*.exe' \
+            --pattern '*.dmg'
+          ls -lh dist-release
+
+      - name: Fetch GitHub release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.ver.outputs.tag }}
+        run: gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '.body // ""' > release-notes.md
+
+      - name: Upload to Gitee Release
+        shell: bash
+        env:
+          VERSION: ${{ steps.ver.outputs.version }}
+        run: |
+          mapfile -t files < <(find dist-release -type f \( -name '*.exe' -o -name '*.dmg' \) | sort)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No .exe or .dmg under dist-release"; ls -laR dist-release; exit 1
+          fi
+          RELEASE_BODY="$(cat release-notes.md)" node upload-gitee.js "${{ secrets.GITEE_ACCESS_TOKEN }}" "$VERSION" "${files[@]}"
