@@ -27,72 +27,140 @@ async function selectXhsCreativeStatement(page, data) {
   }
   console.log("[xhs] 准备选择内容类型声明:", label);
 
-  // 1. 点击「添加内容类型声明」触发下拉
-  const opened = await page.evaluate(() => {
-    const candidates = document.querySelectorAll(".d-select-placeholder");
-    for (const el of candidates) {
-      if ((el.textContent || "").trim() === "添加内容类型声明") {
-        el.click();
-        return true;
-      }
-    }
-    return false;
-  });
-  if (!opened) {
+  // 1. 找到「添加内容类型声明」对应的 .d-select 触发器，给它打临时 id 让 page.click 命中
+  //    （小红书的 d-select 实际监听 mousedown，纯 el.click() 不会打开下拉）
+  const triggerId = await page.evaluate(
+    "(function(){" +
+      "var ps=document.querySelectorAll('.d-select-placeholder');" +
+      "for(var i=0;i<ps.length;i++){" +
+        "if((ps[i].textContent||'').replace(/\\s+/g,'').trim()==='添加内容类型声明'){" +
+          "var sel=ps[i].closest('.d-select')||ps[i].parentElement;" +
+          "if(!sel)return '';" +
+          "var id='__xhs_stmt_'+Date.now();" +
+          "sel.setAttribute('id',id);" +
+          "return id;" +
+        "}" +
+      "}" +
+      "return '';" +
+    "})()"
+  );
+  if (!triggerId) {
     console.warn("未找到小红书「添加内容类型声明」入口，跳过");
     return;
   }
+  try {
+    await page.click("#" + triggerId, { delay: 80 });
+    console.log("[xhs] 已 page.click 打开内容类型声明下拉");
+  } catch (e) {
+    console.warn("[xhs] page.click 失败，尝试 DOM 派发 mousedown:", e?.message || e);
+    await page.evaluate(
+      "(function(id){" +
+        "var el=document.getElementById(id);" +
+        "if(!el)return;" +
+        "var r=el.getBoundingClientRect();" +
+        "var o={bubbles:true,cancelable:true,view:window,clientX:r.left+r.width/2,clientY:r.top+r.height/2,button:0};" +
+        "el.dispatchEvent(new MouseEvent('mousedown',o));" +
+        "el.dispatchEvent(new MouseEvent('mouseup',o));" +
+        "el.dispatchEvent(new MouseEvent('click',o));" +
+      "})(" + JSON.stringify(triggerId) + ")"
+    );
+  }
 
-  // 2. 等下拉项渲染出来
+  // 2. 等下拉项渲染（字符串 evaluate，避开 babel 转译）
   try {
     await page.waitForFunction(
-      (text) => {
-        // 注意：page.evaluate 回调会被序列化送进浏览器；某些打包链路会把 for...of
-        // 转译成依赖 babel helper 的形式，导致 page 端报 "n is not defined"。
-        // 这里用下标 for，避免转译。
-        const names = document.querySelectorAll(".d-options-wrapper .d-option-name");
-        for (var i = 0; i < names.length; i++) {
-          var el = names[i];
-          if ((el.textContent || "").trim() === text) return true;
-        }
-        return false;
-      },
-      { timeout: WAIT_SELECTOR_APPEAR_MS },
-      label
+      "(function(){" +
+        "var ns=document.querySelectorAll('.d-options-wrapper .d-option-name');" +
+        "for(var i=0;i<ns.length;i++){" +
+          "if((ns[i].textContent||'').replace(/\\s+/g,'').trim()===" + JSON.stringify(label.replace(/\s+/g, "").trim()) + ")return true;" +
+        "}" +
+        "return false;" +
+      "})()",
+      { timeout: WAIT_SELECTOR_APPEAR_MS }
     );
   } catch (e) {
     console.warn("小红书声明下拉项未出现:", e?.message || e);
     return;
   }
 
-  // 3. 点选目标选项
-  const picked = await page.evaluate((text) => {
-    var items = document.querySelectorAll(".d-options-wrapper .d-option-name");
-    for (var i = 0; i < items.length; i++) {
-      var el = items[i];
-      if ((el.textContent || "").trim() !== text) continue;
-      // 顺着 grid 结构往上找可点击的 .d-grid-item / .d-option，整行触发点击
-      var row = el.closest(".d-grid-item") || el.closest(".d-option") || el;
-      var grid = row.parentElement;
-      if (grid) {
-        var handler = grid.querySelector(".d-option-handler");
-        if (handler) {
-          handler.click();
-          return true;
-        }
-      }
-      row.click();
-      return true;
-    }
-    return false;
-  }, label);
-
-  if (!picked) {
-    console.warn(`未找到小红书声明选项: ${label}`);
+  // 3. 找目标行对应的 handler：.d-options 里 handler 和 content 是兄弟 grid-item，
+  //    用 style="grid-area: N / x / ..." 里的行号 N 对齐。打临时 id 后用 page.click 真鼠标事件。
+  const optId = await page.evaluate(
+    "(function(){" +
+      "var target=" + JSON.stringify(label.replace(/\s+/g, "").trim()) + ";" +
+      "var items=document.querySelectorAll('.d-options-wrapper .d-option-name');" +
+      "for(var i=0;i<items.length;i++){" +
+        "var t=(items[i].textContent||'').replace(/\\s+/g,'').trim();" +
+        "if(t!==target)continue;" +
+        "var row=items[i].closest('.d-grid-item');" +
+        "if(!row)return '';" +
+        // 解析 grid-area 起始行号
+        "var ga=row.getAttribute('style')||'';" +
+        "var m=ga.match(/grid-area:\\s*(\\d+)/);" +
+        "var rowNum=m?m[1]:'';" +
+        "var handler=null;" +
+        "if(rowNum&&row.parentElement){" +
+          "var sibs=row.parentElement.querySelectorAll('.d-grid-item');" +
+          "for(var s=0;s<sibs.length;s++){" +
+            "var sga=sibs[s].getAttribute('style')||'';" +
+            "var sm=sga.match(/grid-area:\\s*(\\d+)/);" +
+            "if(sm&&sm[1]===rowNum){" +
+              "var h=sibs[s].querySelector('.d-option-handler');" +
+              "if(h){handler=h;break;}" +
+            "}" +
+          "}" +
+        "}" +
+        // 兜底：找不到对应行的 handler 就退到 content 行容器
+        "if(!handler)handler=items[i].closest('.d-option')||row;" +
+        "var id='__xhs_opt_'+Date.now();" +
+        "handler.setAttribute('id',id);" +
+        "return id;" +
+      "}" +
+      "return '';" +
+    "})()"
+  );
+  if (!optId) {
+    console.warn("未找到小红书声明选项: " + label);
     return;
   }
+  try {
+    await page.click("#" + optId, { delay: 80 });
+  } catch (e) {
+    console.warn("[xhs] 点击选项 page.click 失败，DOM 派发:", e?.message || e);
+    await page.evaluate(
+      "(function(id){" +
+        "var el=document.getElementById(id);" +
+        "if(!el)return;" +
+        "var r=el.getBoundingClientRect();" +
+        "var o={bubbles:true,cancelable:true,view:window,clientX:r.left+r.width/2,clientY:r.top+r.height/2,button:0};" +
+        "el.dispatchEvent(new MouseEvent('mousedown',o));" +
+        "el.dispatchEvent(new MouseEvent('mouseup',o));" +
+        "el.dispatchEvent(new MouseEvent('click',o));" +
+      "})(" + JSON.stringify(optId) + ")"
+    );
+  }
   await page.waitForTimeout(400);
-  console.log("[xhs] 已选择内容类型声明:", label);
+
+  // 4. 验证：只看声明 select 自己的 placeholder/description（按 triggerId 限定范围），
+  //    避免把页面其它 .d-select-placeholder（如"添加地点"）当成结果。
+  const selectedNow = await page.evaluate(
+    "(function(id){" +
+      "var sel=document.getElementById(id);" +
+      "if(!sel)return '';" +
+      "var d=sel.querySelector('.d-select-description');" +
+      "var dt=d?(d.textContent||'').replace(/\\s+/g,'').trim():'';" +
+      "if(dt)return dt;" +
+      "var p=sel.querySelector('.d-select-placeholder');" +
+      "var pt=p?(p.textContent||'').replace(/\\s+/g,'').trim():'';" +
+      "if(pt&&pt!=='添加内容类型声明')return pt;" +
+      "return '';" +
+    "})(" + JSON.stringify(triggerId) + ")"
+  );
+  if (selectedNow) {
+    console.log("[xhs] 已选择内容类型声明: " + label + "（页面显示=" + selectedNow + "）");
+  } else {
+    console.warn("[xhs] 点了选项但未观察到 placeholder 被替换，可能没真正选中: " + label);
+  }
 }
 
 function normalizeTagList(rawTagText = "") {
@@ -141,9 +209,7 @@ export default async function (page, data, window, event) {
 
   await page.waitForTimeout(300);
 
-  // 参考头条/快手/抖音的做法：完全用 page.keyboard.type 直接打字，
-  // 不用 clipboard.writeText + Ctrl+V，也不用复杂的 page.evaluate range 操作
-  // ——这套路在 Windows 打包后 webpack/babel 转译时不会触发 "n is not defined"。
+  // 正文/标签：用 keyboard.type + 字符串形式的 page.evaluate（避免 webpack 转译炸 "n is not defined"）
   try {
     const editorSelector = ".tiptap.ProseMirror";
     await page.waitForSelector(editorSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
@@ -153,17 +219,41 @@ export default async function (page, data, window, event) {
     const descText = String(data.data?.bt2 || "").trim();
     const tags = normalizeTagList(data.data?.bq || "");
 
-    // 聚焦编辑器（双击保证 caret 进去）
+    // 聚焦编辑器（先 puppeteer click 定位 caret，再字符串 evaluate 调 .focus() 双保险）
     await editor.click({ clickCount: 2 });
     await page.waitForTimeout(200);
+    // 注意：page.evaluate 传字符串而不是函数，webpack/babel 不会去转译它，避免 "n is not defined"
+    await page.evaluate(
+      "(function(){var el=document.querySelector(" +
+        JSON.stringify(editorSelector) +
+        ");if(el)el.focus();})()"
+    );
+    await page.waitForTimeout(100);
 
     // 输入正文描述
     if (descText) {
       await page.keyboard.type(descText, { delay: 30 });
       await page.waitForTimeout(300);
+      // 校验是否真的写进去了；没有则 fallback 用 execCommand insertText
+      const ok = await page.evaluate(
+        "(function(){var el=document.querySelector(" +
+          JSON.stringify(editorSelector) +
+          ");return !!(el && (el.textContent||'').trim());})()"
+      );
+      if (!ok) {
+        console.warn("[xhs] keyboard.type 未写入正文，尝试 execCommand 兜底");
+        await page.evaluate(
+          "(function(){var el=document.querySelector(" +
+            JSON.stringify(editorSelector) +
+            ");if(!el)return;el.focus();document.execCommand('insertText',false," +
+            JSON.stringify(descText) +
+            ");})()"
+        );
+        await page.waitForTimeout(200);
+      }
     }
 
-    // 输入标签：每个 #xxx 后 Enter 选中候选弹窗第一项（与抖音 / 视频号思路一致）
+    // 输入标签：每个 #xxx 后 Enter 选中候选弹窗第一项
     if (tags.length) {
       if (descText) {
         await page.keyboard.press("Enter");
@@ -173,9 +263,8 @@ export default async function (page, data, window, event) {
         const tag = tags[i];
         await page.keyboard.type("#" + tag, { delay: 30 });
         await page.waitForTimeout(600); // 等小红书话题候选弹窗
-        await page.keyboard.press("Enter"); // 选中候选第一条 → 变成话题胶囊
+        await page.keyboard.press("Enter"); // 选候选第一条 → 变成话题胶囊
         await page.waitForTimeout(300);
-        // 标签之间补一个空格，避免下一个 # 被连到上一个胶囊里
         if (i < tags.length - 1) {
           await page.keyboard.type(" ", { delay: 30 });
         }
@@ -183,46 +272,23 @@ export default async function (page, data, window, event) {
     }
   } catch (err) {
     console.error("❌ 小红书正文/标签填写失败:", err);
-    // 正文/标签是必填项，失败时抛出让 puppeteerFile.js 的 actionCheckTimer 接住并重试（最多 maxRetries 次）。
     throw new Error(`小红书正文/标签填写失败：${err?.message || err}`);
   }
 
   await page.waitForTimeout(300);
 
-  try {
-    const originalSwitchSelector = ".original-wrapper .custom-switch-switch";
-    await page.waitForSelector(originalSwitchSelector, { timeout: 5000 });
-    const originalSwitch = await page.$(originalSwitchSelector);
-    if (!originalSwitch) throw new Error("未找到声明原创开关");
-    await originalSwitch.click();
-
-    try {
-      await page.waitForSelector(".originalContainer input[type='checkbox']", { timeout: 3000 });
-      const checked = await page.evaluate(() => {
-        const originalContainer = document.querySelector(".originalContainer");
-        if (!originalContainer) return false;
-
-        const checkbox = originalContainer.querySelector("input[type='checkbox']");
-        if (checkbox && !checkbox.checked) checkbox.click();
-
-        return Boolean(checkbox);
-      });
-      if (checked) await page.waitForTimeout(300);
-      const confirmed = await page.evaluate(() => {
-        const originalContainer = document.querySelector(".originalContainer");
-        if (!originalContainer) return false;
-
-        const confirmBtn = originalContainer.querySelector(".footer .d-button");
-        if (confirmBtn) confirmBtn.click();
-        return Boolean(confirmBtn);
-      });
-      if (!checked || !confirmed) throw new Error("未找到声明原创确认项");
-    } catch (_) {
-      // 已声明过原创协议时不会出现确认弹窗，继续后续流程
-    }
-  } catch (err) {
-    console.error("❌ 小红书声明原创失败:", err);
-  }
+  // === 声明原创开关：默认不自动开启 ===
+  // 之前会自动点 .original-wrapper .custom-switch-switch 把原创打开，
+  // 进而在发布时弹出"原创承诺"二次确认弹窗，阻塞发布按钮的点击。
+  // 现在保留不点；如果以后要按账号开关原创，再做成一个 data.originalDeclaration 开关。
+  // try {
+  //   const originalSwitchSelector = ".original-wrapper .custom-switch-switch";
+  //   await page.waitForSelector(originalSwitchSelector, { timeout: 5000 });
+  //   const originalSwitch = await page.$(originalSwitchSelector);
+  //   if (originalSwitch) await originalSwitch.click();
+  //   ...
+  // } catch (err) { console.error("❌ 小红书声明原创失败:", err); }
+  console.log("[xhs] 跳过自动声明原创");
 
   // 选择内容类型声明（无标注 / 不支持值会跳过）
   try {
@@ -232,59 +298,139 @@ export default async function (page, data, window, event) {
   }
 
   try {
-    await pollPageUntil(
-      page,
-      () => {
-        const video = document.querySelector(".video-area video");
-        if (!video) return false;
-        const src = video.getAttribute("src") || video.currentSrc || "";
-        return String(src).trim().length > 0;
-      },
-      WAIT_UPLOAD_PROCESSING_MS
-    );
-
-    if (!isDraftMode) {
+    // 等视频上传完成：新版小红书在 .video-plugin-title-action 出现 "重新上传" 文案表示上传完成。
+    // 老版兼容：找任何带 src 的 <video>。超时 2 分钟，到点不抛错继续。
+    try {
       await pollPageUntil(
         page,
-        () => {
-          const norm = text => String(text || "").replace(/\s+/g, "").trim();
-          const bar = document.querySelector(".publish-page-publish-btn");
-          if (!bar) return false;
-          const buttons = Array.from(bar.querySelectorAll("button"));
-          const publishBtn = buttons.find(btn => norm(btn.textContent) === "发布");
-          if (!publishBtn) return false;
-          return !publishBtn.disabled
-            && !publishBtn.hasAttribute("disabled")
-            && publishBtn.getAttribute("aria-disabled") !== "true"
-            && !String(publishBtn.className || "").includes("disabled");
-        },
+        "(function(){" +
+          // 1) 新版：.video-plugin-title-action 含"重新上传"
+          "var actions=document.querySelectorAll('.video-plugin-title-action');" +
+          "for(var i=0;i<actions.length;i++){" +
+            "var t=(actions[i].textContent||'').replace(/\\s+/g,'').trim();" +
+            "if(t.indexOf('重新上传')!==-1)return true;" +
+          "}" +
+          // 2) 老版兜底：任何 video 元素有 src
+          "var vs=document.querySelectorAll('video');" +
+          "for(var j=0;j<vs.length;j++){" +
+            "var s=vs[j].getAttribute('src')||vs[j].currentSrc||'';" +
+            "if(String(s).trim().length>0)return true;" +
+          "}" +
+          "return false;" +
+        "})()",
         WAIT_UPLOAD_PROCESSING_MS
       );
+      console.log("[xhs] 视频上传完成（重新上传按钮已出现）");
+    } catch (_) {
+      console.log("[xhs] 视频上传等待超时，继续走发布流程");
     }
-    
-    const clicked = await page.evaluate(draftMode => {
-      const norm = text => String(text || "").replace(/\s+/g, "").trim();
-      const isDisabled = btn => Boolean(
-        btn.disabled
-          || btn.hasAttribute("disabled")
-          || btn.getAttribute("aria-disabled") === "true"
-          || String(btn.className || "").includes("disabled")
-      );
-      const bar = document.querySelector(".publish-page-publish-btn");
-      if (!bar) return false;
-      const buttons = Array.from(bar.querySelectorAll("button"));
-      // 发布
-      const publishBtn = buttons.find(btn => norm(btn.textContent) === "发布");
-      // 存到草稿
-      const publishDraftBtn = buttons.find(btn => norm(btn.textContent) === "暂存离开");
-      const targetBtn = draftMode ? publishDraftBtn : publishBtn;
-      if (!targetBtn) return false;
-      if (!draftMode && isDisabled(targetBtn)) return false;
-      targetBtn.click();
-      return true;
-    }, isDraftMode);
 
-    if (!clicked) throw new Error(isDraftMode ? "未找到暂存离开按钮" : "未找到发布按钮");
+    // dump 发布栏当前所有按钮的文案 + 状态，方便诊断
+    const buttonDump = await page.evaluate(
+      "(function(){" +
+        "var bar=document.querySelector('.publish-page-publish-btn');" +
+        "if(!bar)return {bar:false,btns:[]};" +
+        "var btns=bar.querySelectorAll('button');" +
+        "var out=[];" +
+        "for(var i=0;i<btns.length;i++){" +
+          "out.push({text:(btns[i].textContent||'').replace(/\\s+/g,'').trim(),disabled:!!btns[i].disabled,className:btns[i].className||''});" +
+        "}" +
+        "return {bar:true,btns:out};" +
+      "})()"
+    );
+    console.log("[xhs] 发布栏按钮:", JSON.stringify(buttonDump));
+
+    if (!isDraftMode) {
+      console.log("[xhs] 开始等发布按钮可用...");
+      // 等发布按钮可用：最多 15s，超时也走，由后面的多次点击兜底
+      try {
+        await pollPageUntil(
+          page,
+          "(function(){" +
+            "var bar=document.querySelector('.publish-page-publish-btn');" +
+            "if(!bar)return false;" +
+            "var btns=bar.querySelectorAll('button');" +
+            "for(var i=0;i<btns.length;i++){" +
+              "var t=(btns[i].textContent||'').replace(/\\s+/g,'').trim();" +
+              "if(t!=='发布')continue;" +
+              "if(btns[i].disabled||btns[i].hasAttribute('disabled'))return false;" +
+              "if(btns[i].getAttribute('aria-disabled')==='true')return false;" +
+              "if(String(btns[i].className||'').indexOf('disabled')!==-1)return false;" +
+              "return true;" +
+            "}" +
+            "return false;" +
+          "})()",
+          15 * 1000
+        );
+        console.log("[xhs] 发布按钮已可用");
+      } catch (_) {
+        console.log("[xhs] 等发布按钮可用超时（15s），继续尝试点击");
+      }
+    } else {
+      console.log("[xhs] 草稿模式，跳过发布按钮可用等待");
+    }
+    console.log("[xhs] 准备进入点击循环, isDraftMode=", isDraftMode);
+
+    // 点击发布按钮：用字符串 evaluate 避免 babel 转译炸；最多尝试 5 次，
+    // 每次点完等 1.5s 看按钮是否还在；如果还在(原创弹窗/二次确认/重复渲染)就再点一次。
+    const targetText = isDraftMode ? "暂存离开" : "发布";
+    const clickCode = function (text) {
+      return (
+        "(function(text){" +
+        "var norm=function(t){return String(t||'').replace(/\\s+/g,'').trim();};" +
+        "var isDisabled=function(b){return !!(b.disabled||b.hasAttribute('disabled')||b.getAttribute('aria-disabled')==='true'||String(b.className||'').indexOf('disabled')!==-1);};" +
+        "var bar=document.querySelector('.publish-page-publish-btn');" +
+        "if(!bar)return {ok:false,reason:'no-bar'};" +
+        "var btns=bar.querySelectorAll('button');" +
+        "for(var i=0;i<btns.length;i++){if(norm(btns[i].textContent)===text){if(isDisabled(btns[i]))return {ok:false,reason:'disabled'};btns[i].click();return {ok:true};}}" +
+        "return {ok:false,reason:'no-match'};" +
+        "})(" + JSON.stringify(text) + ")"
+      );
+    };
+    const existsCode = function (text) {
+      return (
+        "(function(text){" +
+        "var norm=function(t){return String(t||'').replace(/\\s+/g,'').trim();};" +
+        "var bar=document.querySelector('.publish-page-publish-btn');" +
+        "if(!bar)return false;" +
+        "var btns=bar.querySelectorAll('button');" +
+        "for(var i=0;i<btns.length;i++){if(norm(btns[i].textContent)===text)return true;}" +
+        "return false;" +
+        "})(" + JSON.stringify(text) + ")"
+      );
+    };
+
+    let clickedOk = false;
+    let lastReason = "";
+    for (let attempt = 1; attempt <= 5; attempt++) {
+      const result = await page.evaluate(clickCode(targetText));
+      if (result && result.ok) {
+        console.log(`[xhs] 第 ${attempt} 次点击「${targetText}」按钮`);
+        clickedOk = true;
+        await page.waitForTimeout(1500);
+        // 按钮还在 → 说明被 modal 拦/没生效，下一轮再点
+        const stillThere = await page.evaluate(existsCode(targetText));
+        if (!stillThere) {
+          console.log(`[xhs] 「${targetText}」按钮已消失，发布动作生效`);
+          break;
+        }
+        console.log(`[xhs] 「${targetText}」按钮仍然存在，尝试再次点击 (${attempt}/5)`);
+        // 如果是发布模式，可能还出现了原创确认弹窗 —— 顺手把弹窗里的确认按钮点掉
+        await page.evaluate(
+          "(function(){" +
+            "var dialog=document.querySelector('.originalContainer .footer .d-button, .d-modal .d-button-primary');" +
+            "if(dialog)dialog.click();" +
+            "})()"
+        );
+        await page.waitForTimeout(500);
+      } else {
+        lastReason = (result && result.reason) || "unknown";
+        console.warn(`[xhs] 第 ${attempt} 次点击未命中: ${lastReason}`);
+        await page.waitForTimeout(1000);
+      }
+    }
+
+    if (!clickedOk) throw new Error(`未能成功点击「${targetText}」按钮 (${lastReason})`);
 
     console.log(isDraftMode ? "✅ 小红书视频已保存草稿" : "✅ 小红书视频上传成功");
     setTimeout(() => {
