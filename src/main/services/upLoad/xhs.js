@@ -325,112 +325,97 @@ export default async function (page, data, window, event) {
       console.log("[xhs] 视频上传等待超时，继续走发布流程");
     }
 
-    // dump 发布栏当前所有按钮的文案 + 状态，方便诊断
-    const buttonDump = await page.evaluate(
-      "(function(){" +
-        "var bar=document.querySelector('.publish-page-publish-btn');" +
-        "if(!bar)return {bar:false,btns:[]};" +
-        "var btns=bar.querySelectorAll('button');" +
-        "var out=[];" +
-        "for(var i=0;i<btns.length;i++){" +
-          "out.push({text:(btns[i].textContent||'').replace(/\\s+/g,'').trim(),disabled:!!btns[i].disabled,className:btns[i].className||''});" +
-        "}" +
-        "return {bar:true,btns:out};" +
-      "})()"
-    );
-    console.log("[xhs] 发布栏按钮:", JSON.stringify(buttonDump));
+    // 新版发布按钮在 <xhs-publish-btn> 的 closed shadow root 里，
+    // 标准 DOM API 拿不到内部 button。改用鼠标坐标点击：浏览器会自然把点击事件路由进 shadow 内部。
+    // 宿主元素属性: is-publish="true" is-save-draft="true" submit-text="发布" save-text="暂存离开"
+    // 内部布局是 .publish-page-publish-btn 横向 flex：左=暂存离开，右=发布
+    console.log("[xhs] 等 xhs-publish-btn 宿主出现...");
+    let hostHandle = null;
+    try {
+      hostHandle = await page.waitForSelector("xhs-publish-btn", {
+        visible: true,
+        timeout: 30 * 1000,
+      });
+    } catch (e) {
+      console.warn("[xhs] 未找到 xhs-publish-btn 宿主元素:", e?.message || e);
+    }
+    if (!hostHandle) {
+      // 老版兜底：直接找 .publish-page-publish-btn 里的 button
+      hostHandle = await page.$(".publish-page-publish-btn");
+    }
+    if (!hostHandle) throw new Error("未找到任何可点击的发布按钮容器");
 
+    // 等按钮变成"可点击"状态：宿主的 submit-disabled / save-disabled 属性为 false
     if (!isDraftMode) {
-      console.log("[xhs] 开始等发布按钮可用...");
-      // 等发布按钮可用：最多 15s，超时也走，由后面的多次点击兜底
+      console.log("[xhs] 等发布按钮 enable...");
       try {
         await pollPageUntil(
           page,
           "(function(){" +
-            "var bar=document.querySelector('.publish-page-publish-btn');" +
-            "if(!bar)return false;" +
-            "var btns=bar.querySelectorAll('button');" +
-            "for(var i=0;i<btns.length;i++){" +
-              "var t=(btns[i].textContent||'').replace(/\\s+/g,'').trim();" +
-              "if(t!=='发布')continue;" +
-              "if(btns[i].disabled||btns[i].hasAttribute('disabled'))return false;" +
-              "if(btns[i].getAttribute('aria-disabled')==='true')return false;" +
-              "if(String(btns[i].className||'').indexOf('disabled')!==-1)return false;" +
-              "return true;" +
-            "}" +
-            "return false;" +
+            "var h=document.querySelector('xhs-publish-btn');" +
+            "if(!h)return false;" +
+            "return h.getAttribute('submit-disabled')==='false';" +
           "})()",
-          15 * 1000
+          30 * 1000
         );
         console.log("[xhs] 发布按钮已可用");
       } catch (_) {
-        console.log("[xhs] 等发布按钮可用超时（15s），继续尝试点击");
+        console.log("[xhs] 等发布按钮 enable 超时（30s），强行点击");
       }
-    } else {
-      console.log("[xhs] 草稿模式，跳过发布按钮可用等待");
     }
-    console.log("[xhs] 准备进入点击循环, isDraftMode=", isDraftMode);
 
-    // 点击发布按钮：用字符串 evaluate 避免 babel 转译炸；最多尝试 5 次，
-    // 每次点完等 1.5s 看按钮是否还在；如果还在(原创弹窗/二次确认/重复渲染)就再点一次。
+    // 用 page.mouse.click 在宿主对应位置点 —— 坐标会被浏览器路由进 closed shadow 内部 button
+    const box = await hostHandle.boundingBox();
+    if (!box) throw new Error("发布按钮宿主无 boundingBox（未渲染或被遮挡）");
+    console.log(
+      "[xhs] 宿主 box=", JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
+    );
+    // 实测 .publish-page-publish-btn 布局（680x90）：
+    //   暂存离开 中心 ≈ 30% 宽
+    //   发布     中心 ≈ 55% 宽（右侧还有大量 padding 空白，别用 75% 会落空）
+    const xRatio = isDraftMode ? 0.30 : 0.55;
+    const cx = box.x + box.width * xRatio;
+    const cy = box.y + box.height * 0.5;
+
     const targetText = isDraftMode ? "暂存离开" : "发布";
-    const clickCode = function (text) {
-      return (
-        "(function(text){" +
-        "var norm=function(t){return String(t||'').replace(/\\s+/g,'').trim();};" +
-        "var isDisabled=function(b){return !!(b.disabled||b.hasAttribute('disabled')||b.getAttribute('aria-disabled')==='true'||String(b.className||'').indexOf('disabled')!==-1);};" +
-        "var bar=document.querySelector('.publish-page-publish-btn');" +
-        "if(!bar)return {ok:false,reason:'no-bar'};" +
-        "var btns=bar.querySelectorAll('button');" +
-        "for(var i=0;i<btns.length;i++){if(norm(btns[i].textContent)===text){if(isDisabled(btns[i]))return {ok:false,reason:'disabled'};btns[i].click();return {ok:true};}}" +
-        "return {ok:false,reason:'no-match'};" +
-        "})(" + JSON.stringify(text) + ")"
-      );
-    };
-    const existsCode = function (text) {
-      return (
-        "(function(text){" +
-        "var norm=function(t){return String(t||'').replace(/\\s+/g,'').trim();};" +
-        "var bar=document.querySelector('.publish-page-publish-btn');" +
-        "if(!bar)return false;" +
-        "var btns=bar.querySelectorAll('button');" +
-        "for(var i=0;i<btns.length;i++){if(norm(btns[i].textContent)===text)return true;}" +
-        "return false;" +
-        "})(" + JSON.stringify(text) + ")"
-      );
-    };
-
     let clickedOk = false;
-    let lastReason = "";
     for (let attempt = 1; attempt <= 5; attempt++) {
-      const result = await page.evaluate(clickCode(targetText));
-      if (result && result.ok) {
-        console.log(`[xhs] 第 ${attempt} 次点击「${targetText}」按钮`);
+      await page.mouse.click(cx, cy, { delay: 80 });
+      console.log(
+        `[xhs] 第 ${attempt} 次点击「${targetText}」at (${Math.round(cx)},${Math.round(cy)})`
+      );
+      await page.waitForTimeout(1500);
+      // 验证成功：宿主消失/换页/属性变化
+      const stillThere = await page.evaluate(
+        "(function(){return !!document.querySelector('xhs-publish-btn');})()"
+      );
+      if (!stillThere) {
+        console.log(`[xhs] xhs-publish-btn 宿主已消失，发布动作生效`);
         clickedOk = true;
-        await page.waitForTimeout(1500);
-        // 按钮还在 → 说明被 modal 拦/没生效，下一轮再点
-        const stillThere = await page.evaluate(existsCode(targetText));
-        if (!stillThere) {
-          console.log(`[xhs] 「${targetText}」按钮已消失，发布动作生效`);
-          break;
-        }
-        console.log(`[xhs] 「${targetText}」按钮仍然存在，尝试再次点击 (${attempt}/5)`);
-        // 如果是发布模式，可能还出现了原创确认弹窗 —— 顺手把弹窗里的确认按钮点掉
-        await page.evaluate(
-          "(function(){" +
-            "var dialog=document.querySelector('.originalContainer .footer .d-button, .d-modal .d-button-primary');" +
-            "if(dialog)dialog.click();" +
-            "})()"
-        );
-        await page.waitForTimeout(500);
-      } else {
-        lastReason = (result && result.reason) || "unknown";
-        console.warn(`[xhs] 第 ${attempt} 次点击未命中: ${lastReason}`);
-        await page.waitForTimeout(1000);
+        break;
       }
+      // 顺手关掉可能弹出的确认模态
+      await page.evaluate(
+        "(function(){" +
+          "var dialog=document.querySelector('.originalContainer .footer .d-button, .d-modal .d-button-primary, .d-popconfirm .d-button-primary');" +
+          "if(dialog)dialog.click();" +
+        "})()"
+      );
+      await page.waitForTimeout(500);
     }
 
-    if (!clickedOk) throw new Error(`未能成功点击「${targetText}」按钮 (${lastReason})`);
+    if (!clickedOk) {
+      // 最后 dump 一下宿主属性，便于排查
+      const attrDump = await page.evaluate(
+        "(function(){" +
+          "var h=document.querySelector('xhs-publish-btn');" +
+          "if(!h)return 'host-gone';" +
+          "var o={};for(var i=0;i<h.attributes.length;i++){o[h.attributes[i].name]=h.attributes[i].value;}return o;" +
+        "})()"
+      );
+      console.warn("[xhs] 5 次点击后宿主仍在，属性:", JSON.stringify(attrDump));
+      throw new Error(`未能成功点击「${targetText}」按钮`);
+    }
 
     console.log(isDraftMode ? "✅ 小红书视频已保存草稿" : "✅ 小红书视频上传成功");
     setTimeout(() => {
