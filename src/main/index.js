@@ -21,12 +21,14 @@ const { Tray, nativeImage, Menu, dialog, screen, shell } = electron;
 
 import initWindow from "./services/windowManager";
 import DisableButton from "./config/DisableButton";
+import fs from "fs";
 import path from "path";
 import pie from "puppeteer-in-electron";
 import { isCliMode, runCliMain } from "./cli";
 import { startScheduledPublishScheduler } from "./services/scheduledPublish";
 import {
   installMainProcessLogFile,
+  getMainProcessLogDir,
   getMainProcessLogFilePath,
   clearMainProcessLogFile,
 } from "./services/mainProcessLogFile";
@@ -126,14 +128,45 @@ function onAppReady() {
         },
       },
       {
-        label: "打开日志文件",
+        label: "打开日志目录",
         click: () => {
-          const logPath = getMainProcessLogFilePath(app);
-          shell.openPath(logPath).then((errMsg) => {
+          const logDir = getMainProcessLogDir(app);
+          shell.openPath(logDir).then((errMsg) => {
             if (errMsg) {
-              dialog.showErrorBox("无法打开日志文件", errMsg);
+              dialog.showErrorBox("无法打开日志目录", errMsg);
             }
           });
+        },
+      },
+      {
+        label: "导出今日日志",
+        click: async () => {
+          const logPath = getMainProcessLogFilePath(app);
+          const result = await dialog.showSaveDialog(win, {
+            title: "导出今日日志",
+            defaultPath: path.basename(logPath),
+            filters: [
+              { name: "日志文件", extensions: ["log"] },
+              { name: "所有文件", extensions: ["*"] },
+            ],
+          });
+          if (result.canceled || !result.filePath) return;
+          try {
+            fs.mkdirSync(path.dirname(logPath), { recursive: true });
+            fs.closeSync(fs.openSync(logPath, "a"));
+            fs.copyFileSync(logPath, result.filePath);
+            await dialog.showMessageBox(win, {
+              type: "info",
+              title: "导出今日日志",
+              message: "今日日志已导出。",
+              buttons: ["确定"],
+            });
+          } catch (e) {
+            dialog.showErrorBox(
+              "导出失败",
+              e && e.message ? e.message : String(e)
+            );
+          }
         },
       },
       {
@@ -142,7 +175,7 @@ function onAppReady() {
           const first = await dialog.showMessageBox(win, {
             type: "warning",
             title: "清除日志",
-            message: "将清空主进程日志文件（matrixmedia-main.log）的全部内容，且不可恢复。是否继续？",
+            message: "将清除日志目录下所有按天保存的日志，且不可恢复。是否继续？",
             buttons: ["继续", "取消"],
             defaultId: 1,
             cancelId: 1,
@@ -151,7 +184,7 @@ function onAppReady() {
           const second = await dialog.showMessageBox(win, {
             type: "warning",
             title: "再次确认",
-            message: "请再次确认：确定要清除所有已写入的日志吗？",
+            message: "请再次确认：确定要清除所有日志吗？",
             buttons: ["清除", "取消"],
             defaultId: 1,
             cancelId: 1,

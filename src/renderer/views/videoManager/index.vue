@@ -9,8 +9,10 @@
           >发布文章</el-button
         >
       </div>
-
+      <div class="toolbar-right">
+      <el-button type="warning" @click="openFeedback">问题反馈</el-button>
       <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
+      </div>
     </div>
 
     <LocalVideoPublish ref="localPublishRef" @published="loadRecords" />
@@ -508,6 +510,12 @@ export default {
         },
       });
       this.loadRecords();
+    },
+    openFeedback() {
+      window.open(
+        "https://wj.qq.com/s2/26701780/6de3/",
+        "_blank"
+      );
     },
     openQQGroup() {
       window.open(
