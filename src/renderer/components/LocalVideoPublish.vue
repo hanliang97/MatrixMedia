@@ -100,6 +100,42 @@
 
       <el-divider content-position="left">账号平台选择</el-divider>
 
+      <div v-if="treeData.length > 0" class="platform-tree-toolbar">
+        <el-checkbox
+          :indeterminate="checkAllIndeterminate"
+          v-model="checkAllPlatforms"
+          @change="handleCheckAllPlatforms"
+        >
+          全选
+        </el-checkbox>
+        <span class="batch-statement-wrap">
+          <span class="batch-statement-label">批量声明</span>
+          <el-select
+            v-model="batchCreativeStatement"
+            class="batch-statement-select"
+            popper-class="statement-select-dropdown"
+            size="small"
+            placeholder="选择声明"
+          >
+            <el-option
+              v-for="opt in batchStatementOptions"
+              :key="opt.value"
+              :label="opt.label"
+              :value="opt.value"
+              @click.native="onBatchStatementOptionClick(opt.value)"
+            />
+          </el-select>
+          <el-button
+            type="text"
+            size="small"
+            :disabled="checkedPlatformNodes.length === 0"
+            @click="applyBatchCreativeStatement"
+          >
+            应用到已勾选
+          </el-button>
+        </span>
+      </div>
+
       <el-tree
         v-if="treeData.length > 0"
         ref="tree"
@@ -108,8 +144,13 @@
         show-checkbox
         default-expand-all
         :props="defaultProps"
+        @check="onTreeCheck"
       >
-        <span class="custom-tree-node" slot-scope="{ data }">
+        <span
+          class="custom-tree-node"
+          :class="{ 'platform-leaf-node': !!data.url }"
+          slot-scope="{ data }"
+        >
           <template v-if="!data.url">
             <span>{{ data.title }}</span>
             <el-button
@@ -121,16 +162,44 @@
             >
           </template>
           <template v-else>
-            <span>{{ data.pt }}</span>
-            <span
-              style="margin-left: 5px"
-              :style="{ color: data.loggedIn ? 'green' : 'red' }"
-            >
-              <span v-if="data.loggedIn" class="login-ok" @click="reLogin(data)"
-                >登录√</span
+            <div class="platform-leaf-main">
+              <span class="platform-leaf-name">{{ data.pt }}</span>
+              <span
+                class="platform-leaf-login"
+                :style="{ color: data.loggedIn ? 'green' : 'red' }"
               >
-              <span v-else @click="reLogin(data)">❌重新登录</span>
-            </span>
+                <span
+                  v-if="data.loggedIn"
+                  class="login-ok"
+                  @click="reLogin(data)"
+                  >登录√</span
+                >
+                <span v-else @click="reLogin(data)">❌重新登录</span>
+              </span>
+            </div>
+            <div
+              v-if="
+                platformSupportsCreativeStatement(data.pt) &&
+                isPlatformNodeChecked(data.id)
+              "
+              class="platform-statement-row"
+            >
+              <el-select
+                :value="getPlatformStatement(data.id)"
+                size="mini"
+                class="platform-statement-select"
+                popper-class="statement-select-dropdown"
+                :title="getPlatformStatementDisplay(data)"
+                @input="setPlatformStatement(data.id, $event)"
+              >
+                <el-option
+                  v-for="opt in getStatementOptionsForNode(data)"
+                  :key="opt.value"
+                  :label="getStatementOptionPlatformLabel(opt, data.pt)"
+                  :value="opt.value"
+                />
+              </el-select>
+            </div>
           </template>
         </span>
       </el-tree>
@@ -183,6 +252,15 @@ import {
   clearAccountLoginFlag,
   isAccountLoginFlagSet,
 } from "@/utils/accountLoginFlag";
+import {
+  CREATIVE_STATEMENT_DEFAULT,
+  CREATIVE_STATEMENT_OPTIONS,
+  getCreativeStatementOptionsForPlatform,
+  getCreativeStatementPlatformKey,
+  getCreativeStatementShortLabel,
+  normalizeCreativeStatement,
+  platformSupportsCreativeStatement,
+} from "../../shared/creativeStatement.js";
 
 function fileBaseName(p) {
   if (!p) return "";
@@ -222,6 +300,11 @@ export default {
       platformVisible: false,
       localFilePath: "",
       bqTags: [],
+      platformStatements: {},
+      checkedPlatformIds: [],
+      checkAllPlatforms: false,
+      checkAllIndeterminate: false,
+      batchCreativeStatement: CREATIVE_STATEMENT_DEFAULT,
       form: {
         title: "",
         bt1: "",
@@ -248,6 +331,15 @@ export default {
     displayFileName() {
       return fileBaseName(this.localFilePath);
     },
+    batchStatementOptions() {
+      return CREATIVE_STATEMENT_OPTIONS;
+    },
+    checkedPlatformNodes() {
+      if (!this.$refs.tree) return [];
+      return this.$refs.tree
+        .getCheckedNodes(true)
+        .filter((item) => item && item.url);
+    },
   },
   mounted() {
     this._onGetCookieDone = (event, data) => {
@@ -266,11 +358,13 @@ export default {
     }
   },
   methods: {
+    platformSupportsCreativeStatement,
     open(filePath) {
       if (!filePath) return;
       this.localFilePath = filePath;
       const defaultTitle = fileStem(filePath);
       this.bqTags = [];
+      this.resetPlatformStatementState();
       this.form = { title: defaultTitle, bt1: "", bt2: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
@@ -296,6 +390,7 @@ export default {
         address: (form.address || "").trim(),
       };
       this.bqTags = parseBqToTags(form.bq);
+      this.resetPlatformStatementState();
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -317,6 +412,8 @@ export default {
         if (this.$refs.tree) {
           this.$refs.tree.setCheckedKeys(checkedKeys);
         }
+        this.applyRepublishPlatformStatements(form.creativeStatement);
+        this.onTreeCheck();
       });
       return true;
     },
@@ -381,6 +478,138 @@ export default {
         },
       };
     },
+    buildPlatformVideoPayload(platformNode, baseVideo) {
+      return {
+        ...baseVideo,
+        data: {
+          ...baseVideo.data,
+          creativeStatement: this.getPlatformStatement(platformNode.id),
+        },
+      };
+    },
+    resetPlatformStatementState() {
+      this.platformStatements = {};
+      this.checkedPlatformIds = [];
+      this.checkAllPlatforms = false;
+      this.checkAllIndeterminate = false;
+      this.batchCreativeStatement = CREATIVE_STATEMENT_DEFAULT;
+    },
+    getAllPlatformLeafNodes() {
+      const leaves = [];
+      (this.treeData || []).forEach((group) => {
+        (group.children || []).forEach((child) => {
+          if (child && child.url) leaves.push(child);
+        });
+      });
+      return leaves;
+    },
+    initPlatformStatementsForLeaves(leaves, defaultValue) {
+      const next = { ...this.platformStatements };
+      leaves.forEach((node) => {
+        if (!next[node.id]) {
+          next[node.id] = normalizeCreativeStatement(defaultValue);
+        }
+      });
+      this.platformStatements = next;
+    },
+    applyRepublishPlatformStatements(fallbackValue) {
+      const fallback = normalizeCreativeStatement(fallbackValue);
+      const next = { ...this.platformStatements };
+      this.getAllPlatformLeafNodes().forEach((node) => {
+        const rec = this.findRepublishRecord(node.pt, node.phone);
+        if (rec && rec.creativeStatement) {
+          next[node.id] = normalizeCreativeStatement(rec.creativeStatement);
+        } else if (!next[node.id]) {
+          next[node.id] = fallback;
+        }
+      });
+      this.platformStatements = next;
+    },
+    handleCheckAllPlatforms(checked) {
+      if (!this.$refs.tree) return;
+      const keys = checked
+        ? this.getAllPlatformLeafNodes().map((n) => n.id)
+        : [];
+      this.$refs.tree.setCheckedKeys(keys);
+      this.initPlatformStatementsForLeaves(this.getAllPlatformLeafNodes());
+      this.onTreeCheck();
+    },
+    onTreeCheck() {
+      if (!this.$refs.tree) return;
+      const checkedLeaves = this.$refs.tree
+        .getCheckedNodes(true)
+        .filter((n) => n && n.url);
+      this.checkedPlatformIds = checkedLeaves.map((n) => n.id);
+      this.initPlatformStatementsForLeaves(checkedLeaves);
+      const allLeaves = this.getAllPlatformLeafNodes();
+      const total = allLeaves.length;
+      const count = checkedLeaves.length;
+      this.checkAllPlatforms = total > 0 && count === total;
+      this.checkAllIndeterminate = count > 0 && count < total;
+    },
+    isPlatformNodeChecked(id) {
+      return this.checkedPlatformIds.includes(id);
+    },
+    getPlatformStatement(id) {
+      return normalizeCreativeStatement(
+        this.platformStatements[id] || CREATIVE_STATEMENT_DEFAULT
+      );
+    },
+    setPlatformStatement(id, value) {
+      this.$set(this.platformStatements, id, normalizeCreativeStatement(value));
+    },
+    getStatementOptionsForNode(data) {
+      return getCreativeStatementOptionsForPlatform(data.pt);
+    },
+    getStatementOptionPlatformLabel(opt, pt) {
+      const key = getCreativeStatementPlatformKey(pt);
+      if (key && opt.platformLabels && opt.platformLabels[key]) {
+        return opt.platformLabels[key];
+      }
+      return opt.label;
+    },
+    getPlatformStatementDisplay(data) {
+      return getCreativeStatementShortLabel(
+        this.getPlatformStatement(data.id),
+        data.pt
+      );
+    },
+    applyBatchCreativeStatement(options = {}) {
+      const { silent = false } = options;
+      const batchValue = normalizeCreativeStatement(
+        this.batchCreativeStatement
+      );
+      const targets = this.checkedPlatformNodes.filter((node) =>
+        platformSupportsCreativeStatement(node.pt)
+      );
+      if (targets.length === 0) {
+        if (!silent)
+          this.$message.warning("已勾选账号中没有支持创作声明的平台");
+        return;
+      }
+      const next = { ...this.platformStatements };
+      let applied = 0;
+      targets.forEach((node) => {
+        const opts = getCreativeStatementOptionsForPlatform(node.pt);
+        const matched = opts.find((opt) => opt.value === batchValue);
+        if (!matched) return;
+        next[node.id] = matched.value;
+        applied += 1;
+      });
+      this.platformStatements = next;
+      if (applied === 0) {
+        if (!silent) this.$message.warning("当前批量声明不适用于已勾选平台");
+        return;
+      }
+      if (!silent)
+        this.$message.success(`已为 ${applied} 个账号设置创作声明`);
+    },
+    // 用户点了批量声明下拉的任意选项（包括"二次选中相同值"），
+    // 都强制覆盖所有已勾选支持平台账号的声明值。
+    onBatchStatementOptionClick(value) {
+      this.batchCreativeStatement = normalizeCreativeStatement(value);
+      this.applyBatchCreativeStatement({ silent: true });
+    },
     isVideohaoPlatform(platform) {
       return String((platform && platform.pt) || "").includes("视频号");
     },
@@ -422,9 +651,12 @@ export default {
       this.metaVisible = false;
       this.platformVisible = true;
       this.$nextTick(() => {
+        this.resetPlatformStatementState();
+        this.initPlatformStatementsForLeaves(this.getAllPlatformLeafNodes());
         if (this.$refs.tree) {
           this.$refs.tree.setCheckedKeys([]);
         }
+        this.onTreeCheck();
       });
     },
 
@@ -443,6 +675,7 @@ export default {
     resetState() {
       this.localFilePath = "";
       this.bqTags = [];
+      this.resetPlatformStatementState();
       this.form = { title: "", bt1: "", bt2: "", address: "" };
       this.thisShow = false;
       this.closeWindow = true;
@@ -596,7 +829,7 @@ export default {
           return;
         }
       }
-      const video = this.buildVideoPayload();
+      const baseVideo = this.buildVideoPayload();
       const selectedFile = fileBaseName(this.localFilePath);
       const currentDate = moment().format("YYYY-MM-DD");
       const scheduledAtText = String(this.publishAt || "").trim();
@@ -610,20 +843,6 @@ export default {
         return 0;
       });
 
-      const hasBlbl = platforms.some((p) =>
-        String(p.pt || "").includes("哔哩哔哩")
-      );
-      if (hasBlbl && !this.scheduledPublish && !isDraftMode) {
-        this.$alert(
-          "哔哩哔哩可能自动完成封面；若发布失败或状态异常，请自行打开发布窗口查看（含封面、稿件信息等）。",
-          "发布提示",
-          {
-            confirmButtonText: "我知道了",
-            type: "warning",
-          }
-        );
-      }
-
       const scheduledWriteTasks = [];
       for (let p of platforms) {
         const partition = "persist:" + p.phone.split("-")[0] + p.pt;
@@ -632,6 +851,7 @@ export default {
         const shouldCloseWindowAfterPublish = shouldShow
           ? this.closeWindow
           : true;
+        const video = this.buildPlatformVideoPayload(p, baseVideo);
         if (this.scheduledPublish && !isDraftMode) {
           scheduledWriteTasks.push(
             dataRequest({
@@ -647,6 +867,7 @@ export default {
                 bt2: video.data.bt2,
                 bq: video.data.bq,
                 address: video.data.address,
+                creativeStatement: video.data.creativeStatement,
                 filePath: this.localFilePath,
                 useragent: this.ptConfig[p.pt].useragent,
                 phone: p.phone,
@@ -669,7 +890,9 @@ export default {
           );
           continue;
         }
-        ipcRenderer.send("puppeteerFile", {
+        // 用 JSON 兜底序列化，去掉 Vue 响应式代理 / 不可克隆对象，
+        // 避免 Electron IPC 抛 "object could not be cloned" 导致页面会话提前关闭。
+        ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify({
           ...p,
           taskId,
           ...video,
@@ -684,7 +907,7 @@ export default {
           partition,
           filePath: this.localFilePath,
           date: currentDate,
-        });
+        })));
 
         const republishRecord = this.findRepublishRecord(p.pt, p.phone);
         if (republishRecord && republishRecord.id && republishRecord.date) {
@@ -706,6 +929,7 @@ export default {
               bt2: video.data.bt2,
               bq: video.data.bq,
               address: video.data.address,
+              creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
               republishCount: oldRepublish + 1,
@@ -731,6 +955,7 @@ export default {
               bt2: video.data.bt2,
               bq: video.data.bq,
               address: video.data.address,
+              creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,
@@ -792,11 +1017,62 @@ export default {
 .video-form {
   margin-bottom: 16px;
 }
+.platform-tree-toolbar {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.batch-statement-wrap {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.batch-statement-label {
+  font-size: 13px;
+  color: #606266;
+}
+.batch-statement-select {
+  width: 200px;
+}
 .custom-tree-node {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
   justify-content: space-between;
+}
+.custom-tree-node.platform-leaf-node {
+  flex-direction: column;
+  align-items: stretch;
+  width: 120px;
+  min-width: 120px;
+  box-sizing: border-box;
+}
+.platform-leaf-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+}
+.platform-leaf-name {
+  margin-right: 4px;
+}
+.platform-statement-row {
+  width: 100%;
+  margin-top: 6px;
+}
+.platform-statement-select {
+  width: 100%;
+}
+:deep(.platform-statement-select .el-input) {
+  width: 100%;
+}
+:deep(.platform-statement-select .el-input__inner) {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .login-ok {
   padding-left: 10px;
@@ -805,8 +1081,31 @@ export default {
 :deep(.el-dialog__body) {
   padding-top: 10px;
 }
+:deep(.el-tree-node__content) {
+  height: auto;
+  min-height: 26px;
+  align-items: flex-start;
+  padding-top: 3px;
+  padding-bottom: 3px;
+}
+:deep(.el-tree-node__content > .el-checkbox) {
+  margin-top: 2px;
+}
 :deep(.el-tree-node.is-expanded > .el-tree-node__children) {
   display: flex;
   flex-wrap: wrap;
+}
+</style>
+
+<style>
+.statement-select-dropdown {
+  min-width: 260px !important;
+}
+.statement-select-dropdown .el-select-dropdown__item {
+  height: auto;
+  line-height: 1.45;
+  padding-top: 8px;
+  padding-bottom: 8px;
+  white-space: normal;
 }
 </style>

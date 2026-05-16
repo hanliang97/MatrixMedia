@@ -37,8 +37,12 @@ export default {
     this.urldata = this.$route.meta;
     this.title = this.$route.meta.title;
     console.log(this.$route.meta);
-    ipcRenderer.invoke("puppeteerFile", { partition: this.partition, url: this.ptConfig[this.title].upload ,pt: this.title+'登录' }).then((res) => {
-      console.log(res, "登录状态");
+    // 主进程注册的是 ipcMain.on("puppeteerFile", ...)，必须用 send；
+    // 用 invoke 会触发 "No handler registered for 'puppeteerFile'" 报错。
+    ipcRenderer.send("puppeteerFile", {
+      partition: this.partition,
+      url: this.ptConfig[this.title].upload,
+      pt: this.title + '登录',
     });
     setTimeout(() => {
          this.$refs.webviewRef.addEventListener("dom-ready", () => {

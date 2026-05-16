@@ -636,7 +636,8 @@ export default {
           continue;
         }
 
-        ipcRenderer.send("puppeteerFile", {
+        // JSON 兜底序列化，避免 Vue 响应式代理 / 不可克隆对象触发 IPC 错误
+        ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify({
           ...p,
           taskId,
           ...article,
@@ -647,7 +648,7 @@ export default {
           useragent: this.ptConfig[p.pt].useragent,
           partition,
           date: currentDate,
-        });
+        })));
 
         const republishRecord = this.findRepublishRecord(p.pt, p.phone);
         if (republishRecord && republishRecord.id && republishRecord.date) {

@@ -1,13 +1,98 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
+import {
+  WAIT_SELECTOR_APPEAR_MS,
+  WAIT_UPLOAD_PROCESSING_MS,
+  pollPageUntil,
+} from "./uploadTimeouts.js";
 
-export default async function (page, data, window,event) {
-  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
+async function selectDyCreativeStatement(page, data) {
+  const value = data.data && data.data.creativeStatement;
+  console.log("[dy] creativeStatement 值 =", value);
+  // 注意：「无标注」对应抖音「无需添加自主声明」，也必须主动点选，不能跳过
+  const label = resolveDyCreativeStatementLabel(value);
+  console.log("[dy] 准备选择自主声明:", label);
+
+  const opened = await page.evaluate(() => {
+    const norm = (t) => String(t).replace(/\s+/g, "").trim();
+    const isSelectText = (el) => {
+      const cls = el.className;
+      if (typeof cls !== "string") return false;
+      return cls.split(/\s+/).some((c) => c.startsWith("selectText-"));
+    };
+    for (const el of document.querySelectorAll("[class]")) {
+      if (!isSelectText(el)) continue;
+      if (!norm(el.textContent).includes("请选择自主声明")) continue;
+      el.click();
+      return true;
+    }
+    return false;
+  });
+  if (!opened) {
+    console.warn("未找到抖音「请选择自主声明」入口，跳过");
+    return;
+  }
+
+  await page.waitForSelector(".semi-modal-body .semi-radio-addon", {
+    visible: true,
+    timeout: WAIT_SELECTOR_APPEAR_MS,
+  });
+
+  const picked = await page.evaluate((text) => {
+    const modal = document.querySelector(".semi-modal-body");
+    if (!modal) return false;
+    for (const addon of modal.querySelectorAll(".semi-radio-addon")) {
+      if (addon.textContent.trim() !== text) continue;
+      const labelEl = addon.closest("label.semi-radio");
+      if (labelEl) {
+        labelEl.click();
+        return true;
+      }
+    }
+    return false;
+  }, label);
+
+  if (!picked) {
+    console.warn(`未找到抖音自主声明选项: ${label}`);
+    return;
+  }
+  await page.waitForTimeout(400);
+
+  // 点击弹窗里的「确认」按钮提交声明
+  try {
+    const confirmed = await page.evaluate(() => {
+      const modal = document.querySelector(".semi-modal-body");
+      const root = modal ? modal.closest(".semi-modal") || modal : document;
+      const btn = root.querySelector(".semi-button.semi-button-primary");
+      if (btn) {
+        btn.click();
+        return true;
+      }
+      return false;
+    });
+    if (!confirmed) {
+      console.warn(
+        "未找到抖音自主声明确认按钮 .semi-button.semi-button-primary"
+      );
+    } else {
+      console.log("[dy] 已点击声明确认按钮");
+    }
+    await page.waitForTimeout(400);
+  } catch (e) {
+    console.warn("点击抖音声明确认按钮失败:", e?.message || e);
+  }
+}
+
+export default async function (page, data, window, event) {
+  const isDraftMode =
+    data.publishMode === "draft" || data.publishToDraft === true;
 
   try {
     // 等待 name=upload-btn 的 input 出现
-    await page.waitForSelector('input[name="upload-btn"]', { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector('input[name="upload-btn"]', {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     const uploadInputs = await page.$$('input[name="upload-btn"]');
     // 取最后一个 input 元素
     const uploadFileHandle = uploadInputs[uploadInputs.length - 1];
@@ -16,7 +101,9 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入文件失败", e);
   }
   try {
-    await page.waitForSelector(".semi-input", { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(".semi-input", {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     // 获取元素句柄
     const input = await page.$(".semi-input");
     // 点击并清空内容
@@ -30,6 +117,14 @@ export default async function (page, data, window,event) {
   } catch (e) {
     console.error("❌ 输入标题失败", e);
   }
+
+  // 话题输入完后立即选择自主声明（必须声明）
+  try {
+    await selectDyCreativeStatement(page, data);
+  } catch (e) {
+    console.warn("抖音自主声明选择未完成:", e?.message || e);
+  }
+
   try {
     // 不依赖会随打包变化的 container-xxx：等预览区 video（抖音 CDN）与同容器内的 rc 进度条同时出现
     await pollPageUntil(

@@ -1,9 +1,93 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
-import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import {
+  getCreativeStatementOption,
+  resolveBlblCreativeStatementLabel,
+} from "../../../shared/creativeStatement.js";
+import {
+  pollPageUntil,
+  WAIT_SELECTOR_APPEAR_MS,
+  WAIT_UPLOAD_PROCESSING_MS,
+} from "./uploadTimeouts.js";
 
-export default async function (page, data, window,event) {
-  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
+async function waitForBlblAutoCover(page) {
+  await pollPageUntil(
+    page,
+    () => {
+      const main = document.querySelector(".cover-main");
+      if (!main) return false;
+      const empty = main.querySelector(".cover-empty");
+      const img = main.querySelector(".cover-img");
+      return !empty && !!img;
+    },
+    WAIT_UPLOAD_PROCESSING_MS,
+    2000,
+    "哔哩哔哩封面自动生成超时"
+  );
+}
+
+async function selectBlblCreativeStatement(page, data) {
+  const value = data.data && data.data.creativeStatement;
+  console.log("[blbl] creativeStatement 值 =", value);
+  // 注意：「无标注」对应 B 站「内容无需标注」，也必须主动点选，不能跳过
+  const opt = getCreativeStatementOption(value);
+  const label = resolveBlblCreativeStatementLabel(value);
+  console.log(
+    "[blbl] 准备选择创作声明:",
+    label,
+    "optionalAuth=",
+    !!opt.optionalAuth
+  );
+
+  const trigger = await page.$(
+    ".statement-content .bcc-select-input-wrap input"
+  );
+  if (!trigger) {
+    console.warn("未找到哔哩哔哩创作声明选择器，跳过");
+    return;
+  }
+  await trigger.click({ delay: 200 });
+  await page.waitForSelector(".statement-content .bcc-select-list-wrap", {
+    visible: true,
+    timeout: WAIT_SELECTOR_APPEAR_MS,
+  });
+
+  const picked = await page.evaluate(
+    (text, isAuthOption) => {
+      if (isAuthOption) {
+        const auth = document.querySelector(
+          ".statement-content .auth-content .option-text"
+        );
+        if (auth && auth.textContent.trim() === text) {
+          auth.closest(".auth-content")?.click();
+          return true;
+        }
+        return false;
+      }
+      const spans = document.querySelectorAll(
+        ".statement-content li.bcc-option span"
+      );
+      for (const span of spans) {
+        if (span.textContent.trim() === text) {
+          span.closest("li.bcc-option")?.click();
+          return true;
+        }
+      }
+      return false;
+    },
+    label,
+    !!opt.optionalAuth
+  );
+
+  if (!picked) {
+    console.warn(`未找到哔哩哔哩创作声明选项: ${label}`);
+  }
+  await page.waitForTimeout(300);
+}
+
+export default async function (page, data, window, event) {
+  const isDraftMode =
+    data.publishMode === "draft" || data.publishToDraft === true;
 
   console.log(data);
   try {
@@ -24,6 +108,13 @@ export default async function (page, data, window,event) {
     await page.keyboard.type(data.data.bt1, { delay: 50 });
   } catch (e) {
     console.error("❌ 输入标题失败", e);
+  }
+
+  // 标题输入完后立即选择创作声明（必须声明）
+  try {
+    await selectBlblCreativeStatement(page, data);
+  } catch (e) {
+    console.warn("哔哩哔哩创作声明选择未完成:", e?.message || e);
   }
 
   try {
@@ -67,15 +158,18 @@ export default async function (page, data, window,event) {
     console.error("❌ 输入标签失败", e);
   }
 
-  // 封面：尽力自动选择首帧，失败不阻断流程（用户可在发布窗口自行处理）
   try {
-    await page.waitForSelector(".file-item-content-status .success", { timeout: WAIT_UPLOAD_PROCESSING_MS });
-    await page.waitForSelector(".cover-main-img .buttons", { timeout: WAIT_SELECTOR_APPEAR_MS });
-    await page.click(".cover-main .buttons span:first-child", { delay: 200 });
-    await page.waitForSelector(".cover-select-footer-pick>button:last-child", { timeout: WAIT_SELECTOR_APPEAR_MS });
-    await page.click(".cover-select-footer-pick>button:last-child", { delay: 200 });
+    await page.waitForSelector(".file-item-content-status .success", {
+      timeout: WAIT_UPLOAD_PROCESSING_MS,
+    });
   } catch (e) {
-    console.warn("哔哩哔哩封面自动选择未完成（可忽略，发布失败时再在窗口内处理）:", e?.message || e);
+    console.warn("哔哩哔哩视频上传未完成，跳过后续步骤:", e?.message || e);
+  }
+
+  try {
+    await waitForBlblAutoCover(page);
+  } catch (e) {
+    console.warn("哔哩哔哩封面自动生成未完成（可忽略，发布失败时再在窗口内处理）:", e?.message || e);
   }
 
   try {

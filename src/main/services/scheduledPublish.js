@@ -6,6 +6,7 @@ import { ipcMain } from "electron";
 import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "./puppeteerFile";
 import { changeData } from "../server/utils";
+import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
 
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 1000;
@@ -28,7 +29,7 @@ function parseDateParts(value) {
   if (!m) {
     return { ok: false, error: "定时发布时间格式应为 YYYY-MM-DD HH:mm:ss" };
   }
-  const nums = m.slice(1).map(v => Number(v));
+  const nums = m.slice(1).map((v) => Number(v));
   const [year, month, day, hour, minute, second] = nums;
   const dt = new Date(year, month - 1, day, hour, minute, second, 0);
   const valid =
@@ -53,7 +54,11 @@ export function parsePublishAt(value, nowMs = Date.now()) {
   return { ok: true, value: parsed.value, text: parsed.text };
 }
 
-export function createScheduledRecord(recordItem, publishAtText, nowMs = Date.now()) {
+export function createScheduledRecord(
+  recordItem,
+  publishAtText,
+  nowMs = Date.now()
+) {
   const parsed = parsePublishAt(publishAtText, nowMs);
   if (!parsed.ok) {
     throw new Error(parsed.error);
@@ -100,7 +105,9 @@ export function buildTaskPayloadFromRecord(record) {
         summary: record.summary || "",
       },
       textOtherName: record.textOtherName || record.bt || "",
-      selectedFile: record.selectedFile || path.basename(record.articleFilePath || record.filePath || ""),
+      selectedFile:
+        record.selectedFile ||
+        path.basename(record.articleFilePath || record.filePath || ""),
       url: record.uploadUrl || cfg.upload || record.url,
       show: false,
       mmCliSuppressWindow: true,
@@ -124,6 +131,7 @@ export function buildTaskPayloadFromRecord(record) {
       bq: record.bq || "",
       bdText: "",
       address: record.address || "",
+      creativeStatement: normalizeCreativeStatement(record.creativeStatement),
     },
     textOtherName: record.textOtherName || "",
     selectedFile: record.selectedFile || path.basename(record.filePath || ""),
@@ -164,9 +172,13 @@ function listScheduledRecords() {
   });
   const data = (result && result.data) || {};
   const rows = [];
-  Object.keys(data).forEach(date => {
-    (data[date] || []).forEach(item => {
-      if (item && item.scheduledTask === true && item.publishStatus === "scheduled") {
+  Object.keys(data).forEach((date) => {
+    (data[date] || []).forEach((item) => {
+      if (
+        item &&
+        item.scheduledTask === true &&
+        item.publishStatus === "scheduled"
+      ) {
         rows.push({ ...item, date: item.date || date });
       }
     });
@@ -180,14 +192,18 @@ function finishScheduledRecord(record, payload) {
     publishStatus: ok ? "success" : "failed",
     publishSuccessCount: ok ? 1 : 0,
     publishFailCount: ok ? 0 : 1,
-    lastPublishMessage: (payload && payload.message) || (ok ? "发布成功" : "发布失败"),
+    lastPublishMessage:
+      (payload && payload.message) || (ok ? "发布成功" : "发布失败"),
     lastPublishAt: Date.now(),
   });
 }
 
 function executeScheduledRecord(record) {
   if (!record || !record.id) return;
-  if (record.textType !== "article" && (!record.filePath || !fs.existsSync(record.filePath))) {
+  if (
+    record.textType !== "article" &&
+    (!record.filePath || !fs.existsSync(record.filePath))
+  ) {
     updateRecord(record, {
       publishStatus: "failed",
       publishFailCount: 1,
@@ -218,7 +234,8 @@ function executeScheduledRecord(record) {
   });
   const transport = {
     reply(channel, payload) {
-      if (payload && payload.taskId != null && payload.taskId !== taskId) return;
+      if (payload && payload.taskId != null && payload.taskId !== taskId)
+        return;
       if (channel === "puppeteerFile-done") {
         finishScheduledRecord(record, payload);
       } else if (channel === "puppeteer-noLogin") {
@@ -249,7 +266,10 @@ export function schedulePublishRecord(record, nowMs = Date.now()) {
     });
     return;
   }
-  const delay = Math.min(Number(record.scheduledPublishAt) - nowMs, MAX_TIMER_DELAY_MS);
+  const delay = Math.min(
+    Number(record.scheduledPublishAt) - nowMs,
+    MAX_TIMER_DELAY_MS
+  );
   const timer = setTimeout(() => {
     scheduledTimers.delete(key);
     if (Number(record.scheduledPublishAt) > Date.now()) {
@@ -263,7 +283,7 @@ export function schedulePublishRecord(record, nowMs = Date.now()) {
 
 export function refreshScheduledPublishScheduler() {
   const nowMs = Date.now();
-  listScheduledRecords().forEach(record => {
+  listScheduledRecords().forEach((record) => {
     schedulePublishRecord(record, nowMs);
   });
 }
@@ -288,7 +308,7 @@ export function stopScheduledPublishScheduler() {
     clearInterval(refreshInterval);
     refreshInterval = null;
   }
-  scheduledTimers.forEach(timer => clearTimeout(timer));
+  scheduledTimers.forEach((timer) => clearTimeout(timer));
   scheduledTimers.clear();
   schedulerStarted = false;
 }

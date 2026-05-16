@@ -2,8 +2,12 @@
   <div class="container-box">
     <div class="toolbar">
       <div class="toolbar-left">
-        <el-button type="primary" @click="selectVideoFile">选择视频发布</el-button>
-        <el-button type="success" @click="openArticlePublish">发布文章</el-button>
+        <el-button type="primary" @click="selectVideoFile"
+          >选择视频发布</el-button
+        >
+        <el-button type="success" @click="openArticlePublish"
+          >发布文章</el-button
+        >
       </div>
 
       <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
@@ -25,24 +29,44 @@
             <el-table-column prop="selectedFile" label="文件" width="140" />
             <el-table-column label="平台审核状态" width="200">
               <template slot-scope="scope">
-                <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="status-row">
-                  <span class="pt-name" @click="copy(sub.videoLink)">{{ sub.pt }}</span>
-                  <span :class="{ fail: !sub.videoLink }" @click="opPt(sub)">{{ sub.videoLink ? "通过" : "未通过" }}</span>
-                 
+                <div
+                  v-for="(sub, si) in scope.row.showAlltype"
+                  :key="si"
+                  class="status-row"
+                >
+                  <span class="pt-name" @click="copy(sub.videoLink)">{{
+                    sub.pt
+                  }}</span>
+                  <span :class="{ fail: !sub.videoLink }" @click="opPt(sub)">{{
+                    sub.videoLink ? "通过" : "未通过"
+                  }}</span>
                 </div>
               </template>
             </el-table-column>
             <el-table-column prop="phone" label="发布账号" />
             <el-table-column label="发布进度" width="320">
               <template slot-scope="scope">
-               
-                <div v-for="(sub, si) in scope.row.showAlltype" :key="si" class="progress-row">
+                <div
+                  v-for="(sub, si) in scope.row.showAlltype"
+                  :key="si"
+                  class="progress-row"
+                >
                   <span class="pt-name">{{ sub.pt }}</span>
                   <div class="progress-detail">
-                    <span class="progress-count">重发 {{ normalizeCount(sub.republishCount) }} 次</span>
-                    <span class="progress-count success">成功 {{ normalizeCount(sub.publishSuccessCount) }}</span>
-                    <span class="progress-count fail">失败 {{ normalizeCount(sub.publishFailCount) }}</span>
-                    <el-tag size="mini" :type="publishStatusType(sub.publishStatus)">{{ publishStatusText(sub.publishStatus) }}</el-tag>
+                    <span class="progress-count"
+                      >重发 {{ normalizeCount(sub.republishCount) }} 次</span
+                    >
+                    <span class="progress-count success"
+                      >成功 {{ normalizeCount(sub.publishSuccessCount) }}</span
+                    >
+                    <span class="progress-count fail"
+                      >失败 {{ normalizeCount(sub.publishFailCount) }}</span
+                    >
+                    <el-tag
+                      size="mini"
+                      :type="publishStatusType(sub.publishStatus)"
+                      >{{ publishStatusText(sub.publishStatus) }}</el-tag
+                    >
                   </div>
                 </div>
               </template>
@@ -65,8 +89,17 @@
                 >
                   获取状态
                 </el-button>
-                <el-popconfirm confirm-button-text="删除" cancel-button-text="取消" icon="el-icon-info" icon-color="red" title="确定删除这条记录吗？" @confirm="handleDelete(scope.row, index, scope.$index)">
-                  <el-button slot="reference" type="danger" size="mini">删除</el-button>
+                <el-popconfirm
+                  confirm-button-text="删除"
+                  cancel-button-text="取消"
+                  icon="el-icon-info"
+                  icon-color="red"
+                  title="确定删除这条记录吗？"
+                  @confirm="handleDelete(scope.row, index, scope.$index)"
+                >
+                  <el-button slot="reference" type="danger" size="mini"
+                    >删除</el-button
+                  >
                 </el-popconfirm>
                 <el-button
                   v-if="canRepublish(scope.row)"
@@ -84,8 +117,26 @@
       </template>
     </div>
 
-    <el-dialog :title="loginData.partition" :visible.sync="showLoginDialog" append-to-body destroy-on-close width="1200px">
-      <webview v-if="loginData.url" :src="loginData.url" style="display: flex; width: 100%; height: 650px" webpreferences="javascript=yes" :httpreferrer="loginData.url" nodeintegrationinsubframes disablewebsecurity allowpopups :partition="loginData.partition.split('-')[0]" :key="loginData.partition.split('-')[0]" :useragent="ptConfig[loginData.pt].useragent" />
+    <el-dialog
+      :title="loginData.partition"
+      :visible.sync="showLoginDialog"
+      append-to-body
+      destroy-on-close
+      width="1200px"
+    >
+      <webview
+        v-if="loginData.url"
+        :src="loginData.url"
+        style="display: flex; width: 100%; height: 650px"
+        webpreferences="javascript=yes"
+        :httpreferrer="loginData.url"
+        nodeintegrationinsubframes
+        disablewebsecurity
+        allowpopups
+        :partition="loginData.partition.split('-')[0]"
+        :key="loginData.partition.split('-')[0]"
+        :useragent="ptConfig[loginData.pt].useragent"
+      />
     </el-dialog>
   </div>
 </template>
@@ -139,7 +190,11 @@ export default {
     copy: copyToClipboard,
     getStatusRowKey(row) {
       if (!row) return "";
-      return [row.textOtherName || "", String(row.phone || "").split("-")[0], row.selectedFile || ""].join("-");
+      return [
+        row.textOtherName || "",
+        String(row.phone || "").split("-")[0],
+        row.selectedFile || "",
+      ].join("-");
     },
     isStatusLoading(row) {
       const key = this.getStatusRowKey(row);
@@ -149,7 +204,7 @@ export default {
       if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
       const key = this.getStatusRowKey(row);
       this.$set(this.statusLoadingMap, key, true);
-      this.getStatus(row.showAlltype).catch(err => {
+      this.getStatus(row.showAlltype).catch((err) => {
         console.error("获取状态失败:", err);
       });
       setTimeout(() => {
@@ -163,7 +218,9 @@ export default {
     canGetStatus(row) {
       if (!row) return false;
       if (row.textType !== "article") return true;
-      return (row.showAlltype || [row]).some(item => item && item.textType === "article" && item.pt === "掘金");
+      return (row.showAlltype || [row]).some(
+        (item) => item && item.textType === "article" && item.pt === "掘金"
+      );
     },
     normalizeCount(v) {
       const n = Number(v);
@@ -171,7 +228,8 @@ export default {
     },
     publishStatusType(status) {
       if (status === "success") return "success";
-      if (status === "fail" || status === "failed" || status === "expired") return "danger";
+      if (status === "fail" || status === "failed" || status === "expired")
+        return "danger";
       if (status === "scheduled") return "info";
       if (status === "draft") return "info";
       return "warning";
@@ -187,8 +245,15 @@ export default {
     },
     isPublishFailed(row) {
       if (!row) return false;
-      if (["fail", "failed", "expired"].includes(String(row.publishStatus || ""))) return true;
-      if (Number(row.publishFailCount) > 0 && Number(row.publishSuccessCount) === 0) return true;
+      if (
+        ["fail", "failed", "expired"].includes(String(row.publishStatus || ""))
+      )
+        return true;
+      if (
+        Number(row.publishFailCount) > 0 &&
+        Number(row.publishSuccessCount) === 0
+      )
+        return true;
       if (String(row.lastPublishMessage || "").includes("失败")) return true;
       if (String(row.lastPublishMessage || "").includes("过期")) return true;
       return false;
@@ -204,15 +269,13 @@ export default {
       }
       if (row.textType === "article") {
         const sample = details[0] || {};
-        const failedTargets = details
-          .filter(this.isPublishFailed)
-          .map(v => ({
-            pt: v.pt,
-            phone: String(v.phone || "").split("-")[0],
-          }));
+        const failedTargets = details.filter(this.isPublishFailed).map((v) => ({
+          pt: v.pt,
+          phone: String(v.phone || "").split("-")[0],
+        }));
         const ok = this.$refs.articlePublishRef.openRepublish({
           sample,
-          records: details.map(v => ({
+          records: details.map((v) => ({
             id: v.id,
             date: v.date,
             pt: v.pt,
@@ -224,11 +287,13 @@ export default {
         });
         if (!ok) return;
         if (failedTargets.length === 0) {
-          this.$message.info("未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。");
+          this.$message.info(
+            "未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。"
+          );
         }
         return;
       }
-      let filePath = details.map(v => v && v.filePath).find(Boolean);
+      let filePath = details.map((v) => v && v.filePath).find(Boolean);
       if (!filePath) {
         this.$message.info("历史记录缺少视频路径，请先重新选择视频文件。");
         filePath = await ipcRenderer.invoke("dialog:openVideoFile");
@@ -263,12 +328,10 @@ export default {
       }
 
       const sample = details[0] || {};
-      const failedTargets = details
-        .filter(this.isPublishFailed)
-        .map(v => ({
-          pt: v.pt,
-          phone: String(v.phone || "").split("-")[0],
-        }));
+      const failedTargets = details.filter(this.isPublishFailed).map((v) => ({
+        pt: v.pt,
+        phone: String(v.phone || "").split("-")[0],
+      }));
 
       const ok = this.$refs.localPublishRef.openRepublish({
         filePath,
@@ -279,8 +342,9 @@ export default {
           bt2: sample.bt2 || sample.bt || "",
           bq: sample.bq || "",
           address: sample.address || "",
+          creativeStatement: sample.creativeStatement,
         },
-        records: details.map(v => ({
+        records: details.map((v) => ({
           id: v.id,
           date: v.date,
           pt: v.pt,
@@ -292,7 +356,9 @@ export default {
       });
       if (!ok) return;
       if (failedTargets.length === 0) {
-        this.$message.info("未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。");
+        this.$message.info(
+          "未检测到失败平台，已打开发布弹窗，请手动勾选需要重发的平台。"
+        );
       }
     },
     getFileName(filePath) {
@@ -306,10 +372,15 @@ export default {
       const attemptCount = Number(copyRow.publishAttemptCount) || 1;
       copyRow.publishAttemptCount = attemptCount;
       copyRow.republishCount = Number(copyRow.republishCount);
-      if (!Number.isFinite(copyRow.republishCount) || copyRow.republishCount < 0) {
+      if (
+        !Number.isFinite(copyRow.republishCount) ||
+        copyRow.republishCount < 0
+      ) {
         copyRow.republishCount = Math.max(0, attemptCount - 1);
       }
-      copyRow.publishSuccessCount = this.normalizeCount(copyRow.publishSuccessCount);
+      copyRow.publishSuccessCount = this.normalizeCount(
+        copyRow.publishSuccessCount
+      );
       copyRow.publishFailCount = this.normalizeCount(copyRow.publishFailCount);
       copyRow.publishStatus = copyRow.publishStatus || "publishing";
       return copyRow;
@@ -322,7 +393,8 @@ export default {
     },
     getArticleField(row, key) {
       if (!row) return "";
-      if (row[key] !== undefined && row[key] !== null) return this.recordValue(row[key]);
+      if (row[key] !== undefined && row[key] !== null)
+        return this.recordValue(row[key]);
       const data = row.data || {};
       return this.recordValue(data[key]);
     },
@@ -347,12 +419,18 @@ export default {
       ].join("\u0001");
     },
     isSameArticlePublishRecord(record, target) {
-      return this.buildArticleMergeKey(record) === this.buildArticleMergeKey(target);
+      return (
+        this.buildArticleMergeKey(record) === this.buildArticleMergeKey(target)
+      );
     },
     findLocalPublishRecord(donePayload) {
       const textType = donePayload.textType || "local";
-      const textOtherName = donePayload.textOtherName || (donePayload.data && donePayload.data.textOtherName) || "";
-      const selectedFile = donePayload.selectedFile || this.getFileName(donePayload.filePath);
+      const textOtherName =
+        donePayload.textOtherName ||
+        (donePayload.data && donePayload.data.textOtherName) ||
+        "";
+      const selectedFile =
+        donePayload.selectedFile || this.getFileName(donePayload.filePath);
       const pt = donePayload.pt;
       const phone = String(donePayload.phone || "").split("-")[0];
       const dateKeys = Object.keys(this.dataList || {});
@@ -387,31 +465,56 @@ export default {
       return null;
     },
     async syncPublishProgress(donePayload) {
-      if (!donePayload || !["local", "article"].includes(donePayload.textType)) return;
-      if (!donePayload.pt || String(donePayload.pt).includes("状态") || String(donePayload.pt).includes("登录")) return;
+      if (!donePayload || !["local", "article"].includes(donePayload.textType))
+        return;
+      if (
+        !donePayload.pt ||
+        String(donePayload.pt).includes("状态") ||
+        String(donePayload.pt).includes("登录")
+      )
+        return;
       const target = this.findLocalPublishRecord(donePayload);
       if (!target || !target.row || !target.row.id) return;
       const row = this.fillPublishStats(target.row);
       const success = !!donePayload.status;
-      const isDraftMode = donePayload.publishMode === "draft" || donePayload.publishToDraft === true;
+      const isDraftMode =
+        donePayload.publishMode === "draft" ||
+        donePayload.publishToDraft === true;
       await dataRequest({
         type: "update",
         fileName: "pushData",
         item: {
           id: row.id,
           date: target.date,
-          publishSuccessCount: success ? row.publishSuccessCount + 1 : row.publishSuccessCount,
-          publishFailCount: success ? row.publishFailCount : row.publishFailCount + 1,
+          publishSuccessCount: success
+            ? row.publishSuccessCount + 1
+            : row.publishSuccessCount,
+          publishFailCount: success
+            ? row.publishFailCount
+            : row.publishFailCount + 1,
           publishMode: isDraftMode ? "draft" : row.publishMode || "publish",
-          publishStatus: success ? (isDraftMode ? "draft" : "success") : "failed",
-          lastPublishMessage: donePayload.message || (success ? (isDraftMode ? "保存草稿成功" : "发布成功") : "发布失败"),
+          publishStatus: success
+            ? isDraftMode
+              ? "draft"
+              : "success"
+            : "failed",
+          lastPublishMessage:
+            donePayload.message ||
+            (success
+              ? isDraftMode
+                ? "保存草稿成功"
+                : "发布成功"
+              : "发布失败"),
           lastPublishAt: Date.now(),
         },
       });
       this.loadRecords();
     },
     openQQGroup() {
-      window.open("https://qm.qq.com/cgi-bin/qm/qr?k=NLsaKNd7gqbOeW_JXNg7bRreFtcLKXmp&jump_from=webapi&authKey=Nd/DrSrJWaH+Nip9gEIGse4LdHWpLkp8bVfcKwinOk4hI8XfNTDvGf/smQgZvWHT", "_blank");
+      window.open(
+        "https://qm.qq.com/cgi-bin/qm/qr?k=NLsaKNd7gqbOeW_JXNg7bRreFtcLKXmp&jump_from=webapi&authKey=Nd/DrSrJWaH+Nip9gEIGse4LdHWpLkp8bVfcKwinOk4hI8XfNTDvGf/smQgZvWHT",
+        "_blank"
+      );
     },
     async selectVideoFile() {
       const path = await ipcRenderer.invoke("dialog:openVideoFile");
@@ -427,7 +530,7 @@ export default {
       dataRequest({
         type: "get",
         fileName: "pushData",
-      }).then(r => {
+      }).then((r) => {
         this.initDataFiltered(r.data || {});
       });
     },
@@ -438,17 +541,28 @@ export default {
       for (const key in data) {
         const tempData = {};
         const list = data[key] || [];
-        list.forEach(row => {
+        list.forEach((row) => {
           if (!["local", "article"].includes(row.textType)) return;
-          const mergeKey = row.textType === "article"
-            ? this.buildArticleMergeKey(row)
-            : row.textOtherName + "-" + row.textType + this.getRecordPhone(row) + row.selectedFile;
+          const mergeKey =
+            row.textType === "article"
+              ? this.buildArticleMergeKey(row)
+              : row.textOtherName +
+                "-" +
+                row.textType +
+                this.getRecordPhone(row) +
+                row.selectedFile;
           if (!tempData[mergeKey]) {
-            const copyRow = this.fillPublishStats(JSON.parse(JSON.stringify(row)));
-            copyRow.showAlltype = [this.fillPublishStats(JSON.parse(JSON.stringify(row)))];
+            const copyRow = this.fillPublishStats(
+              JSON.parse(JSON.stringify(row))
+            );
+            copyRow.showAlltype = [
+              this.fillPublishStats(JSON.parse(JSON.stringify(row))),
+            ];
             tempData[mergeKey] = copyRow;
           } else {
-            tempData[mergeKey].showAlltype.push(this.fillPublishStats(JSON.parse(JSON.stringify(row))));
+            tempData[mergeKey].showAlltype.push(
+              this.fillPublishStats(JSON.parse(JSON.stringify(row)))
+            );
           }
         });
         if (Object.keys(tempData).length) {
@@ -467,9 +581,12 @@ export default {
     },
 
     getStatus(arr) {
-      const isJuejinArticle = item => item && item.textType === "article" && item.pt === "掘金";
-      const targets = (arr || []).filter(item => item && (item.textType !== "article" || isJuejinArticle(item)));
-      const arrAll = new Promise(resolve => {
+      const isJuejinArticle = (item) =>
+        item && item.textType === "article" && item.pt === "掘金";
+      const targets = (arr || []).filter(
+        (item) => item && (item.textType !== "article" || isJuejinArticle(item))
+      );
+      const arrAll = new Promise((resolve) => {
         let acLen = 0;
         let acLen2 = 0;
         const total = targets.length;
@@ -477,20 +594,25 @@ export default {
           resolve();
           return;
         }
-        targets.forEach(item => {
+        targets.forEach((item) => {
           if (!item.videoLink) {
             const taskId = Date.now() + Math.random();
-            ipcRenderer.send("puppeteerFile", {
+            // JSON 兜底序列化，避免 Vue 响应式代理 / 不可克隆对象触发 IPC 错误
+            ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify({
               show: false,
               taskId,
               ...item,
               title: item.title || item.bt || item.textOtherName || "",
               pt: item.pt + "状态",
               statusCalss: (this.statusCalss || "").trim(),
-            });
-            this.taskHandlers.set(taskId, data => {
+            })));
+            this.taskHandlers.set(taskId, (data) => {
               acLen++;
-              const statusUrl = data.url || (isJuejinArticle(item) && this.ptConfig[item.pt] ? this.ptConfig[item.pt].listIndex : "");
+              const statusUrl =
+                data.url ||
+                (isJuejinArticle(item) && this.ptConfig[item.pt]
+                  ? this.ptConfig[item.pt].listIndex
+                  : "");
               if (statusUrl && data.status) {
                 acLen2++;
                 const payload = JSON.parse(JSON.stringify(item));
@@ -519,12 +641,12 @@ export default {
           }
         });
       });
-      return new Promise(resolve => {
+      return new Promise((resolve) => {
         arrAll.then(() => {
           dataRequest({
             type: "get",
             fileName: "pushData",
-          }).then(r => {
+          }).then((r) => {
             this.initDataFiltered(r.data || {});
             resolve();
           });
@@ -533,7 +655,7 @@ export default {
     },
 
     handleDelete(item, dateKey, idx) {
-      const promises = item.showAlltype.map(v =>
+      const promises = item.showAlltype.map((v) =>
         dataRequest({
           type: "delete",
           fileName: "pushData",
