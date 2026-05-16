@@ -1,7 +1,99 @@
 import path from "path";
-import { clipboard } from "electron";
 import maybeClosePublishWindow from "./closeWindow.js";
+import {
+  isCreativeStatementNone,
+  resolveXhsCreativeStatementLabel,
+} from "../../../shared/creativeStatement.js";
 import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+
+// 小红书下拉里直接展示的支持选项；未匹配则跳过。
+const XHS_SUPPORTED_STATEMENT_LABELS = new Set([
+  "笔记含AI合成内容",
+  "虚构演绎，仅供娱乐",
+  "内容包含营销广告",
+]);
+
+async function selectXhsCreativeStatement(page, data) {
+  const value = data.data && data.data.creativeStatement;
+  console.log("[xhs] creativeStatement 值 =", value);
+  if (isCreativeStatementNone(value)) {
+    console.log("[xhs] 无标注，小红书保持不选");
+    return;
+  }
+  const label = resolveXhsCreativeStatementLabel(value);
+  if (!XHS_SUPPORTED_STATEMENT_LABELS.has(label)) {
+    console.warn(`[xhs] 当前声明值 "${value}" 在小红书没有对应选项，跳过`);
+    return;
+  }
+  console.log("[xhs] 准备选择内容类型声明:", label);
+
+  // 1. 点击「添加内容类型声明」触发下拉
+  const opened = await page.evaluate(() => {
+    const candidates = document.querySelectorAll(".d-select-placeholder");
+    for (const el of candidates) {
+      if ((el.textContent || "").trim() === "添加内容类型声明") {
+        el.click();
+        return true;
+      }
+    }
+    return false;
+  });
+  if (!opened) {
+    console.warn("未找到小红书「添加内容类型声明」入口，跳过");
+    return;
+  }
+
+  // 2. 等下拉项渲染出来
+  try {
+    await page.waitForFunction(
+      (text) => {
+        // 注意：page.evaluate 回调会被序列化送进浏览器；某些打包链路会把 for...of
+        // 转译成依赖 babel helper 的形式，导致 page 端报 "n is not defined"。
+        // 这里用下标 for，避免转译。
+        const names = document.querySelectorAll(".d-options-wrapper .d-option-name");
+        for (var i = 0; i < names.length; i++) {
+          var el = names[i];
+          if ((el.textContent || "").trim() === text) return true;
+        }
+        return false;
+      },
+      { timeout: WAIT_SELECTOR_APPEAR_MS },
+      label
+    );
+  } catch (e) {
+    console.warn("小红书声明下拉项未出现:", e?.message || e);
+    return;
+  }
+
+  // 3. 点选目标选项
+  const picked = await page.evaluate((text) => {
+    var items = document.querySelectorAll(".d-options-wrapper .d-option-name");
+    for (var i = 0; i < items.length; i++) {
+      var el = items[i];
+      if ((el.textContent || "").trim() !== text) continue;
+      // 顺着 grid 结构往上找可点击的 .d-grid-item / .d-option，整行触发点击
+      var row = el.closest(".d-grid-item") || el.closest(".d-option") || el;
+      var grid = row.parentElement;
+      if (grid) {
+        var handler = grid.querySelector(".d-option-handler");
+        if (handler) {
+          handler.click();
+          return true;
+        }
+      }
+      row.click();
+      return true;
+    }
+    return false;
+  }, label);
+
+  if (!picked) {
+    console.warn(`未找到小红书声明选项: ${label}`);
+    return;
+  }
+  await page.waitForTimeout(400);
+  console.log("[xhs] 已选择内容类型声明:", label);
+}
 
 function normalizeTagList(rawTagText = "") {
   const tagText = String(rawTagText).trim();
@@ -26,6 +118,8 @@ export default async function (page, data, window, event) {
     await uploadInput.uploadFile(path.resolve(data.filePath));
   } catch (err) {
     console.error("❌ 小红书文件上传失败:", err);
+    // 文件上传是流程起点，失败必须重试，把异常抛给 puppeteerFile 的 actionCheckTimer
+    throw new Error(`小红书文件上传失败：${err?.message || err}`);
   }
 
   try {
@@ -41,10 +135,15 @@ export default async function (page, data, window, event) {
     }
   } catch (err) {
     console.error("❌ 小红书标题填写失败:", err);
+    // 标题也是必填，挂了直接抛触发重试
+    throw new Error(`小红书标题填写失败：${err?.message || err}`);
   }
 
   await page.waitForTimeout(300);
 
+  // 参考头条/快手/抖音的做法：完全用 page.keyboard.type 直接打字，
+  // 不用 clipboard.writeText + Ctrl+V，也不用复杂的 page.evaluate range 操作
+  // ——这套路在 Windows 打包后 webpack/babel 转译时不会触发 "n is not defined"。
   try {
     const editorSelector = ".tiptap.ProseMirror";
     await page.waitForSelector(editorSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
@@ -54,91 +153,38 @@ export default async function (page, data, window, event) {
     const descText = String(data.data?.bt2 || "").trim();
     const tags = normalizeTagList(data.data?.bq || "");
 
+    // 聚焦编辑器（双击保证 caret 进去）
     await editor.click({ clickCount: 2 });
-    const modifierKey = process.platform === "darwin" ? "Meta" : "Control";
-    await page.evaluate(selector => {
-      const editor = document.querySelector(selector);
-      if (!editor) return;
-      editor.focus();
-      const range = document.createRange();
-      range.selectNodeContents(editor);
-      const selection = window.getSelection();
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }, editorSelector);
-    await page.keyboard.press("Backspace");
-    if (descText || tags.length) {
-      const originalClipboardText = clipboard.readText();
-      try {
-        if (descText) {
-          clipboard.writeText(descText);
-          await page.keyboard.down(modifierKey);
-          await page.keyboard.press("KeyV");
-          await page.keyboard.up(modifierKey);
-          await page.waitForTimeout(300);
+    await page.waitForTimeout(200);
 
-          const hasContent = await page.evaluate(selector => {
-            const editor = document.querySelector(selector);
-            return Boolean(editor && editor.textContent.trim());
-          }, editorSelector);
-          if (!hasContent) {
-            await page.evaluate((selector, text) => {
-              const editor = document.querySelector(selector);
-              if (!editor) return;
-              editor.focus();
-              document.execCommand("insertText", false, text);
-              editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
-            }, editorSelector, descText);
-          }
-        }
+    // 输入正文描述
+    if (descText) {
+      await page.keyboard.type(descText, { delay: 30 });
+      await page.waitForTimeout(300);
+    }
 
-        if (tags.length) {
-          if (descText) {
-            await page.keyboard.press("Enter");
-            await page.waitForTimeout(800);
-          }
-          for (const tag of tags) {
-            await page.evaluate(selector => {
-              const editor = document.querySelector(selector);
-              if (!editor) return;
-              editor.focus();
-              const range = document.createRange();
-              range.selectNodeContents(editor);
-              range.collapse(false);
-              const selection = window.getSelection();
-              selection.removeAllRanges();
-              selection.addRange(range);
-            }, editorSelector);
-            clipboard.writeText(`#${tag}`);
-            await page.keyboard.down(modifierKey);
-            await page.keyboard.press("KeyV");
-            await page.keyboard.up(modifierKey);
-            await page.waitForTimeout(800);
-            const hasTag = await page.evaluate((selector, tagName) => {
-              const editor = document.querySelector(selector);
-              return Boolean(editor && editor.textContent.includes(tagName));
-            }, editorSelector, tag);
-            if (!hasTag) {
-              await page.evaluate((selector, tagName) => {
-                const editor = document.querySelector(selector);
-                if (!editor) return;
-                editor.focus();
-                document.execCommand("insertText", false, `#${tagName}`);
-                editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: `#${tagName}` }));
-              }, editorSelector, tag);
-            }
-            await page.keyboard.press("Enter");
-            await page.waitForTimeout(800);
-            await page.keyboard.press("Enter");
-            await page.waitForTimeout(800);
-          }
+    // 输入标签：每个 #xxx 后 Enter 选中候选弹窗第一项（与抖音 / 视频号思路一致）
+    if (tags.length) {
+      if (descText) {
+        await page.keyboard.press("Enter");
+        await page.waitForTimeout(400);
+      }
+      for (let i = 0; i < tags.length; i++) {
+        const tag = tags[i];
+        await page.keyboard.type("#" + tag, { delay: 30 });
+        await page.waitForTimeout(600); // 等小红书话题候选弹窗
+        await page.keyboard.press("Enter"); // 选中候选第一条 → 变成话题胶囊
+        await page.waitForTimeout(300);
+        // 标签之间补一个空格，避免下一个 # 被连到上一个胶囊里
+        if (i < tags.length - 1) {
+          await page.keyboard.type(" ", { delay: 30 });
         }
-      } finally {
-        clipboard.writeText(originalClipboardText);
       }
     }
   } catch (err) {
     console.error("❌ 小红书正文/标签填写失败:", err);
+    // 正文/标签是必填项，失败时抛出让 puppeteerFile.js 的 actionCheckTimer 接住并重试（最多 maxRetries 次）。
+    throw new Error(`小红书正文/标签填写失败：${err?.message || err}`);
   }
 
   await page.waitForTimeout(300);
@@ -176,6 +222,13 @@ export default async function (page, data, window, event) {
     }
   } catch (err) {
     console.error("❌ 小红书声明原创失败:", err);
+  }
+
+  // 选择内容类型声明（无标注 / 不支持值会跳过）
+  try {
+    await selectXhsCreativeStatement(page, data);
+  } catch (e) {
+    console.warn("小红书内容类型声明选择未完成:", e?.message || e);
   }
 
   try {

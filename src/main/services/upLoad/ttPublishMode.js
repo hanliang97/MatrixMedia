@@ -11,7 +11,14 @@ function getToutiaoCoverItemSelector() {
 }
 
 function getToutiaoCoverTriggerSelector() {
-  return ".video-form-basic .form-item-poster .fake-upload-trigger";
+  // 新版页面横屏挂在 .video-form-item-control，竖屏挂在 .xigua-poster-editor.portrait；
+  // 保留老版 .video-form-basic .form-item-poster 兜底。
+  return [
+    ".video-form-item-control .fake-upload-trigger",
+    ".xigua-poster-editor.portrait .fake-upload-trigger",
+    ".video-form-basic .form-item-poster .fake-upload-trigger",
+    ".xigua-poster-editor .fake-upload-trigger",
+  ].join(", ");
 }
 
 function getToutiaoPosterDialogSelector() {

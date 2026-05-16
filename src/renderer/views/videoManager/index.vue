@@ -341,7 +341,6 @@ export default {
           bt1: sample.bt || "",
           bt2: sample.bt2 || sample.bt || "",
           bq: sample.bq || "",
-          address: sample.address || "",
           creativeStatement: sample.creativeStatement,
         },
         records: details.map((v) => ({

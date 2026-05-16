@@ -41,12 +41,6 @@
             >会将本项作为正文内容。
           </p>
         </el-form-item>
-        <el-form-item label="地址">
-          <el-input v-model="form.address" placeholder="选填" />
-          <p class="bt2-tip">
-            仅<strong>百家号</strong>会用到本项：对应发布页「地址」。其它平台忽略；若不填则不填写。
-          </p>
-        </el-form-item>
         <el-form-item label="定时发布">
           <el-switch
             v-model="scheduledPublish"
@@ -309,7 +303,6 @@ export default {
         title: "",
         bt1: "",
         bt2: "",
-        address: "",
       },
       thisShow: false,
       closeWindow: true,
@@ -335,10 +328,18 @@ export default {
       return CREATIVE_STATEMENT_OPTIONS;
     },
     checkedPlatformNodes() {
-      if (!this.$refs.tree) return [];
-      return this.$refs.tree
-        .getCheckedNodes(true)
-        .filter((item) => item && item.url);
+      // 依赖 checkedPlatformIds（响应式），避免只依赖 $refs 导致 computed 不更新；
+      // 再从 treeData 里按 id 还原节点。
+      const ids = this.checkedPlatformIds;
+      if (!ids || ids.length === 0) return [];
+      const idSet = new Set(ids);
+      const result = [];
+      (this.treeData || []).forEach(group => {
+        (group.children || []).forEach(child => {
+          if (child && child.url && idSet.has(child.id)) result.push(child);
+        });
+      });
+      return result;
     },
   },
   mounted() {
@@ -365,7 +366,7 @@ export default {
       const defaultTitle = fileStem(filePath);
       this.bqTags = [];
       this.resetPlatformStatementState();
-      this.form = { title: defaultTitle, bt1: "", bt2: "", address: "" };
+      this.form = { title: defaultTitle, bt1: "", bt2: "" };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -387,7 +388,6 @@ export default {
         title: (form.title || defaultTitle || "").trim(),
         bt1: (form.bt1 || "").trim(),
         bt2: (form.bt2 || "").trim(),
-        address: (form.address || "").trim(),
       };
       this.bqTags = parseBqToTags(form.bq);
       this.resetPlatformStatementState();
@@ -474,7 +474,6 @@ export default {
           bt2,
           bq: formatBqFromTags(this.bqTags),
           bdText: "",
-          address: this.form.address.trim(),
         },
       };
     },
@@ -589,20 +588,34 @@ export default {
       }
       const next = { ...this.platformStatements };
       let applied = 0;
+      let fallback = 0;
       targets.forEach((node) => {
         const opts = getCreativeStatementOptionsForPlatform(node.pt);
         const matched = opts.find((opt) => opt.value === batchValue);
-        if (!matched) return;
-        next[node.id] = matched.value;
-        applied += 1;
+        if (matched) {
+          next[node.id] = matched.value;
+          applied += 1;
+        } else {
+          // 当前批量值在该平台没有对应选项时，回退到「无标注」，
+          // 保证每个支持声明的子账号都有一个明确的声明值，不会留空。
+          next[node.id] = CREATIVE_STATEMENT_DEFAULT;
+          fallback += 1;
+        }
       });
       this.platformStatements = next;
-      if (applied === 0) {
+      if (applied === 0 && fallback === 0) {
         if (!silent) this.$message.warning("当前批量声明不适用于已勾选平台");
         return;
       }
-      if (!silent)
-        this.$message.success(`已为 ${applied} 个账号设置创作声明`);
+      if (!silent) {
+        if (fallback > 0) {
+          this.$message.success(
+            `已为 ${applied} 个账号设置创作声明，${fallback} 个不支持已回退为「无标注」`
+          );
+        } else {
+          this.$message.success(`已为 ${applied} 个账号设置创作声明`);
+        }
+      }
     },
     // 用户点了批量声明下拉的任意选项（包括"二次选中相同值"），
     // 都强制覆盖所有已勾选支持平台账号的声明值。
@@ -676,7 +689,7 @@ export default {
       this.localFilePath = "";
       this.bqTags = [];
       this.resetPlatformStatementState();
-      this.form = { title: "", bt1: "", bt2: "", address: "" };
+      this.form = { title: "", bt1: "", bt2: "" };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -866,7 +879,6 @@ export default {
                 bt: video.data.bt1,
                 bt2: video.data.bt2,
                 bq: video.data.bq,
-                address: video.data.address,
                 creativeStatement: video.data.creativeStatement,
                 filePath: this.localFilePath,
                 useragent: this.ptConfig[p.pt].useragent,
@@ -928,7 +940,6 @@ export default {
               bt: video.data.bt1,
               bt2: video.data.bt2,
               bq: video.data.bq,
-              address: video.data.address,
               creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
@@ -954,7 +965,6 @@ export default {
               bt: video.data.bt1,
               bt2: video.data.bt2,
               bq: video.data.bq,
-              address: video.data.address,
               creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,

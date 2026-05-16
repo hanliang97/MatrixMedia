@@ -28,6 +28,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "内容无需标注",
       dy: "无需添加自主声明",
+      bjh: "无需声明",
     },
   },
   {
@@ -36,6 +37,10 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "含AI生成内容",
       dy: "内容由AI生成",
+      bjh: "含AI生成内容",
+      ks: "内容为AI生成",
+      tt: "AI生成",
+      xhs: "笔记含AI合成内容",
     },
   },
   {
@@ -44,6 +49,10 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "含虚构演绎内容",
       dy: "虚构演绎，仅供娱乐",
+      bjh: "含虚构演绎内容",
+      ks: "演绎情节，仅供娱乐",
+      tt: "虚构演绎，故事经历",
+      xhs: "虚构演绎，仅供娱乐",
     },
   },
   {
@@ -52,6 +61,8 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "内容含营销信息",
       dy: "内容含营销推广信息",
+      bjh: "内容含营销信息",
+      xhs: "内容包含营销广告",
     },
   },
   {
@@ -60,6 +71,8 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "个人观点，仅供参考",
       dy: "内容为个人观点或见解",
+      bjh: "个人观点，仅供参考",
+      ks: "个人观点，仅供参考",
     },
   },
   {
@@ -68,6 +81,9 @@ export const CREATIVE_STATEMENT_OPTIONS = [
     platformLabels: {
       blbl: "内容为转载",
       dy: "内容为转载信息",
+      bjh: "内容为转载",
+      tt: "取自站外",
+      ks: "素材来源于网络",
     },
   },
   {
@@ -85,6 +101,10 @@ export const CREATIVE_STATEMENT_OPTIONS = [
 export const CREATIVE_STATEMENT_PLATFORM_KEYS = {
   哔哩哔哩: "blbl",
   抖音: "dy",
+  百家号: "bjh",
+  快手: "ks",
+  头条: "tt",
+  小红书: "xhs",
 };
 
 export function getCreativeStatementPlatformKey(pt) {
@@ -171,4 +191,20 @@ export function resolveBlblCreativeStatementLabel(value) {
 
 export function resolveDyCreativeStatementLabel(value) {
   return getCreativeStatementLabel(value, "dy");
+}
+
+export function resolveBjhCreativeStatementLabel(value) {
+  return getCreativeStatementLabel(value, "bjh");
+}
+
+export function resolveKsCreativeStatementLabel(value) {
+  return getCreativeStatementLabel(value, "ks");
+}
+
+export function resolveTtCreativeStatementLabel(value) {
+  return getCreativeStatementLabel(value, "tt");
+}
+
+export function resolveXhsCreativeStatementLabel(value) {
+  return getCreativeStatementLabel(value, "xhs");
 }

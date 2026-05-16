@@ -41,7 +41,6 @@ export function parsePublishArgs(subArgv) {
     bookName: null,
     bt2: null,
     bq: "",
-    address: "",
     publishAt: null,
     show: false,
     closeWindowAfterPublish: true,
@@ -65,8 +64,6 @@ export function parsePublishArgs(subArgv) {
       out.bt2 = args[++i];
     } else if (a === "--tags" || a === "--bq") {
       out.bq = args[++i] || "";
-    } else if (a === "--address") {
-      out.address = args[++i] || "";
     } else if (a === "--publish-at") {
       out.publishAt = args[++i];
     } else if (a === "--show") {
@@ -189,7 +186,6 @@ export function publishHelpText() {
                             • 视频号/抖音/快手：整串拼进描述末尾；未写 # 的标签会自动补上（与 GUI 标签多选一致）。
                             • 哔哩哔哩/小红书：按空格切分为独立标签，前导 # 会被自动剥离，可省。
                             • 百家号/头条：当前代码不消费 bq，无需填。
-      --address <text>  地址 → data.address；仅百家号
       --publish-at <t>  一次性定时发布，格式 "YYYY-MM-DD HH:mm:ss"。创建后立即写入发布历史，
                             到点后由应用主进程调度执行；不支持每日/每周/每月循环。
       --show            （已忽略）CLI 不显示自动化窗口
