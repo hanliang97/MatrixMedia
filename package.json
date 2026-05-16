@@ -7,6 +7,7 @@
   "main": "./dist/electron/main.js",
   "scripts": {
     "dev": "cross-env TERGET_ENV=development node .electron-vue/dev-runner.js",
+    "dev:download": "node .electron-vue/dev-download-server.js",
     "build:dir": "cross-env BUILD_TARGET=clean node .electron-vue/build.js",
     "rm:build": "node scripts/rm-build-dir.js",
     "build:ico": "node scripts/build-ico.js",
@@ -17,6 +18,8 @@
     "dep:upgrade": "yarn upgrade-interactive --latest",
     "postinstall": "electron-builder install-app-deps",
     "pushall": "node pushall.js",
+    "xz": "node .electron-vue/dev-download-server.js",
+    "test:dev-download-server": "node scripts/test-dev-download-server.js",
     "test:cli-login": "node scripts/test-cli-login.js",
     "test:publish-article-args": "node scripts/test-publish-article-args.js",
     "test:article-republish": "node scripts/test-article-republish.js"
