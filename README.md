@@ -11,8 +11,6 @@
 
 便于脚本与智能体编排。
 
-> 用 MatrixMedia 了？**[填 5 题告诉我](https://wj.qq.com/s2/26553035/aefd/)**（2 分钟，帮助决定下一步功能优先级）
-
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
 <!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（仅抖音）与 `publish`（全部 7 个平台）详见下文。 -->
 
