@@ -130,7 +130,7 @@ const classObj = computed(() => {
 .feedback-webview {
   display: flex;
   width: 100%;
-  height: 650px;
+  height: 600px;
 }
 
 .feedback-confirm-text {
