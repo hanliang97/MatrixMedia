@@ -1,6 +1,6 @@
 # 矩媒 MatrixMedia
 
-## <strong>📺 [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)</strong> · <strong>📝 [技术文章①CLI设计](https://juejin.cn/post/7636984000939327498)</strong> · <strong>📝 [技术文章②MCP Server](https://juejin.cn/post/7638538754269069363)</strong> · <strong>📝 [技术文章③掘金发布](https://juejin.cn/post/7639672225034338313)</strong>
+## <strong>📺 [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)</strong> · <strong>📝 [技术文章①CLI设计](https://juejin.cn/post/7636984000939327498)</strong> · <strong>📝 [技术文章②MCP Server](https://juejin.cn/post/7638538754269069363)</strong> · <strong>📝 [技术文章③掘金发布](https://juejin.cn/post/7639672225034338313)</strong> · <strong>📝 [技术文章④创作声明](https://juejin.cn/post/7640275639350345728)</strong>
 
 自媒体矩阵发布工具（Electron）。支持图形界面与**命令行（CLI）**自动化：
 
