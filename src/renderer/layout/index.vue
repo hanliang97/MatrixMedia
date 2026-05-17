@@ -81,10 +81,14 @@ ipcRenderer.invoke("IsUseSysTitle").then(res => {
   IsUseSysTitle.value = res;
 });
 
-// 取消弹窗
-// onMounted(() => {
-//   feedbackDialogVisible.value = localStorage.getItem(feedbackStorageKey) !== "1";
-// });
+onMounted(() => {
+  // 2026.6.1号就不出现了
+  const now = new Date();
+  const targetDate = new Date(2026, 5, 1);
+  if (now > targetDate) {
+    feedbackDialogVisible.value = localStorage.getItem(feedbackStorageKey) !== "1";
+  }
+});
 
 function showFeedbackConfirm() {
   feedbackConfirmVisible.value = true;
