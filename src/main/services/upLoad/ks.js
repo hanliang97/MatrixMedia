@@ -4,7 +4,7 @@ import {
   isCreativeStatementNone,
   resolveKsCreativeStatementLabel,
 } from "../../../shared/creativeStatement.js";
-import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS } from "./uploadTimeouts.js";
+import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
 
 async function selectKsCreativeStatement(page, data) {
   const value = data.data && data.data.creativeStatement;
@@ -210,7 +210,15 @@ export default async function (page, data, window,event) {
   }
 
   try {
-    await page.waitForSelector("#preview-tours video", { timeout: WAIT_UPLOAD_PROCESSING_MS });
+    // 用 pollPageUntil 替代 waitForSelector，避免 puppeteer 默认 protocolTimeout
+    // (约 180s) 在大文件/弱网下把单次 Runtime.callFunctionOn 砍掉。
+    await pollPageUntil(
+      page,
+      () => !!document.querySelector("#preview-tours video"),
+      WAIT_UPLOAD_PROCESSING_MS,
+      2000,
+      "等待快手视频上传完成超时"
+    );
     await page.waitForFunction(
       text => {
         const bar = document.querySelector("#setting-tours + div");

@@ -61,6 +61,18 @@ function isExpectedPublishUrl(data, currentUrl) {
       return String(currentUrl || "").indexOf("https://juejin.cn/editor/drafts") === 0;
     }
   }
+  // 百家号上传页 baidu 经常追加/重排 query（app_id、登录态参数等），strict === 会一直
+  // 走 URL 不匹配的重试关窗分支，导致 bjh handler 一次都进不去、日志也不会出现。
+  // 改成 origin + /builder/rc/edit 前缀匹配。
+  if (data && data.pt === "百家号") {
+    try {
+      const current = new URL(currentUrl);
+      const expected = new URL(data.url);
+      return current.origin === expected.origin && current.pathname.indexOf("/builder/rc/edit") === 0;
+    } catch (_) {
+      return String(currentUrl || "").indexOf("https://baijiahao.baidu.com/builder/rc/edit") === 0;
+    }
+  }
   return false;
 }
 

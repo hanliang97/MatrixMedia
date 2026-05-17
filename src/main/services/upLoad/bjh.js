@@ -3,7 +3,8 @@ import maybeClosePublishWindow from './closeWindow.js'
 import { resolveBjhCreativeStatementLabel } from '../../../shared/creativeStatement.js'
 import {
   WAIT_SELECTOR_APPEAR_MS,
-  WAIT_UPLOAD_PROCESSING_MS
+  WAIT_UPLOAD_PROCESSING_MS,
+  pollPageUntil
 } from './uploadTimeouts.js'
 
 async function selectBjhCreativeStatement(page, data) {
@@ -278,7 +279,15 @@ export default async function (page, data, window, event) {
   // 点击提交按钮
   try {
     // 等待 .upload-step-progress  .progress-container.uploading 消失
-    await page.waitForSelector(".upload-step-progress  .progress-container.uploading", { hidden: true, timeout: WAIT_UPLOAD_PROCESSING_MS });
+    // 用 pollPageUntil 替代 waitForSelector，避免 puppeteer 默认 protocolTimeout
+    // (约 180s) 在弱网/大文件下把 CDP Runtime.callFunctionOn 提前砍掉。
+    await pollPageUntil(
+      page,
+      () => !document.querySelector(".upload-step-progress .progress-container.uploading"),
+      WAIT_UPLOAD_PROCESSING_MS,
+      2000,
+      "等待百家号视频上传完成超时"
+    );
     await page.waitForTimeout(1000);
 
     // 草稿 / 发布 二选一点击，不能两个都点（先点存草稿会改变页面状态，发布按钮就摸不到了）

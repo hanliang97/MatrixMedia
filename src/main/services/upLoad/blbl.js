@@ -159,9 +159,15 @@ export default async function (page, data, window, event) {
   }
 
   try {
-    await page.waitForSelector(".file-item-content-status .success", {
-      timeout: WAIT_UPLOAD_PROCESSING_MS,
-    });
+    // 用 pollPageUntil 替代 waitForSelector，避免 puppeteer 默认 protocolTimeout
+    // (约 180s) 把单次 Runtime.callFunctionOn 砍掉，导致弱网/大文件场景下假性超时。
+    await pollPageUntil(
+      page,
+      () => !!document.querySelector(".file-item-content-status .success"),
+      WAIT_UPLOAD_PROCESSING_MS,
+      2000,
+      "等待哔哩哔哩视频上传完成超时"
+    );
   } catch (e) {
     console.warn("哔哩哔哩视频上传未完成，跳过后续步骤:", e?.message || e);
   }
