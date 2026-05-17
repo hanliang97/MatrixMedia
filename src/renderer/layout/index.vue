@@ -81,9 +81,10 @@ ipcRenderer.invoke("IsUseSysTitle").then(res => {
   IsUseSysTitle.value = res;
 });
 
-onMounted(() => {
-  feedbackDialogVisible.value = localStorage.getItem(feedbackStorageKey) !== "1";
-});
+// 取消弹窗
+// onMounted(() => {
+//   feedbackDialogVisible.value = localStorage.getItem(feedbackStorageKey) !== "1";
+// });
 
 function showFeedbackConfirm() {
   feedbackConfirmVisible.value = true;
