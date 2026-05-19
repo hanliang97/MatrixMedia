@@ -1,6 +1,7 @@
 import { ipcRenderer } from "electron";
 import { useAppStore } from "@/store/app";
 import ptConfig from "@/utils/configUrl";
+import openLoginWindow from "@/utils/openLoginWindow";
 // 打开页面保持登录状态
 export default async function (endData) {
   const taskHandlers = new Map();
@@ -45,8 +46,11 @@ export default async function (endData) {
           taskHandlers.set(taskId, data => {
             console.log(data, "---------");
 
+            // 不再 push 到 showLogingData 让 App.vue 弹 webview，
+            // 改为直接通过 openLoginWindow 弹独立 BrowserWindow。
             useAppStore().addLoginData(data);
             useAppStore().addLoginDataStatus({ [data.partition]: false });
+            openLoginWindow(data).catch(() => {});
           });
           taskHandlers2.set(taskId, data => {
             successAccount++;

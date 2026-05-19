@@ -188,6 +188,103 @@ export default {
     registerPuppeteerIpc()
     registerScheduledPublishIpc()
 
+    // 通用的渲染进程 → 主进程日志透传通道，方便把 webview / Vue 里
+    // 不开 DevTools 就看不到的输出，直接打到「主程序日志」那个终端面板。
+    // 用法：ipcRenderer.send('mm-debug-log', { tag: 'xxx', payload: any })
+    ipcMain.on('mm-debug-log', (_event, args) => {
+      try {
+        const tag = (args && args.tag) || 'debug'
+        const payload = args && Object.prototype.hasOwnProperty.call(args, 'payload') ? args.payload : args
+        console.log(`[mm-debug-log][${tag}]`, payload)
+      } catch (e) {
+        console.log('[mm-debug-log] 打印失败:', e && e.message)
+      }
+    })
+
+    // 账号登录用的独立 BrowserWindow：替代 <webview>，避免小红书等站点
+    // 通过 GuestView 指纹 (websectiga / sec_poison_id / window.parent 等) 把会话标红。
+    // partition 与视频管理的发布窗口完全一致 (persist:xxx<平台>)，cookie/localStorage
+    // 在同一份 Electron session 里共享 —— 在这里扫码登录后，发布流程能直接复用。
+    ipcMain.handle('open-account-login-window', async (_event, args) => {
+      const partition = args && args.partition
+      const url = args && args.url
+      const useragent = args && args.useragent
+      const title = args && args.title
+      if (!partition || !url) {
+        return { ok: false, message: 'partition/url 必填' }
+      }
+
+      // 已经为同一个 partition 开过登录窗就直接 focus，不重复开
+      for (const w of BrowserWindow.getAllWindows()) {
+        if (w && !w.isDestroyed() && w._mmAccountLoginPartition === partition) {
+          try {
+            if (w.isMinimized()) w.restore()
+            w.focus()
+          } catch (_) { /* ignore */ }
+          return { ok: true, reused: true }
+        }
+      }
+
+      const win = new BrowserWindow({
+        width: 1200,
+        height: 800,
+        title: `${title || '账号登录'} ${partition}`,
+        autoHideMenuBar: true,
+        webPreferences: {
+          partition,
+          nodeIntegration: false,
+          contextIsolation: true,
+          webviewTag: false,
+          devTools: true,
+        },
+      })
+      win._mmAccountLoginPartition = partition
+
+      // 跟视频管理的发布窗口保持一致：强制设置 UA 为 ptConfig[平台].useragent，
+      // 不要让站点看到 Electron/x.x.x 字样；扫码登录时种下的 cookie 自然就是
+      // 跟发布时同一份 UA 指纹下的。
+      if (useragent) {
+        try { win.webContents.setUserAgent(useragent) } catch (_) { /* ignore */ }
+      }
+
+      // 弹窗页打不开（站点的二维码扫码经常会弹新页），统一拒绝 window.open，
+      // 让站点退回到内嵌扫码 / 当前页跳转，避免漏跑事件监听。
+      try { win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })) } catch (_) { /* ignore */ }
+
+      try {
+        await win.loadURL(url)
+      } catch (e) {
+        console.warn('[open-account-login-window] loadURL 失败:', e && e.message)
+      }
+      return { ok: true }
+    })
+
+    // 通用的弹独立 BrowserWindow 加载任意 URL（不绑定 partition），用于
+    // 反馈问卷这种"不需要登录态共享"的场景，统一替代 <webview>。
+    ipcMain.handle('open-external-window', async (_event, args) => {
+      const url = args && args.url
+      if (!url) return { ok: false, message: 'url 必填' }
+      const win = new BrowserWindow({
+        width: (args && args.width) || 1000,
+        height: (args && args.height) || 720,
+        title: (args && args.title) || '',
+        autoHideMenuBar: true,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true,
+          webviewTag: false,
+          devTools: true,
+        },
+      })
+      try { win.webContents.setWindowOpenHandler(() => ({ action: 'deny' })) } catch (_) { /* ignore */ }
+      try {
+        await win.loadURL(url)
+      } catch (e) {
+        console.warn('[open-external-window] loadURL 失败:', e && e.message)
+      }
+      return { ok: true }
+    })
+
     // 获取文件下面的文件
     ipcMain.handle('getFiles', (event, args) => {
       if (!fs.existsSync(args)) {

@@ -119,27 +119,7 @@
       </template>
     </div>
 
-    <el-dialog
-      :title="loginData.partition"
-      :visible.sync="showLoginDialog"
-      append-to-body
-      destroy-on-close
-      width="1200px"
-    >
-      <webview
-        v-if="loginData.url"
-        :src="loginData.url"
-        style="display: flex; width: 100%; height: 650px"
-        webpreferences="javascript=yes"
-        :httpreferrer="loginData.url"
-        nodeintegrationinsubframes
-        disablewebsecurity
-        allowpopups
-        :partition="loginData.partition.split('-')[0]"
-        :key="loginData.partition.split('-')[0]"
-        :useragent="ptConfig[loginData.pt].useragent"
-      />
-    </el-dialog>
+    <!-- 旧的 <webview> 登录弹窗已迁移到主进程独立 BrowserWindow -->
   </div>
 </template>
 
@@ -148,6 +128,7 @@ import { ipcRenderer } from "electron";
 import dataRequest from "@/utils/dataRequest";
 import copyToClipboard from "@/utils/copy";
 import ptConfig from "@/utils/configUrl";
+import openLoginWindow from "@/utils/openLoginWindow";
 import LocalVideoPublish from "@/components/LocalVideoPublish.vue";
 import LocalArticlePublish from "@/components/LocalArticlePublish.vue";
 
@@ -204,6 +185,8 @@ export default {
     },
     async handleGetStatus(row) {
       if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
+      const canContinue = await this.confirmAndInterruptUploadingTasks();
+      if (!canContinue) return;
       const key = this.getStatusRowKey(row);
       this.$set(this.statusLoadingMap, key, true);
       this.getStatus(row.showAlltype).catch((err) => {
@@ -223,6 +206,66 @@ export default {
       return (row.showAlltype || [row]).some(
         (item) => item && item.textType === "article" && item.pt === "掘金"
       );
+    },
+    isUploadingPublishStatus(status) {
+      return ["publishing", "drafting"].includes(String(status || ""));
+    },
+    getUploadingPublishRecords() {
+      const recordMap = new Map();
+      Object.values(this.dataList || {}).forEach((rows) => {
+        (rows || []).forEach((row) => {
+          (row.showAlltype || []).forEach((sub) => {
+            if (
+              sub &&
+              sub.id &&
+              sub.date &&
+              this.isUploadingPublishStatus(sub.publishStatus)
+            ) {
+              recordMap.set(`${sub.date}-${sub.id}`, sub);
+            }
+          });
+        });
+      });
+      return Array.from(recordMap.values());
+    },
+    async confirmAndInterruptUploadingTasks() {
+      const records = this.getUploadingPublishRecords();
+      if (records.length === 0) return true;
+      try {
+        await this.$confirm(
+          `当前存在 ${records.length} 个发布中任务。获取状态会中断上传，确认后会将全部上传中任务标记为失败，并主动打断上传任务。是否继续？`,
+          "获取状态",
+          {
+            confirmButtonText: "确认中断并获取状态",
+            cancelButtonText: "取消",
+            type: "warning",
+          }
+        );
+      } catch (_) {
+        return false;
+      }
+      ipcRenderer.send("puppeteerFile:cancelAll", {
+        reason: "获取状态已中断上传",
+      });
+      await Promise.all(
+        records.map((item) =>
+          dataRequest({
+            type: "update",
+            fileName: "pushData",
+            item: {
+              id: item.id,
+              date: item.date,
+              publishStatus: "failed",
+              publishFailCount: this.normalizeCount(item.publishFailCount) + 1,
+              lastPublishMessage: "获取状态已中断上传",
+              lastPublishAt: Date.now(),
+            },
+          })
+        )
+      );
+      this.loadRecords();
+      this.$message.warning("已中断上传任务，并将上传中记录标记为失败。");
+      return true;
     },
     normalizeCount(v) {
       const n = Number(v);
@@ -468,6 +511,7 @@ export default {
     async syncPublishProgress(donePayload) {
       if (!donePayload || !["local", "article"].includes(donePayload.textType))
         return;
+      if (donePayload.interrupted) return;
       if (
         !donePayload.pt ||
         String(donePayload.pt).includes("状态") ||
@@ -582,9 +626,17 @@ export default {
       }
     },
 
-    opPt(item) {
-      this.loginData = item;
-      this.showLoginDialog = true;
+    async opPt(item) {
+      try {
+        const result = await openLoginWindow(item);
+        if (result && result.ok === false) {
+          this.$message.error(result.message || "打开登录窗口失败");
+        } else if (result && result.reused) {
+          this.$message.info("已切换到已打开的登录窗口");
+        }
+      } catch (e) {
+        this.$message.error("打开登录窗口失败：" + (e && e.message ? e.message : e));
+      }
     },
 
     getStatus(arr) {

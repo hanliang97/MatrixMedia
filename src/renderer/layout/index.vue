@@ -10,26 +10,25 @@
         </div>
       </div>
     </div>
+    <!-- 反馈问卷弹窗：原本是 el-dialog 套 <webview>，已改成
+         「点确认 → 调主进程 open-external-window 弹独立 BrowserWindow 加载问卷」。
+         彻底移除 webview 标签，保持全应用 webview-free。 -->
     <el-dialog
       title="MatrixMedia 使用反馈"
       :visible.sync="feedbackDialogVisible"
       append-to-body
       destroy-on-close
-      width="960px"
+      width="480px"
       :show-close="false"
       :close-on-click-modal="false"
       :close-on-press-escape="false"
     >
-      <webview
-        v-if="feedbackDialogVisible"
-        :src="feedbackUrl"
-        class="feedback-webview"
-        webpreferences="javascript=yes"
-        :httpreferrer="feedbackUrl"
-        disablewebsecurity
-        allowpopups
-      />
+      <div class="feedback-confirm-text">
+        我们想听听你的使用感受。点击「打开反馈表单」会弹出一个独立窗口，
+        填写后回到本窗口点「我已经提交」即可。
+      </div>
       <template #footer>
+        <el-button @click="openFeedbackWindow">打开反馈表单</el-button>
         <el-button type="primary" @click="showFeedbackConfirm">
           我已经提交
         </el-button>
@@ -90,6 +89,15 @@ onMounted(() => {
   }
 });
 
+function openFeedbackWindow() {
+  ipcRenderer.invoke("open-external-window", {
+    url: feedbackUrl,
+    title: "MatrixMedia 使用反馈",
+    width: 960,
+    height: 720,
+  }).catch(() => {});
+}
+
 function showFeedbackConfirm() {
   feedbackConfirmVisible.value = true;
 }
@@ -130,12 +138,6 @@ const classObj = computed(() => {
 
 .NoUseSysTitle {
   top: 30px
-}
-
-.feedback-webview {
-  display: flex;
-  width: 100%;
-  height: 600px;
 }
 
 .feedback-confirm-text {

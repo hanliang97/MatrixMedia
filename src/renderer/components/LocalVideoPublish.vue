@@ -210,28 +210,9 @@
         >
       </div>
 
-      <el-dialog
-        :title="loginData.partition"
-        :visible.sync="showLoginDialog"
-        append-to-body
-        destroy-on-close
-        width="1200px"
-        @close="hideLoginDialog"
-      >
-        <webview
-          v-if="loginData.url"
-          :src="loginData.url"
-          style="display: flex; width: 100%; height: 650px"
-          webpreferences="javascript=yes"
-          :httpreferrer="loginData.url"
-          nodeintegrationinsubframes
-          disablewebsecurity
-          allowpopups
-          :partition="loginData.partition.split('-')[0]"
-          :key="loginData.partition.split('-')[0]"
-          :useragent="ptConfig[loginData.pt].useragent"
-        />
-      </el-dialog>
+      <!-- 旧的 <webview> 登录弹窗已迁移到主进程的独立 BrowserWindow，
+           避免被小红书等站点的 GuestView 指纹识别后反复跳登录。
+           现在点击"重新登录"会通过 openLoginWindow 调用 IPC 弹独立窗口。 -->
     </el-dialog>
   </div>
 </template>
@@ -241,6 +222,7 @@ import { ipcRenderer } from "electron";
 import moment from "moment";
 import dataRequest from "@/utils/dataRequest";
 import ptConfig from "@/utils/configUrl";
+import openLoginWindow from "@/utils/openLoginWindow";
 import {
   setAccountLoginFlag,
   clearAccountLoginFlag,
@@ -788,12 +770,23 @@ export default {
       }, 1000);
     },
 
-    reLogin(item) {
-      this.loginData = {
-        ...item,
-        partition: "persist:" + item.phone.split("-")[0] + item.pt,
-      };
-      this.showLoginDialog = true;
+    async reLogin(item) {
+      const partition = "persist:" + item.phone.split("-")[0] + item.pt;
+      try {
+        const result = await openLoginWindow({ ...item, partition });
+        if (result && result.ok === false) {
+          this.$message.error(result.message || "打开登录窗口失败");
+        } else if (result && result.reused) {
+          this.$message.info("已切换到已打开的登录窗口");
+        }
+      } catch (e) {
+        this.$message.error("打开登录窗口失败：" + (e && e.message ? e.message : e));
+      }
+      // 旧逻辑里 hideLoginDialog 会在 dialog 关闭后调 loadAccounts；
+      // 这里手动延时调一次，让 cookie 落地后刷新登录状态。
+      setTimeout(() => {
+        if (typeof this.loadAccounts === "function") this.loadAccounts();
+      }, 2000);
     },
 
     async handleBatchPublish() {

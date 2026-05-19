@@ -43,7 +43,9 @@ function createMainWindow(fn) {
       contextIsolation: false, //
       nodeIntegration: true,
       allowRunningInsecureContent: true,
-      webviewTag: true, // 启用webview标签
+      // 项目已全面用独立 BrowserWindow 替代 <webview>（避免反爬指纹）。
+      // 主窗口不再需要启用 webview 标签，避免回头有人误用又踩坑。
+      webviewTag: false,
       webSecurity: false, // false是允许跨域
       // 如果是开发模式可以使用devTools
       devTools: true,

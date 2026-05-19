@@ -24,30 +24,87 @@ export function createIpcTransport(ipcEvent) {
   };
 }
 
-const taskQueue = [];
-let taskBusy = false;
+export function createPuppeteerTaskRuntime({ runTask }) {
+  const taskQueue = [];
+  let taskBusy = false;
+  let activeTask = null;
 
-function enqueueTask(data, transport, userOnFinish) {
-  taskQueue.push({ data, transport, userOnFinish });
-  processNextTask();
+  const processNextTask = () => {
+    if (taskBusy) return;
+    const next = taskQueue.shift();
+    if (!next) return;
+    taskBusy = true;
+    let cancelHandler = null;
+    let doneCalled = false;
+    const runtimeTask = {
+      ...next,
+      setCancelHandler(handler) {
+        cancelHandler = handler;
+      },
+    };
+    const queueDone = () => {
+      if (doneCalled) return;
+      doneCalled = true;
+      try {
+        if (typeof next.userOnFinish === "function") {
+          next.userOnFinish();
+        }
+      } finally {
+        if (activeTask === runtimeTask) activeTask = null;
+        taskBusy = false;
+        processNextTask();
+      }
+    };
+    runtimeTask.cancel = reason => {
+      if (typeof cancelHandler === "function") {
+        cancelHandler(reason);
+      } else {
+        queueDone();
+      }
+    };
+    activeTask = runtimeTask;
+    runTask(runtimeTask, queueDone);
+  };
+
+  return {
+    enqueueTask(data, transport, userOnFinish) {
+      taskQueue.push({ data, transport, userOnFinish });
+      processNextTask();
+    },
+    cancelPuppeteerTasks(reason = "上传任务已主动中断") {
+      const queued = taskQueue.length;
+      taskQueue.splice(0, taskQueue.length);
+      const active = activeTask && taskBusy ? 1 : 0;
+      if (activeTask && taskBusy) {
+        activeTask.cancel(reason);
+      }
+      return {
+        active,
+        queued,
+        total: active + queued,
+      };
+    },
+    getQueueSize() {
+      return taskQueue.length;
+    },
+    isBusy() {
+      return taskBusy;
+    },
+  };
 }
 
-function processNextTask() {
-  if (taskBusy) return;
-  const next = taskQueue.shift();
-  if (!next) return;
-  taskBusy = true;
-  const queueDone = () => {
-    try {
-      if (typeof next.userOnFinish === "function") {
-        next.userOnFinish();
-      }
-    } finally {
-      taskBusy = false;
-      processNextTask();
-    }
-  };
-  doUpload(next.data, next.transport, queueDone);
+const puppeteerTaskRuntime = createPuppeteerTaskRuntime({
+  runTask(task, queueDone) {
+    doUpload(task.data, task.transport, queueDone, task);
+  },
+});
+
+function enqueueTask(data, transport, userOnFinish) {
+  puppeteerTaskRuntime.enqueueTask(data, transport, userOnFinish);
+}
+
+export function cancelPuppeteerTasks(reason) {
+  return puppeteerTaskRuntime.cancelPuppeteerTasks(reason);
 }
 
 function isExpectedPublishUrl(data, currentUrl) {
@@ -83,6 +140,10 @@ export function registerPuppeteerIpc() {
   ipcMain.on("puppeteerFile", async (event, args) => {
     enqueueTask(args, createIpcTransport(event));
   });
+  ipcMain.on("puppeteerFile:cancelAll", (event, args = {}) => {
+    const result = cancelPuppeteerTasks(args.reason);
+    event.reply("puppeteerFile:cancelAll-done", result);
+  });
 }
 
 /**
@@ -95,7 +156,7 @@ export function runPuppeteerTask(data, transport, onFinish) {
   enqueueTask(data, transport, onFinish);
 }
 
-async function doUpload(data, transport, queueDone) {
+async function doUpload(data, transport, queueDone, runtimeTask) {
   data.partition = data.partition.split("-")[0];
   const maxRetries = 5;
   let currentAttempt = 0;
@@ -149,6 +210,7 @@ async function doUpload(data, transport, queueDone) {
 
   const createAttemptTransport = () => ({
     reply(channel, ...args) {
+      if (finished) return false;
       const payload = args[0];
       if (channel === "puppeteerFile-done" && payload && payload.status === false) {
         const err = new Error(payload.message || "平台上传失败");
@@ -224,11 +286,29 @@ async function doUpload(data, transport, queueDone) {
         closePublishWinProgrammatically(win);
       }, AUTO_CLOSE_DELAY);
 
-      if (data.pt.indexOf("视频") !== -1) {
-        await page.setUserAgent(data.useragent);
+      // 统一 UA：所有平台都强制设置 data.useragent。
+      // 这一步很关键：账号管理里 <webview> 是用 ptConfig[pt].useragent（Chrome/138 桌面 UA）扫码登的，
+      // 而 BrowserWindow 默认 UA 带 "Electron/x.x.x" 字样。如果发布时不改 UA，
+      // 小红书 / 抖音 / 快手等站点的风控会把"同账号、不同 UA"判定为换设备，
+      // cookie 即使共享也会被要求重新登录，表现就是用户看到的"重复登录"。
+      // 之前的代码只在 pt 含"视频"时才 setUserAgent，是历史遗留，现在统一对齐。
+      if (data.useragent) {
         if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
-          win.webContents.setUserAgent(data.useragent);
+          try {
+            win.webContents.setUserAgent(data.useragent);
+          } catch (e) {
+            console.warn("win.webContents.setUserAgent 失败:", e?.message || e);
+          }
         }
+        try {
+          await page.setUserAgent(data.useragent);
+        } catch (e) {
+          console.warn("page.setUserAgent 失败:", e?.message || e);
+        }
+      }
+
+      if (data.pt.indexOf("视频") !== -1) {
+        // 视频号原来用 page.goto + domcontentloaded，保持不变避免回归。
         await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 60000 });
       } else {
         await win.loadURL(data.url);
@@ -284,7 +364,18 @@ async function doUpload(data, transport, queueDone) {
           if (isExpectedPublishUrl(data, currentUrl)) {
             const action = Type[data.pt];
             if (typeof action !== "function") {
-              throw new Error(`未找到平台处理器: ${data.pt}`);
+              // pt 没注册处理器属于配置/调用方错误，重试 5 次也变不出来 handler，
+              // 反而会反复打开同一个 URL，触发站点重复登录（典型例子：账号管理
+              // 之前发的 pt="小红书登录" 在 Type.js 里没对应项）。直接终结任务。
+              console.warn(`未找到平台处理器: ${data.pt}，跳过重试直接结束任务`);
+              safeReply("puppeteerFile-done", {
+                ...data,
+                status: false,
+                message: `未找到平台处理器: ${data.pt}`,
+              });
+              if (win && !win.isDestroyed()) closePublishWinProgrammatically(win);
+              finishOnce();
+              return;
             }
             await action(page, data, win, createAttemptTransport(), finishOnce);
           } else {
@@ -335,6 +426,23 @@ async function doUpload(data, transport, queueDone) {
       }, retryDelay);
     }
   };
+
+  if (runtimeTask && typeof runtimeTask.setCancelHandler === "function") {
+    runtimeTask.setCancelHandler(reason => {
+      if (finished) return;
+      const message = reason || "上传任务已主动中断";
+      safeReply("puppeteerFile-done", {
+        ...data,
+        status: false,
+        interrupted: true,
+        message,
+      });
+      if (activeWin && !activeWin.isDestroyed()) {
+        closePublishWinProgrammatically(activeWin);
+      }
+      finishOnce();
+    });
+  }
 
   setTimeout(() => {
     createWindowAndAttempt().catch(err => {
