@@ -205,6 +205,9 @@ export default {
     // 通过 GuestView 指纹 (websectiga / sec_poison_id / window.parent 等) 把会话标红。
     // partition 与视频管理的发布窗口完全一致 (persist:xxx<平台>)，cookie/localStorage
     // 在同一份 Electron session 里共享 —— 在这里扫码登录后，发布流程能直接复用。
+    //
+    // 互斥策略：同一时间只允许有一个'账号登录窗'。每次调用都会关掉其它
+    // partition 的旧登录窗，避免用户切账号时桌面上堆一排登录窗口。
     ipcMain.handle('open-account-login-window', async (_event, args) => {
       const partition = args && args.partition
       const url = args && args.url
@@ -214,15 +217,26 @@ export default {
         return { ok: false, message: 'partition/url 必填' }
       }
 
-      // 已经为同一个 partition 开过登录窗就直接 focus，不重复开
+      // 先扫一遍现有窗口：
+      //   - 同 partition：标记为'已存在'，等会儿 focus 复用
+      //   - 不同 partition 但属于'账号登录窗'：直接关掉
+      let existingWin = null
       for (const w of BrowserWindow.getAllWindows()) {
-        if (w && !w.isDestroyed() && w._mmAccountLoginPartition === partition) {
-          try {
-            if (w.isMinimized()) w.restore()
-            w.focus()
-          } catch (_) { /* ignore */ }
-          return { ok: true, reused: true }
+        if (!w || w.isDestroyed()) continue
+        if (!w._mmAccountLoginPartition) continue // 不是账号登录窗，不动
+        if (w._mmAccountLoginPartition === partition) {
+          existingWin = w
+        } else {
+          try { w.close() } catch (_) { /* ignore */ }
         }
+      }
+
+      if (existingWin) {
+        try {
+          if (existingWin.isMinimized()) existingWin.restore()
+          existingWin.focus()
+        } catch (_) { /* ignore */ }
+        return { ok: true, reused: true }
       }
 
       const win = new BrowserWindow({
