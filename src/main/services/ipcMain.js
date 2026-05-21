@@ -460,12 +460,99 @@ export default {
         const sheetName = workbook.SheetNames[0]
         const sheet = workbook.Sheets[sheetName]
         const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' })
+        // 清洗 xlsx 单元格：去 BOM / 零宽 / NBSP / 换行 / 前后空白。
+        // trim() 处理不了 ﻿ / ​ /  ，这些是从网页复制单元格最常踩的坑。
+        const cleanCell = (v) =>
+          String(v || '')
+            .replace(/[﻿​‌‍ ]/g, '')
+            .replace(/[\r\n\t]/g, '')
+            .trim()
         // Normalize: support column headers "文件名"/"fileName", "标题"/"title", "标签"/"tags"
-        return rows.map(row => ({
-          fileName: String(row['文件名'] || row['fileName'] || row['filename'] || '').trim(),
-          title: String(row['标题'] || row['title'] || '').trim(),
-          tags: String(row['标签'] || row['tags'] || '').trim(),
-        })).filter(r => r.fileName)
+        // 列头本身也可能带不可见字符，做一份归一化映射。
+        const normalizedRows = rows.map(row => {
+          const map = {}
+          Object.keys(row).forEach(k => {
+            const key = cleanCell(k).toLowerCase()
+            map[key] = row[k]
+          })
+          return {
+            fileName: cleanCell(
+              map['文件名'] != null ? map['文件名']
+                : map['filename'] != null ? map['filename']
+                : map['file'] || ''
+            ),
+            title: cleanCell(
+              map['标题'] != null ? map['标题'] : map['title'] || ''
+            ),
+            tags: cleanCell(
+              map['标签'] != null ? map['标签'] : map['tags'] || ''
+            ),
+          }
+        }).filter(r => r.fileName)
+        return normalizedRows
+      } catch (e) {
+        return { error: e && e.message ? e.message : String(e) }
+      }
+    })
+
+    // 校验 + 解析批量发布的真实文件路径：
+    // - 拼 dirPath + fileName
+    // - 如果 fileName 没带后缀（或后缀对不上磁盘大小写），自动在目录里找匹配
+    // - 返回每条 { fileName, resolvedPath, exists, matchedFileName }
+    ipcMain.handle('resolveBatchFiles', async (event, payload) => {
+      try {
+        const dirPath = payload && payload.dirPath
+        const fileNames = (payload && payload.fileNames) || []
+        if (!dirPath) return { error: '缺少目录路径' }
+        if (!fs.existsSync(dirPath)) return { error: '目录不存在: ' + dirPath }
+        const dirEntries = fs.readdirSync(dirPath)
+        // 建立 normalize 后的索引：忽略大小写 + 去不可见字符 -> 实际文件名
+        const norm = (s) =>
+          String(s || '')
+            .replace(/[﻿​‌‍ ]/g, '')
+            .replace(/[\r\n\t]/g, '')
+            .trim()
+            .toLowerCase()
+        const indexByName = new Map()        // 全名（含扩展名）
+        const indexByStem = new Map()        // 仅文件名主干（不含扩展名）
+        dirEntries.forEach(entry => {
+          indexByName.set(norm(entry), entry)
+          const stem = entry.replace(/\.[^/.]+$/, '')
+          if (!indexByStem.has(norm(stem))) {
+            indexByStem.set(norm(stem), entry)
+          }
+        })
+        const results = fileNames.map(rawName => {
+          const fileName = norm(rawName)
+          let matched = null
+          if (indexByName.has(fileName)) {
+            matched = indexByName.get(fileName)
+          } else if (indexByStem.has(fileName)) {
+            // 用户在 xlsx 里只写了文件名主干，自动补磁盘上的真实后缀
+            matched = indexByStem.get(fileName)
+          } else {
+            // 退一步：xlsx 里写了 stem.mp4 但磁盘是 stem.MP4 / stem.mov 之类
+            const stem = norm(String(rawName).replace(/\.[^/.]+$/, ''))
+            if (indexByStem.has(stem)) {
+              matched = indexByStem.get(stem)
+            }
+          }
+          if (matched) {
+            return {
+              fileName: rawName,
+              matchedFileName: matched,
+              resolvedPath: path.join(dirPath, matched),
+              exists: true
+            }
+          }
+          return {
+            fileName: rawName,
+            matchedFileName: '',
+            resolvedPath: path.join(dirPath, rawName),
+            exists: false
+          }
+        })
+        return { ok: true, results }
       } catch (e) {
         return { error: e && e.message ? e.message : String(e) }
       }

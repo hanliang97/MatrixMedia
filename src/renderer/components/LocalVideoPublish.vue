@@ -1211,7 +1211,7 @@ export default {
       return !!this.dirPath;
     },
 
-    onDirPublishNext() {
+    async onDirPublishNext() {
       if (!this.dirPath) {
         this.$message.warning("请先选择目录");
         return;
@@ -1226,13 +1226,49 @@ export default {
         return;
       }
       // Filter rows to only those with a fileName
-      this.dirBatchFiles = this.dirXlsxRows.filter(
+      const filteredRows = this.dirXlsxRows.filter(
         (r) => r.fileName && r.fileName.trim()
       );
-      if (!this.dirBatchFiles.length) {
+      if (!filteredRows.length) {
         this.$message.warning("xlsx 中没有有效的文件名行");
         return;
       }
+
+      // 用 main 进程对每个 fileName 做："文件存在性 + 后缀自动补全 + 大小写匹配"
+      // 任意一条匹配不到都直接阻断，避免发布时拿着不存在的 filePath 卡死。
+      const resolveRes = await ipcRenderer.invoke("resolveBatchFiles", {
+        dirPath: this.dirPath,
+        fileNames: filteredRows.map((r) => r.fileName),
+      });
+      if (!resolveRes || resolveRes.error) {
+        this.$message.error(
+          "校验文件失败: " + ((resolveRes && resolveRes.error) || "未知错误")
+        );
+        return;
+      }
+      const missing = resolveRes.results.filter((r) => !r.exists);
+      if (missing.length) {
+        this.$message.error(
+          `以下文件在目录中不存在（前 5 个）: ${missing
+            .slice(0, 5)
+            .map((m) => m.fileName)
+            .join("、")}${missing.length > 5 ? ` 等共 ${missing.length} 个` : ""}`
+        );
+        return;
+      }
+      // 把解析后的完整 filePath 回填到 dirBatchFiles，submitDirBatchPublish 不再做 path.join。
+      const pathToByName = new Map(
+        resolveRes.results.map((r) => [r.fileName, r])
+      );
+      this.dirBatchFiles = filteredRows.map((row) => {
+        const resolved = pathToByName.get(row.fileName);
+        return {
+          ...row,
+          fileName: resolved ? resolved.matchedFileName || row.fileName : row.fileName,
+          resolvedPath: resolved ? resolved.resolvedPath : "",
+        };
+      });
+
       this.dirPublishVisible = false;
       this.loadAccounts();
       this.platformVisible = true;
@@ -1278,7 +1314,11 @@ export default {
       const scheduledWriteTasks = [];
 
       for (const fileRow of this.dirBatchFiles) {
-        const filePath = path.join(this.dirPath, fileRow.fileName);
+        // 优先使用 onDirPublishNext 里 IPC 解析好的真实路径（已做存在性 + 后缀补全）。
+        // 兜底：老入口或刷新后 resolvedPath 丢失时，回退到 dirPath + fileName 拼接。
+        const filePath =
+          fileRow.resolvedPath ||
+          path.join(this.dirPath, fileRow.fileName);
         const stem = fileRow.fileName.replace(/\.[^/.]+$/, "");
         const bt1 = (fileRow.title || stem).trim();
         const bt2 = bt1;

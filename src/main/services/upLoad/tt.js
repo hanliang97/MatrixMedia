@@ -171,6 +171,136 @@ async function clickReadyElement(
   if (!clicked) throw new Error(`未找到${label}`)
 }
 
+async function dumpToutiaoPublishFooterState(page, tag) {
+  try {
+    const info = await page.evaluate(() => {
+      const norm = text =>
+        String(text || '')
+          .replace(/\s+/g, '')
+          .trim()
+      const visible = el => {
+        if (!el) return false
+        const rect = el.getBoundingClientRect()
+        const style = window.getComputedStyle(el)
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden'
+        )
+      }
+      const footer = document.querySelector('.video-batch-footer') || document
+      const nodes = [...footer.querySelectorAll('button, .m-button, [role="button"], div, span')]
+        .map(el => ({
+          tag: el.tagName,
+          cls: el.className || '',
+          text: norm(el.textContent).slice(0, 30),
+          disabled: el.getAttribute('disabled'),
+          ariaDisabled: el.getAttribute('aria-disabled'),
+          cannotClick: el.classList.contains('cannot-click'),
+          visible: visible(el)
+        }))
+        .filter(item => item.text || String(item.cls || '').includes('submit') || String(item.cls || '').includes('draft'))
+        .slice(0, 30)
+      return {
+        hasFooter: !!document.querySelector('.video-batch-footer'),
+        actionFooterBtnCount: document.querySelectorAll('.video-batch-footer .action-footer-btn').length,
+        submitCount: document.querySelectorAll('.video-batch-footer .submit').length,
+        draftCount: document.querySelectorAll('.video-batch-footer .draft').length,
+        nodes
+      }
+    })
+    console.log(`[tt] 发布页脚状态(${tag}):`, JSON.stringify(info))
+  } catch (e) {
+    console.log(`[tt] 发布页脚状态(${tag})读取失败:`, e?.message || e)
+  }
+}
+
+async function waitForToutiaoPublishFooterReady(page) {
+  await pollPageUntil(
+    page,
+    () => {
+      const norm = text =>
+        String(text || '')
+          .replace(/\s+/g, '')
+          .trim()
+      const isReady = el => {
+        if (!el) return false
+        const rect = el.getBoundingClientRect()
+        const style = window.getComputedStyle(el)
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          !el.classList.contains('cannot-click') &&
+          el.getAttribute('aria-disabled') !== 'true' &&
+          el.getAttribute('disabled') === null
+        )
+      }
+      const selector =
+        '.video-batch-footer .action-footer-btn, .video-batch-footer .submit, .video-batch-footer .draft'
+      if ([...document.querySelectorAll(selector)].some(isReady)) return true
+      const footer = document.querySelector('.video-batch-footer') || document
+      return [...footer.querySelectorAll('button, .m-button, [role="button"], div')]
+        .some(el => {
+          const text = norm(el.textContent)
+          return isReady(el) && (text === '发布' || text === '存草稿' || text === '保存草稿')
+        })
+    },
+    WAIT_SELECTOR_APPEAR_MS,
+    1000,
+    '等待头条发布页脚按钮出现超时'
+  )
+}
+
+async function clickToutiaoFooterAction(page, { draft }) {
+  const primarySelector = draft
+    ? '.video-batch-footer .draft'
+    : '.video-batch-footer .submit'
+  const label = draft ? '头条保存草稿按钮' : '头条发布按钮'
+  try {
+    await clickReadyElement(page, primarySelector, label, 10000)
+    return
+  } catch (e) {
+    console.log(`[tt] ${label} selector 点击失败，尝试按文本兜底:`, e?.message || e)
+    await dumpToutiaoPublishFooterState(page, `${draft ? 'draft' : 'publish'}-selector-fail`)
+  }
+  const clicked = await page.evaluate(isDraft => {
+    const norm = text =>
+      String(text || '')
+        .replace(/\s+/g, '')
+        .trim()
+    const isReady = el => {
+      if (!el) return false
+      const rect = el.getBoundingClientRect()
+      const style = window.getComputedStyle(el)
+      return (
+        rect.width > 0 &&
+        rect.height > 0 &&
+        style.display !== 'none' &&
+        style.visibility !== 'hidden' &&
+        !el.classList.contains('cannot-click') &&
+        el.getAttribute('aria-disabled') !== 'true' &&
+        el.getAttribute('disabled') === null
+      )
+    }
+    const targets = isDraft ? ['存草稿', '保存草稿'] : ['发布']
+    const footer = document.querySelector('.video-batch-footer') || document
+    const nodes = [...footer.querySelectorAll('button, .m-button, [role="button"], div')]
+    for (const el of nodes) {
+      if (!isReady(el)) continue
+      if (!targets.includes(norm(el.textContent))) continue
+      el.scrollIntoView({ block: 'center', inline: 'center' })
+      el.click()
+      return { ok: true, text: norm(el.textContent), cls: el.className || '' }
+    }
+    return { ok: false }
+  }, draft)
+  console.log(`[tt] ${label}文本兜底点击结果:`, JSON.stringify(clicked))
+  if (!clicked || !clicked.ok) throw new Error(`未找到${label}`)
+}
+
 async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
   const coverMode = getToutiaoCoverMode({ hasTagSelector })
   const coverItemSelector = getToutiaoCoverItemSelector()
@@ -209,18 +339,31 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
   await page.waitForTimeout(3000)
   setPublishStage('点击裁剪')
   console.log('点击裁剪')
-  // 兜底：只要 .xigua-poster-editor .bg 已经有 background-image(blob:...)，
-  // 就认为封面已经上传完成，按钮卡在 cannot-click 也不再死等，避免整个流程卡死。
+  // 兜底：封面编辑器有图就认为封面已经准备好，按钮卡在 cannot-click 也不再死等。
+  // 兼容多种新版结构：.xigua-poster-editor .bg / .base-content-wrap canvas / .cover-preview img
   const isXiguaPosterUploaded = async () => {
     try {
       return await page.evaluate(() => {
-        const bg = document.querySelector('.xigua-poster-editor .bg')
-        if (!bg) return false
-        const inline = bg.style && bg.style.backgroundImage
-        const computed =
-          (window.getComputedStyle(bg) || {}).backgroundImage || ''
-        const bgImage = inline || computed
-        return !!bgImage && bgImage.includes('url(') && bgImage !== 'none'
+        const hasBg = el => {
+          if (!el) return false
+          const inline = el.style && el.style.backgroundImage
+          const computed =
+            (window.getComputedStyle(el) || {}).backgroundImage || ''
+          const bgImage = inline || computed
+          return !!bgImage && bgImage.includes('url(') && bgImage !== 'none'
+        }
+        if (hasBg(document.querySelector('.xigua-poster-editor .bg'))) return true
+        if (hasBg(document.querySelector('.base-content-wrap .bg'))) return true
+        if (hasBg(document.querySelector('.base-content-wrap .preview'))) return true
+        // 新版可能用 canvas 渲染裁剪结果
+        const canvas = document.querySelector('.base-content-wrap canvas')
+        if (canvas && canvas.width > 0 && canvas.height > 0) return true
+        // 兼容 img 预览
+        const img = document.querySelector(
+          '.base-content-wrap img, .xigua-poster-editor img, .cover-preview img'
+        )
+        if (img && img.src && img.naturalWidth > 0) return true
+        return false
       })
     } catch (_) {
       return false
@@ -242,7 +385,72 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
       return false
     }
   }
-  // 裁剪按钮：有就点，没有（新版可能直接跳过裁剪步骤）就跳过，不阻断后续流程
+  const waitCoverDialogClosed = async () => {
+    try {
+      await pollPageUntil(
+        page,
+        () => {
+          const isVisible = el => {
+            if (!el) return false
+            const rect = el.getBoundingClientRect()
+            const style = window.getComputedStyle(el)
+            return (
+              rect.width > 0 &&
+              rect.height > 0 &&
+              style.display !== 'none' &&
+              style.visibility !== 'hidden'
+            )
+          }
+          const coverDialogs = [
+            ...document.querySelectorAll(
+              '.Dialog-container .m-poster-upgrade, .Dialog-container .base-content-wrap, .Dialog-container .xigua-poster-editor'
+            )
+          ]
+          return !coverDialogs.some(isVisible)
+        },
+        30000,
+        500,
+        '等待头条封面弹窗关闭超时'
+      )
+      console.log('[tt] 封面弹窗已关闭，封面设置已生效')
+    } catch (e) {
+      await dumpCoverEditorState('cover-dialog-not-closed')
+      throw e
+    }
+  }
+  // 打印当前封面编辑器关键 DOM 状态，便于线上排查新版结构变化
+  const dumpCoverEditorState = async (tag) => {
+    try {
+      const info = await page.evaluate(() => {
+        const pick = (sel) => {
+          const el = document.querySelector(sel)
+          if (!el) return null
+          return {
+            cls: el.className || '',
+            text: (el.textContent || '').trim().slice(0, 40),
+            disabled: el.getAttribute('disabled'),
+            ariaDisabled: el.getAttribute('aria-disabled'),
+            cannotClick: el.classList.contains('cannot-click'),
+            visible:
+              el.offsetWidth > 0 &&
+              el.offsetHeight > 0 &&
+              window.getComputedStyle(el).visibility !== 'hidden'
+          }
+        }
+        return {
+          clipBtn: pick('.base-content-wrap .clip-btn'),
+          btnSure: pick('.base-content-wrap .btn-sure'),
+          dialogRed: pick('.Dialog-container .footer .m-button.red'),
+          xiguaBg: pick('.xigua-poster-editor .bg'),
+          baseBg: pick('.base-content-wrap .bg')
+        }
+      })
+      console.log(`[tt] 封面编辑器状态(${tag}):`, JSON.stringify(info))
+    } catch (_) {}
+  }
+
+  // 裁剪按钮：新版很可能自动完成裁剪，按钮永远 cannot-click。
+  // 缩短等待 + 失败后无条件继续，不再阻断后续 btn-sure 流程。
   const clipBtn = await page.$('.base-content-wrap .clip-btn')
   if (clipBtn) {
     try {
@@ -250,21 +458,21 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
         page,
         '.base-content-wrap .clip-btn',
         '头条封面裁剪按钮',
-        5000
+        3000
       )
       await page.waitForTimeout(500)
       setPublishStage('裁剪完成')
       console.log('裁剪完成')
     } catch (e) {
       console.log('[tt] 裁剪按钮点击失败，跳过:', e?.message || e)
-      if (await isXiguaPosterUploaded()) {
-        console.log('[tt] 检测到 .xigua-poster-editor .bg 已有封面，按已完成处理')
-      }
+      await dumpCoverEditorState('clip-fail')
+      // 不管 bg 检测是否通过，都继续往下走，让 btn-sure 接管。
     }
   } else {
     console.log('[tt] 没有裁剪按钮，跳过裁剪步骤')
   }
   setPublishStage('点击确认')
+  console.log('[tt] 准备点击封面确认按钮 .base-content-wrap .btn-sure')
   try {
     await clickReadyElement(
       page,
@@ -272,17 +480,28 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
       '头条封面确认按钮',
       5000
     )
+    console.log('[tt] 封面确认按钮点击成功')
   } catch (e) {
     console.log('[tt] 封面确认按钮等待超时:', e?.message || e)
-    if (await isXiguaPosterUploaded()) {
-      console.log('[tt] bg 已存在，兜底强制点击 btn-sure')
-      await forceClickIfExists('.base-content-wrap .btn-sure', 'btn-sure')
-    } else {
-      throw e
+    await dumpCoverEditorState('btn-sure-fail')
+    const uploaded = await isXiguaPosterUploaded()
+    console.log('[tt] isXiguaPosterUploaded =', uploaded)
+    // 无论 bg 检测结果如何，只要按钮存在就强制点击；按钮也不存在才放弃。
+    const forced = await forceClickIfExists(
+      '.base-content-wrap .btn-sure',
+      'btn-sure'
+    )
+    if (!forced) {
+      console.log('[tt] btn-sure 不存在，尝试常见替代按钮')
+      await forceClickIfExists(
+        '.base-content-wrap .m-button.red, .base-content-wrap .confirm-btn, .cover-editor .btn-sure',
+        'btn-sure 替代'
+      )
     }
   }
   await page.waitForTimeout(1000)
   setPublishStage('确认封面弹窗')
+  console.log('[tt] 准备点击封面弹窗确认 .Dialog-container .footer .m-button.red')
   try {
     await clickReadyElement(
       page,
@@ -290,19 +509,20 @@ async function setToutiaoCover(page, hasTagSelector, setPublishStage) {
       '头条封面弹窗确认按钮',
       5000
     )
+    console.log('[tt] 封面弹窗确认按钮点击成功')
   } catch (e) {
     console.log('[tt] 封面弹窗确认按钮等待超时:', e?.message || e)
-    if (await isXiguaPosterUploaded()) {
-      console.log('[tt] bg 已存在，兜底强制点击弹窗 red 按钮')
-      await forceClickIfExists(
-        '.Dialog-container .footer .m-button.red',
-        '弹窗 red'
-      )
-    } else {
-      throw e
-    }
+    await dumpCoverEditorState('dialog-red-fail')
+    // 兜底：直接强点；如果弹窗已经被前面 btn-sure 关闭，这里点不到也无所谓。
+    await forceClickIfExists(
+      '.Dialog-container .footer .m-button.red',
+      '弹窗 red'
+    )
   }
+  setPublishStage('等待封面设置生效')
+  await waitCoverDialogClosed()
   setPublishStage('封面设置完成')
+  console.log('[tt] 封面设置流程结束')
 }
 
 async function waitForToutiaoUploadProgressComplete(page) {
@@ -484,41 +704,26 @@ export default async function (page, data, window, event) {
     await page.waitForTimeout(1000)
 
     publishStage = '等待发布按钮'
-    await page.waitForSelector('.video-batch-footer .action-footer-btn', {
-      timeout: WAIT_SELECTOR_APPEAR_MS
-    })
+    console.log('[tt] 封面流程后开始等待发布页脚按钮')
+    await dumpToutiaoPublishFooterState(page, 'before-footer-ready')
+    await waitForToutiaoPublishFooterReady(page)
+    await dumpToutiaoPublishFooterState(page, 'after-footer-ready')
     await page.waitForTimeout(3000)
 
-    publishStage = '等待视频处理完成'
-    await pollPageUntil(
-      page,
-      () => {
-        const els = document.querySelector('.basic-info  .m-right-btn .btn')
-        return !!(els && els.textContent.trim() === '重新上传')
-      },
-      WAIT_UPLOAD_PROCESSING_MS
-    )
+    console.log('[tt] 封面设置已完成，跳过“重新上传”按钮等待，直接进入提交')
     const shouldSaveDraft = shouldSaveToutiaoDraft({
       requestedDraft: isDraftMode,
       hasTagSelector
     })
     // 草稿：竖屏无标签时不支持保存草稿，直接走发布。
-    await page.waitForTimeout(6000)
+    await page.waitForTimeout(1000)
     if (shouldSaveDraft) {
       publishStage = '点击保存草稿'
-      await clickReadyElement(
-        page,
-        '.video-batch-footer .draft',
-        '头条保存草稿按钮'
-      )
+      await clickToutiaoFooterAction(page, { draft: true })
     } else {
       // 发布
       publishStage = '点击发布'
-      await clickReadyElement(
-        page,
-        '.video-batch-footer .submit',
-        '头条发布按钮'
-      )
+      await clickToutiaoFooterAction(page, { draft: false })
     }
     console.log(
       shouldSaveDraft ? '✅ 头条号视频已保存草稿' : '✅ 头条号视频上传成功'
