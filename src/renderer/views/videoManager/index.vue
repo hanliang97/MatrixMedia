@@ -278,7 +278,7 @@ export default {
       if (status === "success") return "success";
       if (status === "fail" || status === "failed" || status === "expired")
         return "danger";
-      if (status === "scheduled") return "info";
+      if (status === "scheduled" || status === "skipped") return "info";
       if (status === "draft") return "info";
       return "warning";
     },
@@ -286,6 +286,7 @@ export default {
       if (status === "success") return "成功";
       if (status === "fail" || status === "failed") return "失败";
       if (status === "scheduled") return "等待定时发布";
+      if (status === "skipped") return "已跳过";
       if (status === "expired") return "任务过期";
       if (status === "draft") return "已保存草稿";
       if (status === "drafting") return "保存草稿中";
@@ -524,6 +525,22 @@ export default {
       const target = this.findLocalPublishRecord(donePayload);
       if (!target || !target.row || !target.row.id) return;
       const row = this.fillPublishStats(target.row);
+      if (donePayload.skipped) {
+        await dataRequest({
+          type: "update",
+          fileName: "pushData",
+          item: {
+            id: row.id,
+            date: target.date,
+            publishStatus: "skipped",
+            lastPublishMessage:
+              donePayload.message || "用户关闭窗口，已跳过发布",
+            lastPublishAt: Date.now(),
+          },
+        });
+        this.loadRecords();
+        return;
+      }
       const success = !!donePayload.status;
       const isDraftMode =
         donePayload.publishMode === "draft" ||

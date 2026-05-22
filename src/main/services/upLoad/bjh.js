@@ -166,6 +166,147 @@ async function selectBjhCreativeStatement(page, data) {
   }
 }
 
+/** 百家号底部操作区根节点 */
+const BJH_OPERATOR_ROOT = '#new-operator-content .op-list-right'
+
+/** 等待发布/存草稿按钮变为可点击（disabled 解除） */
+async function waitForBjhActionButtonReady(page, buttonText, totalMs = 120000) {
+  const deadline = Date.now() + totalMs
+  while (Date.now() < deadline) {
+    const ok = await page
+      .evaluate(text => {
+        const norm = t =>
+          String(t || '')
+            .replace(/\s+/g, '')
+            .trim()
+        const isReady = el => {
+          if (!el) return false
+          const rect = el.getBoundingClientRect()
+          const style = window.getComputedStyle(el)
+          return (
+            rect.width > 0 &&
+            rect.height > 0 &&
+            style.display !== 'none' &&
+            style.visibility !== 'hidden' &&
+            !el.disabled &&
+            el.getAttribute('aria-disabled') !== 'true' &&
+            el.getAttribute('disabled') === null
+          )
+        }
+        const root =
+          document.querySelector('#new-operator-content .op-list-right') || document
+        if (text === '发布') {
+          const byTestId = root.querySelector('button[data-testid="publish-btn"]')
+          if (isReady(byTestId)) return true
+        }
+        for (const btn of root.querySelectorAll('button')) {
+          if (norm(btn.textContent) === text && isReady(btn)) return true
+        }
+        return false
+      }, buttonText)
+      .catch(() => false)
+    if (ok) return
+    await page.waitForTimeout(2000)
+  }
+  const err = new Error(`等待百家号「${buttonText}」按钮可点击超时`)
+  err.name = 'TimeoutError'
+  throw err
+}
+
+/** 读取发布/存草稿按钮当前状态，便于 disabled 时给出明确失败原因 */
+async function getBjhActionButtonState(page, buttonText) {
+  return page.evaluate(
+    (rootSel, text) => {
+      const norm = t =>
+        String(t || '')
+          .replace(/\s+/g, '')
+          .trim()
+      const root = document.querySelector(rootSel) || document
+      let btn = null
+      if (text === '发布') {
+        btn = root.querySelector('button[data-testid="publish-btn"]')
+      }
+      if (!btn) {
+        for (const b of root.querySelectorAll('button')) {
+          if (norm(b.textContent) === text) {
+            btn = b
+            break
+          }
+        }
+      }
+      if (!btn) return { found: false }
+      const disabled =
+        btn.disabled ||
+        btn.hasAttribute('disabled') ||
+        btn.getAttribute('aria-disabled') === 'true'
+      return {
+        found: true,
+        disabled,
+        text: norm(btn.textContent),
+        testId: btn.getAttribute('data-testid') || '',
+        cls: btn.className || ''
+      }
+    },
+    BJH_OPERATOR_ROOT,
+    buttonText
+  )
+}
+
+/** 仅当按钮可点击时才触发 click，避免 disabled 灰色按钮误点 */
+async function clickBjhActionButton(page, buttonText) {
+  return page.evaluate(
+    (rootSel, text) => {
+      const norm = t =>
+        String(t || '')
+          .replace(/\s+/g, '')
+          .trim()
+      const isReady = el => {
+        if (!el) return false
+        const rect = el.getBoundingClientRect()
+        const style = window.getComputedStyle(el)
+        return (
+          rect.width > 0 &&
+          rect.height > 0 &&
+          style.display !== 'none' &&
+          style.visibility !== 'hidden' &&
+          !el.disabled &&
+          el.getAttribute('aria-disabled') !== 'true' &&
+          el.getAttribute('disabled') === null
+        )
+      }
+      const root = document.querySelector(rootSel) || document
+      let btn = null
+      if (text === '发布') {
+        btn = root.querySelector('button[data-testid="publish-btn"]')
+      }
+      if (!btn) {
+        for (const b of root.querySelectorAll('button')) {
+          if (norm(b.textContent) === text) {
+            btn = b
+            break
+          }
+        }
+      }
+      if (!btn && text === '发布') {
+        btn = root.querySelector('button.cheetah-btn-primary.cheetah-btn-solid')
+      }
+      if (!btn) return { ok: false, reason: 'not-found' }
+      if (!isReady(btn)) {
+        return {
+          ok: false,
+          reason: 'disabled',
+          text: norm(btn.textContent),
+          testId: btn.getAttribute('data-testid') || ''
+        }
+      }
+      btn.click()
+      return { ok: true, text: norm(btn.textContent) }
+    },
+    BJH_OPERATOR_ROOT,
+    buttonText
+  )
+}
+
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === 'draft' || data.publishToDraft === true
@@ -308,46 +449,32 @@ export default async function (page, data, window, event) {
     );
     await page.waitForTimeout(1000);
 
+    const actionText = isDraftMode ? '存草稿' : '发布'
+
     // 草稿 / 发布 二选一点击，不能两个都点（先点存草稿会改变页面状态，发布按钮就摸不到了）
-    if (isDraftMode) {
-      // 「存草稿」是默认样式按钮，不是 primary。优先按文本精确匹配，避免误点定时发布。
-      const clickedDraft = await page.evaluate(() => {
-        const norm = t => String(t || "").replace(/\s+/g, "").trim();
-        const root = document.querySelector("#new-operator-content .op-list-right") || document;
-        const btns = root.querySelectorAll("button");
-        for (let i = 0; i < btns.length; i++) {
-          if (norm(btns[i].textContent) === "存草稿") {
-            btns[i].click();
-            return true;
-          }
-        }
-        return false;
-      });
-      if (!clickedDraft) throw new Error("未找到百家号「存草稿」按钮");
-      console.log("[bjh] 已点击存草稿");
-    } else {
-      // 「发布」是 primary solid 按钮，文本精确匹配 + 类名兜底
-      const clickedPub = await page.evaluate(() => {
-        const norm = t => String(t || "").replace(/\s+/g, "").trim();
-        const root = document.querySelector("#new-operator-content .op-list-right") || document;
-        const btns = root.querySelectorAll("button");
-        for (let i = 0; i < btns.length; i++) {
-          if (norm(btns[i].textContent) === "发布") {
-            btns[i].click();
-            return true;
-          }
-        }
-        // 兜底：按 class 找 primary solid
-        const fallback = root.querySelector("button.cheetah-btn-primary.cheetah-btn-solid");
-        if (fallback) {
-          fallback.click();
-          return true;
-        }
-        return false;
-      });
-      if (!clickedPub) throw new Error("未找到百家号「发布」按钮");
-      console.log("[bjh] 已点击发布");
+    try {
+      await waitForBjhActionButtonReady(page, actionText)
+    } catch (waitErr) {
+      const btnState = await getBjhActionButtonState(page, actionText)
+      console.log(`[bjh] ${actionText}按钮状态:`, JSON.stringify(btnState))
+      if (btnState.found && btnState.disabled) {
+        throw new Error(
+          `${actionText}按钮不可用（视频质量不足或未满足发布条件），请在本页查看原因`
+        )
+      }
+      throw waitErr
     }
+
+    const clicked = await clickBjhActionButton(page, actionText)
+    if (!clicked || !clicked.ok) {
+      if (clicked && clicked.reason === 'disabled') {
+        throw new Error(
+          `${actionText}按钮不可用（视频质量不足或未满足发布条件），请在本页查看原因`
+        )
+      }
+      throw new Error(`未找到百家号「${actionText}」按钮`)
+    }
+    console.log(`[bjh] 已点击${actionText}`)
     console.log(isDraftMode ? "✅ 百家号视频已保存草稿" : "✅ 百家号视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
@@ -358,11 +485,12 @@ export default async function (page, data, window, event) {
       maybeClosePublishWindow(data, window);
     }, 5000);
   } catch (err) {
-    event.reply("puppeteerFile-done", {
+    const failMessage = err?.message || '上传失败'
+    event.reply('puppeteerFile-done', {
       ...data,
       status: false,
-      message: "上传失败",
-    });
-    console.error("点击提交按钮失败:", err);
+      message: failMessage
+    })
+    console.error('点击提交按钮失败:', err)
   }
 }

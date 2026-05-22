@@ -204,6 +204,9 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   };
 
   const closePublishWinProgrammatically = win => {
+    if (win && !win.isDestroyed()) {
+      win._mmClosedByProgram = true;
+    }
     skipCloseConfirmation(win);
     if (win && !win.isDestroyed()) win.close();
   };
@@ -342,6 +345,19 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
           }, retryDelay);
           return;
         }
+        // 用户主动关窗（非程序自动关窗 / 非重试关窗）：跳过该平台，继续队列中的下一项
+        const userClosed = !win._mmClosedByProgram;
+        if (userClosed) {
+          console.log(`用户关闭 ${data.partition} 发布窗口，跳过 ${data.pt}`);
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            skipped: true,
+            message: "用户关闭窗口，已跳过该平台的发布",
+          });
+          finishOnce();
+          return;
+        }
         if (currentAttempt >= maxRetries) {
           safeReply("puppeteer-noLogin", data);
           safeReply("puppeteerFile-done", {
@@ -386,6 +402,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
             }
           }
         } catch (err) {
+          if (finished) return;
           console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
           const failurePayload = err && err._mmUploadFailurePayload;
           if (currentAttempt >= maxRetries) {

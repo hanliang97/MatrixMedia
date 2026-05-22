@@ -303,6 +303,21 @@ export async function runCliMain(argv = process.argv) {
             if (payload && payload.taskId != null && payload.taskId !== taskId) {
               return;
             }
+            if (payload && payload.skipped) {
+              console.log(
+                JSON.stringify({
+                  channel,
+                  skipped: true,
+                  message: payload.message,
+                })
+              );
+              updateRecord(
+                "skipped",
+                payload.message || "用户关闭窗口，已跳过发布"
+              );
+              finish(0);
+              return;
+            }
             const ok = payload && payload.status === true;
             console.log(JSON.stringify({ channel, status: ok, message: payload && payload.message }));
             updateRecord(ok ? "success" : "failed", (payload && payload.message) || (ok ? "上传成功" : "上传失败"));
@@ -501,6 +516,21 @@ export async function runCliMain(argv = process.argv) {
         reply(channel, payload) {
           if (channel === "puppeteerFile-done") {
             if (payload && payload.taskId != null && payload.taskId !== taskId) {
+              return;
+            }
+            if (payload && payload.skipped) {
+              console.log(
+                JSON.stringify({
+                  channel,
+                  skipped: true,
+                  message: payload.message,
+                })
+              );
+              updateRecord(
+                "skipped",
+                payload.message || "用户关闭窗口，已跳过发布"
+              );
+              finish(0);
               return;
             }
             const ok = payload && payload.status === true;

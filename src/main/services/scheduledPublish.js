@@ -186,6 +186,17 @@ function listScheduledRecords() {
 }
 
 function finishScheduledRecord(record, payload) {
+  if (payload && payload.skipped) {
+    updateRecord(record, {
+      publishStatus: "skipped",
+      publishSuccessCount: 0,
+      publishFailCount: 0,
+      lastPublishMessage:
+        (payload && payload.message) || "用户关闭窗口，已跳过发布",
+      lastPublishAt: Date.now(),
+    });
+    return;
+  }
   const ok = payload && payload.status === true;
   updateRecord(record, {
     publishStatus: ok ? "success" : "failed",
