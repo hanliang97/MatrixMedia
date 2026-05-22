@@ -67,7 +67,8 @@ const PT_ICON_STEM = {
   百家号: 'bjh',
   头条: 'tt',
   快手: 'ks',
-  小红书: 'xhs'
+  小红书: 'xhs',
+  番茄视频: 'fqsp'
 }
 
 export default {

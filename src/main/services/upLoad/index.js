@@ -6,3 +6,4 @@ export { default as tt } from "./tt.js";
 export { default as ks } from "./ks.js";
 export { default as xhs } from "./xhs.js";
 export { default as juejin } from "./juejin.js";
+export { default as fqsp } from "./fqsp.js";

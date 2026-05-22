@@ -17,9 +17,13 @@ const PLATFORM_ALIASES = {
   ks: "快手",
   kuaishou: "快手",
   快手: "快手",
+  fqsp: "番茄视频",
+  fanqie: "番茄视频",
+  fq: "番茄视频",
+  番茄视频: "番茄视频",
 };
 
-const CANONICAL = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手"];
+const CANONICAL = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手", "番茄视频"];
 const STATUS_ALIASES = {
   success: "success",
   ok: "success",
@@ -121,7 +125,7 @@ export function historyHelpText() {
 数据来源：<Documents>/MatrixMedia/data/pushData/YYYY-MM-DD.json。
 
 选项:
-  -p, --platform <id>   仅列某个平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号
+  -p, --platform <id>   仅列某个平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号、fqsp|番茄视频
       --phone <id>      仅列某个手机号
   -s, --status <s>      仅列某个状态：success|failed|publishing|scheduled|expired
                           （中文同义：成功|失败|发布中|等待定时发布|任务过期）

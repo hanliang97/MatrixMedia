@@ -54,4 +54,11 @@ export default {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
     listIndex: "https://juejin.cn/creator/content/article/essays?status=published",
   },
+  番茄视频: {
+    index: "https://pugc.yueduwuxian.com/fqvideo/login",
+    upload: "https://pugc.yueduwuxian.com/fqvideo/home/publish-video",
+    useragent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    listIndex: "https://pugc.yueduwuxian.com/fqvideo/home/publish-video",
+  },
 };

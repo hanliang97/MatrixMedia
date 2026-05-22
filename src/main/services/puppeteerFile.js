@@ -130,6 +130,22 @@ function isExpectedPublishUrl(data, currentUrl) {
       return String(currentUrl || "").indexOf("https://baijiahao.baidu.com/builder/rc/edit") === 0;
     }
   }
+  if (data && data.pt === "番茄视频") {
+    try {
+      const current = new URL(currentUrl);
+      const expected = new URL(data.url);
+      return (
+        current.origin === expected.origin &&
+        current.pathname.indexOf("/fqvideo/home/publish-video") === 0
+      );
+    } catch (_) {
+      return (
+        String(currentUrl || "").indexOf(
+          "https://pugc.yueduwuxian.com/fqvideo/home/publish-video"
+        ) === 0
+      );
+    }
+  }
   return false;
 }
 

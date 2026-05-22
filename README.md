@@ -4,7 +4,7 @@
 
 ## 关键词（便于搜索）
 
-自媒体、自媒体矩阵、矩阵发布、矩阵运营、内容矩阵、视频矩阵、多平台矩阵、跨平台发布、批量发布、批量上传、批量分发、一键发布、多账号发布、多平台发布、本地视频发布、短视频矩阵、内容分发、账号矩阵、自动化发布、CLI 批量、命令行发布、无头发布、智能体编排、OpenClaw、MCP 发布、抖音矩阵、快手矩阵、小红书矩阵、百家号矩阵、哔哩哔哩矩阵、头条矩阵、视频号矩阵、MatrixMedia、矩媒、pubtw
+自媒体、自媒体矩阵、矩阵发布、矩阵运营、内容矩阵、视频矩阵、多平台矩阵、跨平台发布、批量发布、批量上传、批量分发、一键发布、多账号发布、多平台发布、本地视频发布、短视频矩阵、内容分发、账号矩阵、自动化发布、CLI 批量、命令行发布、无头发布、智能体编排、OpenClaw、MCP 发布、抖音矩阵、快手矩阵、小红书矩阵、百家号矩阵、哔哩哔哩矩阵、头条矩阵、视频号矩阵、番茄视频、番茄视频矩阵、MatrixMedia、矩媒、pubtw
 
 ## <strong>📺 [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)</strong>
 
@@ -12,13 +12,13 @@
 
 - **支持平台**：Windows、macOS、CLI。
 - **CLI 登录**：目前仅支持**抖音**（终端二维码 / puppeteer 无头）。
-- **CLI 发布**：**全部 7 个平台**均可用——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书。
+- **CLI 发布**：**7 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书；**番茄视频**已接入配置与 GUI 登录，自动发布流程开发中。
 - **CLI 查询**：`cli accounts` 实时检测登录态，`cli history` 查看本机发布记录。
 
 便于脚本与智能体编排。
 
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
-<!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（仅抖音）与 `publish`（全部 7 个平台）详见下文。 -->
+<!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（仅抖音）与 `publish`（7 个已自动化平台 + 番茄视频配置中）详见下文。 -->
 
 ## AI 工具 / 智能体联动
 
@@ -42,7 +42,7 @@
 
 仓库顶部的 `<!-- openclaw-integrable ... -->` HTML 注释以 OpenClaw 的 schema 示例上述约定；其它平台如需类似的仓库级可发现标记，可沿用同一 `argv-marker=cli` 语义，或加上自家的注释标签（例如 `<!-- hermes-integrable ... -->`），互不冲突。
 
-典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 仅用于完成 **抖音** 的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对全部 7 个平台一致可用。终端二维码与无头模式等行为见各子命令 `--help`。
+典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 仅用于完成 **抖音** 的扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对已自动化 7 平台一致可用（番茄视频待完善）。终端二维码与无头模式等行为见各子命令 `--help`。
 
 ### MCP Server（Claude Desktop / Cursor / Cline 原生接入）
 
@@ -111,6 +111,36 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 6. 视频号
 7. 小红书
 
+### 番茄视频（配置已接入，自动化待完善）
+
+[番茄视频创作平台](https://pugc.yueduwuxian.com/fqvideo/login) 已写入 URL 配置，GUI 可添加账号并通过独立 BrowserWindow 登录；自动上传、填表、点发布及审核状态查询尚未实现。
+
+| 用途 | URL |
+|------|-----|
+| 登录页 | https://pugc.yueduwuxian.com/fqvideo/login |
+| 发布页 | https://pugc.yueduwuxian.com/fqvideo/home/publish-video |
+
+| 能力 | 状态 |
+|------|------|
+| GUI 添加账号 / 登录窗口 | 可用 |
+| GUI / CLI 自动发布 | 待完善（会提示「番茄视频自动发布流程待完善」） |
+| 登录 Cookie 自动检测 | 待完善 |
+| 发布审核状态回查 | 待完善 |
+
+**CLI / 配置别名**：`fqsp`、`fanqie`、`fq`、`番茄视频`
+
+**主要代码位置**（完善发布流程时改这些文件）：
+
+| 文件 | 说明 |
+|------|------|
+| `src/renderer/utils/configUrl.js` | 渲染层 URL（与主进程保持一致） |
+| `src/main/config/ptConfig.js` | 主进程 / CLI 用 URL |
+| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑（当前为占位） |
+| `src/main/services/zt/fqsp.js` | 审核状态查询（当前为占位） |
+| `src/main/services/getCookie.js` | 登录态 Cookie 规则（待补充） |
+
+侧栏图标（可选）：将 `fqsp.png` 放到 `src/renderer/layout/components/Sidebar/ptcion/`。
+
 ## 命令行（CLI）
 
 从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。子命令一览：
@@ -118,9 +148,9 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | 子命令 | 支持平台 | 作用 |
 |--------|----------|------|
 | `cli login` | **仅抖音**（`-p dy`） | 抖音扫码登录 / puppeteer 无头登录 |
-| `cli publish` | **全部 7 个平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`） | 发布本地视频（与 GUI「本地视频发布」等价） |
-| `cli accounts` | 全平台 | 列出所有账号并实时检测 cookie 登录态 |
-| `cli history` | 全平台 | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
+| `cli publish` | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布本地视频（与 GUI「本地视频发布」等价） |
+| `cli accounts` | 全平台（含 `fqsp` 番茄视频） | 列出所有账号并实时检测 cookie 登录态 |
+| `cli history` | 全平台（含 `fqsp` 番茄视频） | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
 
 > **非抖音平台的登录怎么办？** 当前 CLI 登录只实现了抖音一家；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 

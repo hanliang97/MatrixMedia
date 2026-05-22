@@ -6,6 +6,7 @@ import  tt from "./tt.js";
 import  ks from "./ks.js";
 import  xhs from "./xhs.js";
 import  juejin from "./juejin.js";
+import  fqsp from "./fqsp.js";
 
 // 添加默认导出
 export default {
@@ -16,5 +17,6 @@ export default {
   tt,
   ks,
   xhs,
-  juejin
+  juejin,
+  fqsp,
 };
