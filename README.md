@@ -158,6 +158,19 @@ sudo rm /usr/local/bin/matrixmedia
 alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 ```
 
+### macOS：提示“已损坏，无法打开”
+
+如果 Apple Silicon（M1/M2/M3）设备安装 `arm64` 包后提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。`x64` 包在 Apple Silicon 上会通过 Rosetta 运行，系统校验路径可能不同，所以会出现 `x64` 可打开、`arm64` 被拦截的情况。
+
+临时处理方式：
+
+```bash
+sudo xattr -rd com.apple.quarantine /Applications/matrixmedia.app
+open /Applications/matrixmedia.app
+```
+
+正式分发给普通用户时，建议使用 Apple Developer 的 Developer ID 证书对 macOS 包进行签名和公证。
+
 ### 其它提示
 
 - 中英文可执行文件名已统一为 `matrixmedia`，无需区分。
