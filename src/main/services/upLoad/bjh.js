@@ -93,8 +93,13 @@ async function selectBjhCreativeStatement(page, data) {
       var row1 = getRow(w1)
       if (norm(row1.textContent) === target) {
         var inp1 = w1.querySelector('input.cheetah-radio-input')
-        if (inp1) try { inp1.click() } catch (_) {}
-        try { w1.click() } catch (_) {}
+        if (inp1)
+          try {
+            inp1.click()
+          } catch (_) {}
+        try {
+          w1.click()
+        } catch (_) {}
         return { ok: true, mode: 'row-equal', rows: rowTexts }
       }
     }
@@ -104,8 +109,13 @@ async function selectBjhCreativeStatement(page, data) {
       var row2 = getRow(w2)
       if (norm(row2.textContent).indexOf(target) !== -1) {
         var inp2 = w2.querySelector('input.cheetah-radio-input')
-        if (inp2) try { inp2.click() } catch (_) {}
-        try { w2.click() } catch (_) {}
+        if (inp2)
+          try {
+            inp2.click()
+          } catch (_) {}
+        try {
+          w2.click()
+        } catch (_) {}
         return { ok: true, mode: 'row-includes', rows: rowTexts }
       }
     }
@@ -119,8 +129,14 @@ async function selectBjhCreativeStatement(page, data) {
         var ri = row3.querySelector('input.cheetah-radio-input')
         var rl = row3.querySelector('.cheetah-radio-wrapper')
         if (ri || rl) {
-          if (ri) try { ri.click() } catch (_) {}
-          if (rl) try { rl.click() } catch (_) {}
+          if (ri)
+            try {
+              ri.click()
+            } catch (_) {}
+          if (rl)
+            try {
+              rl.click()
+            } catch (_) {}
           return { ok: true, mode: 'span-walkup', rows: rowTexts }
         }
         row3 = row3.parentElement
@@ -130,7 +146,11 @@ async function selectBjhCreativeStatement(page, data) {
   }, label)
 
   console.log(
-    `[bjh] radio 命中模式=${pickResult && pickResult.mode ? pickResult.mode : 'miss'}; 弹窗里 ${(pickResult && pickResult.rows ? pickResult.rows.length : 0)} 个 radio 行文本: ${JSON.stringify(pickResult && pickResult.rows || [])}`
+    `[bjh] radio 命中模式=${
+      pickResult && pickResult.mode ? pickResult.mode : 'miss'
+    }; 弹窗里 ${
+      pickResult && pickResult.rows ? pickResult.rows.length : 0
+    } 个 radio 行文本: ${JSON.stringify((pickResult && pickResult.rows) || [])}`
   )
   const picked = pickResult && pickResult.ok
 
@@ -194,9 +214,12 @@ async function waitForBjhActionButtonReady(page, buttonText, totalMs = 120000) {
           )
         }
         const root =
-          document.querySelector('#new-operator-content .op-list-right') || document
+          document.querySelector('#new-operator-content .op-list-right') ||
+          document
         if (text === '发布') {
-          const byTestId = root.querySelector('button[data-testid="publish-btn"]')
+          const byTestId = root.querySelector(
+            'button[data-testid="publish-btn"]'
+          )
           if (isReady(byTestId)) return true
         }
         for (const btn of root.querySelectorAll('button')) {
@@ -339,7 +362,7 @@ export default async function (page, data, window, event) {
     try {
       await page.waitForSelector('input[placeholder="请选择创作声明"]', {
         visible: true,
-        timeout: 60 * 1000,
+        timeout: 60 * 1000
       })
       console.log('[bjh] 发布表单已就绪（声明 input 已出现）')
     } catch (_) {
@@ -356,7 +379,7 @@ export default async function (page, data, window, event) {
         placeholder: el.placeholder || '',
         type: el.type || '',
         maxlength: el.getAttribute('maxlength') || '',
-        readonly: el.readOnly,
+        readonly: el.readOnly
       }))
       const textareas = [...document.querySelectorAll('textarea')].map(el => ({
         tag: 'textarea',
@@ -364,16 +387,19 @@ export default async function (page, data, window, event) {
         placeholder: el.placeholder || '',
         maxlength: el.getAttribute('maxlength') || '',
         readonly: el.readOnly,
-        class: el.className || '',
+        class: el.className || ''
       }))
       const editables = [
-        ...document.querySelectorAll('[contenteditable="true"]'),
+        ...document.querySelectorAll('[contenteditable="true"]')
       ].map(el => ({
         tag: el.tagName.toLowerCase(),
         id: el.id || '',
         class: el.className || '',
-        placeholder: el.getAttribute('data-placeholder') || el.getAttribute('placeholder') || '',
-        text: (el.textContent || '').slice(0, 30),
+        placeholder:
+          el.getAttribute('data-placeholder') ||
+          el.getAttribute('placeholder') ||
+          '',
+        text: (el.textContent || '').slice(0, 30)
       }))
       return { inputs, textareas, editables }
     })
@@ -426,7 +452,6 @@ export default async function (page, data, window, event) {
     console.error('[bjh] 标题处理失败:', err?.message || err)
   }
 
-
   // 标题/地址填完后立即选择创作声明（必须声明）
   try {
     console.log('选择创作声明')
@@ -442,12 +467,15 @@ export default async function (page, data, window, event) {
     // (约 180s) 在弱网/大文件下把 CDP Runtime.callFunctionOn 提前砍掉。
     await pollPageUntil(
       page,
-      () => !document.querySelector(".upload-step-progress .progress-container.uploading"),
+      () =>
+        !document.querySelector(
+          '.upload-step-progress .progress-container.uploading'
+        ),
       WAIT_UPLOAD_PROCESSING_MS,
       2000,
-      "等待百家号视频上传完成超时"
-    );
-    await page.waitForTimeout(1000);
+      '等待百家号视频上传完成超时'
+    )
+    await page.waitForTimeout(1000)
 
     const actionText = isDraftMode ? '存草稿' : '发布'
 
@@ -465,25 +493,99 @@ export default async function (page, data, window, event) {
       throw waitErr
     }
 
-    const clicked = await clickBjhActionButton(page, actionText)
-    if (!clicked || !clicked.ok) {
-      if (clicked && clicked.reason === 'disabled') {
-        throw new Error(
-          `${actionText}按钮不可用（视频质量不足或未满足发布条件），请在本页查看原因`
-        )
+    // 基于操作区容器左上角的固定偏移量点击：
+    //   存草稿：left 600px, top 30px
+    //   发布：  left 700px, top 30px
+    const opRoot = await page.$('.op-list.op-list-wrap-videoV2')
+    const box = opRoot ? await opRoot.boundingBox() : null
+    if (!box)
+      throw new Error(
+        '未找到百家号操作区容器或无 boundingBox (.op-list .op-list-wrap-videoV2)'
+      )
+    console.log(
+      '[bjh] 操作区 box=',
+      JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
+    )
+
+    const cx = box.x + (isDraftMode ? 500 : 700)
+    const cy = box.y + 30
+
+    // 点击前先等 #cover-tabs-container 下的 .cheetah-progress-inner 消失，
+    // 有则表示视频仍在上传中，等待最长 5 分钟。
+    console.log('[bjh] 检查视频是否仍在上传（#cover-tabs-container .cheetah-progress-inner）...')
+    await pollPageUntil(
+      page,
+      "(function(){" +
+        "var container = document.querySelector('#cover-tabs-container');" +
+        "if (!container) return true;" +
+        "return !container.querySelector('.cheetah-progress-inner');" +
+      "})()",
+      5 * 60 * 1000,
+      2000,
+      "等待百家号视频上传进度条消失超时"
+    ).catch(e => console.warn('[bjh] 进度条等待超时，强行继续:', e?.message || e))
+    console.log('[bjh] 视频上传进度条已消失，准备点击')
+
+    // 点击后解析 .cheetah-message.cheetah-message-top 的图标类型：
+    //   aria-label="info-circle"  → 成功提示，直接结束
+    //   aria-label="close-circle" → 失败提示，重试
+    //   10s 内不出现任何提示      → 也视为成功
+    let clickSuccess = false
+    for (let attempt = 1; attempt <= 10; attempt++) {
+      await page.mouse.click(cx, cy, { delay: 80 })
+      console.log(`[bjh] 第 ${attempt} 次点击「${actionText}」at (${Math.round(cx)}, ${Math.round(cy)})`)
+
+      // 等最多 10s，监听消息框出现
+      const appeared = await page.waitForSelector('.cheetah-message.cheetah-message-top', {
+        visible: true,
+        timeout: 10000
+      }).then(() => true).catch(() => false)
+
+      if (!appeared) {
+        console.log(`[bjh] 10s 内未出现任何提示，点击成功`)
+        clickSuccess = true
+        break
       }
-      throw new Error(`未找到百家号「${actionText}」按钮`)
+
+      // 出现提示后，读取图标 aria-label 判断成功/失败
+      const msgType = await page.evaluate(function () {
+        var el = document.querySelector('.cheetah-message.cheetah-message-top')
+        if (!el) return 'unknown'
+        var icon = el.querySelector('span[role="img"]')
+        return icon ? (icon.getAttribute('aria-label') || 'unknown') : 'unknown'
+      })
+      console.log(`[bjh] 消息提示图标类型: ${msgType}`)
+
+      if (msgType === 'info-circle') {
+        console.log(`[bjh] 出现 info-circle 成功提示，点击成功`)
+        clickSuccess = true
+        break
+      }
+
+      // close-circle 或其他 → 失败，等提示消失后重试
+      console.warn(`[bjh] 出现 ${msgType} 失败提示，第 ${attempt} 次重试...`)
+      await page.waitForSelector('.cheetah-message.cheetah-message-top', {
+        hidden: true,
+        timeout: 5000
+      }).catch(() => {})
+      await page.waitForTimeout(500)
     }
-    console.log(`[bjh] 已点击${actionText}`)
-    console.log(isDraftMode ? "✅ 百家号视频已保存草稿" : "✅ 百家号视频上传成功");
+
+    if (!clickSuccess) {
+      throw new Error(`百家号「${actionText}」多次点击后仍出现失败提示，放弃`)
+    }
+
+    console.log(
+      isDraftMode ? '✅ 百家号视频已保存草稿' : '✅ 百家号视频上传成功'
+    )
     setTimeout(() => {
-      event.reply("puppeteerFile-done", {
+      event.reply('puppeteerFile-done', {
         ...data,
         status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+        message: isDraftMode ? '保存草稿成功' : '上传成功'
+      })
+      maybeClosePublishWindow(data, window)
+    }, 5000)
   } catch (err) {
     const failMessage = err?.message || '上传失败'
     event.reply('puppeteerFile-done', {

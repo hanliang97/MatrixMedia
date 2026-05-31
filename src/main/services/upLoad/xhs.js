@@ -370,12 +370,11 @@ export default async function (page, data, window, event) {
     console.log(
       "[xhs] 宿主 box=", JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
     );
-    // 实测 .publish-page-publish-btn 布局（680x90）：
-    //   暂存离开 中心 ≈ 30% 宽
-    //   发布     中心 ≈ 55% 宽（右侧还有大量 padding 空白，别用 75% 会落空）
-    const xRatio = isDraftMode ? 0.30 : 0.55;
-    const cx = box.x + box.width * xRatio;
-    const cy = box.y + box.height * 0.5;
+    // 基于 .publish-page-publish-btn 左上角的固定偏移量：
+    //   暂存离开：left 250px, top 40px
+    //   发布：    left 400px, top 40px
+    const cx = box.x + (isDraftMode ? 250 : 400);
+    const cy = box.y + 40;
 
     const targetText = isDraftMode ? "暂存离开" : "发布";
     let clickedOk = false;
