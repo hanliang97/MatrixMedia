@@ -168,6 +168,13 @@
             <div class="platform-leaf-main">
               <span class="platform-leaf-name">{{ data.pt }}</span>
               <span
+                v-if="data.proxyDisplay"
+                class="platform-leaf-proxy"
+                :title="'已配置代理 ' + data.proxyDisplay"
+              >
+                代理 {{ data.proxyDisplay }}
+              </span>
+              <span
                 class="platform-leaf-login"
                 :style="{ color: data.loggedIn ? 'green' : 'red' }"
               >
@@ -367,6 +374,10 @@ import {
   normalizeCreativeStatement,
   platformSupportsCreativeStatement,
 } from "../../shared/creativeStatement.js";
+import {
+  getAccountProxyDisplay,
+  isAccountProxyEnabled,
+} from "../../shared/accountProxy.js";
 import {
   isBt2SelectAllShortcut,
   isVideohaoBt2AllowedChar,
@@ -949,6 +960,8 @@ export default {
             phone: child.meta.phone.split("-")[0],
             date: child.meta.date,
             url: child.meta.url,
+            proxyDisplay: getAccountProxyDisplay(child.meta.proxy),
+            proxyEnabled: isAccountProxyEnabled(child.meta.proxy),
             loggedIn: (() => {
               const name = `${child.meta.phone.split("-")[0]}${
                 child.meta.pt
@@ -1663,6 +1676,11 @@ export default {
 }
 .platform-leaf-name {
   margin-right: 4px;
+}
+.platform-leaf-proxy {
+  margin-right: 4px;
+  font-size: 12px;
+  color: #409eff;
 }
 .platform-statement-row {
   width: 100%;

@@ -7,6 +7,7 @@ import pie from "puppeteer-in-electron";
 import Type from "./Type";
 import { UPLOAD_WINDOW_AUTO_CLOSE_MS } from "./upLoad/uploadTimeouts.js";
 import { skipCloseConfirmation } from "./upLoad/closeWindow.js";
+import { applyAccountProxyForTask } from "./proxyConfig.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -55,7 +56,7 @@ export function createPuppeteerTaskRuntime({ runTask }) {
         processNextTask();
       }
     };
-    runtimeTask.cancel = reason => {
+    runtimeTask.cancel = (reason) => {
       if (typeof cancelHandler === "function") {
         cancelHandler(reason);
       } else {
@@ -113,9 +114,15 @@ function isExpectedPublishUrl(data, currentUrl) {
     try {
       const current = new URL(currentUrl);
       const expected = new URL(data.url);
-      return current.origin === expected.origin && current.pathname.indexOf("/editor/drafts") === 0;
+      return (
+        current.origin === expected.origin &&
+        current.pathname.indexOf("/editor/drafts") === 0
+      );
     } catch (_) {
-      return String(currentUrl || "").indexOf("https://juejin.cn/editor/drafts") === 0;
+      return (
+        String(currentUrl || "").indexOf("https://juejin.cn/editor/drafts") ===
+        0
+      );
     }
   }
   // 百家号上传页 baidu 经常追加/重排 query（app_id、登录态参数等），strict === 会一直
@@ -125,9 +132,16 @@ function isExpectedPublishUrl(data, currentUrl) {
     try {
       const current = new URL(currentUrl);
       const expected = new URL(data.url);
-      return current.origin === expected.origin && current.pathname.indexOf("/builder/rc/edit") === 0;
+      return (
+        current.origin === expected.origin &&
+        current.pathname.indexOf("/builder/rc/edit") === 0
+      );
     } catch (_) {
-      return String(currentUrl || "").indexOf("https://baijiahao.baidu.com/builder/rc/edit") === 0;
+      return (
+        String(currentUrl || "").indexOf(
+          "https://baijiahao.baidu.com/builder/rc/edit"
+        ) === 0
+      );
     }
   }
   if (data && data.pt === "番茄视频") {
@@ -219,7 +233,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     if (queueDone) queueDone();
   };
 
-  const closePublishWinProgrammatically = win => {
+  const closePublishWinProgrammatically = (win) => {
     if (win && !win.isDestroyed()) {
       win._mmClosedByProgram = true;
     }
@@ -231,7 +245,11 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     reply(channel, ...args) {
       if (finished) return false;
       const payload = args[0];
-      if (channel === "puppeteerFile-done" && payload && payload.status === false) {
+      if (
+        channel === "puppeteerFile-done" &&
+        payload &&
+        payload.status === false
+      ) {
         const err = new Error(payload.message || "平台上传失败");
         err._mmUploadFailurePayload = payload;
         throw err;
@@ -256,6 +274,17 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     let page;
 
     try {
+      const proxyResult = await applyAccountProxyForTask({
+        partition: data.partition,
+        phone: data.phone,
+        pt: data.pt,
+      });
+      if (proxyResult.applied) {
+        console.log(
+          `[proxy] 发布任务 ${data.partition} 使用代理 ${proxyResult.display}`
+        );
+      }
+
       browser = await pie.connect(app, puppeteer);
       activeBrowser = browser;
       win = new BrowserWindow({
@@ -277,7 +306,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));
 
       // 站点在上传中常注册 beforeunload；用户主动关窗时二次确认，程序自动关窗见 skipCloseConfirmation。
-      win.webContents.on("will-prevent-unload", event => {
+      win.webContents.on("will-prevent-unload", (event) => {
         if (win._mmAllowCloseWithoutConfirm) {
           win._mmAllowCloseWithoutConfirm = false;
           event.preventDefault();
@@ -301,7 +330,11 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
 
       const AUTO_CLOSE_DELAY = UPLOAD_WINDOW_AUTO_CLOSE_MS;
       autoCloseTimer = setTimeout(() => {
-        console.log(`窗口 ${data.partition} 已自动关闭（${Math.round(AUTO_CLOSE_DELAY / 60000)} 分钟兜底超时）`);
+        console.log(
+          `窗口 ${data.partition} 已自动关闭（${Math.round(
+            AUTO_CLOSE_DELAY / 60000
+          )} 分钟兜底超时）`
+        );
         closePublishWinProgrammatically(win);
       }, AUTO_CLOSE_DELAY);
 
@@ -312,7 +345,12 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       // cookie 即使共享也会被要求重新登录，表现就是用户看到的"重复登录"。
       // 之前的代码只在 pt 含"视频"时才 setUserAgent，是历史遗留，现在统一对齐。
       if (data.useragent) {
-        if (win && !win.isDestroyed() && win.webContents && !win.webContents.isDestroyed()) {
+        if (
+          win &&
+          !win.isDestroyed() &&
+          win.webContents &&
+          !win.webContents.isDestroyed()
+        ) {
           try {
             win.webContents.setUserAgent(data.useragent);
           } catch (e) {
@@ -328,7 +366,10 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
 
       if (data.pt.indexOf("视频") !== -1) {
         // 视频号原来用 page.goto + domcontentloaded，保持不变避免回归。
-        await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+        await page.goto(data.url, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
       } else {
         await win.loadURL(data.url);
       }
@@ -346,10 +387,11 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         if (activeWin === win) activeWin = null;
         if (activeBrowser === browser) activeBrowser = null;
         if (finished) return;
-        const retry = Boolean(win._mmRetryAfterClose) && currentAttempt < maxRetries;
+        const retry =
+          Boolean(win._mmRetryAfterClose) && currentAttempt < maxRetries;
         if (retry) {
           setTimeout(() => {
-            createWindowAndAttempt().catch(err => {
+            createWindowAndAttempt().catch((err) => {
               console.error("重试创建窗口失败:", err);
               safeReply("puppeteerFile-done", {
                 ...data,
@@ -399,19 +441,24 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               // pt 没注册处理器属于配置/调用方错误，重试 5 次也变不出来 handler，
               // 反而会反复打开同一个 URL，触发站点重复登录（典型例子：账号管理
               // 之前发的 pt="小红书登录" 在 Type.js 里没对应项）。直接终结任务。
-              console.warn(`未找到平台处理器: ${data.pt}，跳过重试直接结束任务`);
+              console.warn(
+                `未找到平台处理器: ${data.pt}，跳过重试直接结束任务`
+              );
               safeReply("puppeteerFile-done", {
                 ...data,
                 status: false,
                 message: `未找到平台处理器: ${data.pt}`,
               });
-              if (win && !win.isDestroyed()) closePublishWinProgrammatically(win);
+              if (win && !win.isDestroyed())
+                closePublishWinProgrammatically(win);
               finishOnce();
               return;
             }
             await action(page, data, win, createAttemptTransport(), finishOnce);
           } else {
-            console.log(`尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`);
+            console.log(
+              `尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`
+            );
             if (win && !win.isDestroyed()) {
               win._mmRetryAfterClose = true;
               closePublishWinProgrammatically(win);
@@ -439,6 +486,18 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         }
       }, 3000);
     } catch (error) {
+      const proxyConfigError =
+        error && /代理/.test(String(error.message || error));
+      if (proxyConfigError) {
+        console.log(`尝试${currentAttempt}代理配置错误:`, error);
+        safeReply("puppeteerFile-done", {
+          ...data,
+          status: false,
+          message: error.message || "代理配置错误",
+        });
+        finishOnce();
+        return;
+      }
       console.log(`尝试${currentAttempt}发生错误:`, error);
       if (win && !win.isDestroyed()) {
         win._mmRetryAfterClose = true;
@@ -447,7 +506,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       if (browser) browser.disconnect();
       if (finished) return;
       setTimeout(() => {
-        createWindowAndAttempt().catch(err => {
+        createWindowAndAttempt().catch((err) => {
           console.error("重试创建窗口失败:", err);
           safeReply("puppeteerFile-done", {
             ...data,
@@ -461,7 +520,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   };
 
   if (runtimeTask && typeof runtimeTask.setCancelHandler === "function") {
-    runtimeTask.setCancelHandler(reason => {
+    runtimeTask.setCancelHandler((reason) => {
       if (finished) return;
       const message = reason || "上传任务已主动中断";
       safeReply("puppeteerFile-done", {
@@ -478,7 +537,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   }
 
   setTimeout(() => {
-    createWindowAndAttempt().catch(err => {
+    createWindowAndAttempt().catch((err) => {
       console.error("首次创建窗口失败:", err);
       safeReply("puppeteerFile-done", {
         ...data,

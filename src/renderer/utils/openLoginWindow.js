@@ -35,5 +35,7 @@ export default async function openLoginWindow(item) {
     url,
     useragent,
     title: pt,
+    phone: item.phone,
+    pt,
   });
 }
