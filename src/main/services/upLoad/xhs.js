@@ -195,7 +195,11 @@ export default async function (page, data, window, event) {
     await page.waitForSelector(titleSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
-    const titleText = (data.data?.bt1 || data.data?.bt2 || "").trim();
+    const rawTitle = (data.data?.bt1 || data.data?.bt2 || "").trim();
+    const titleText = rawTitle.slice(0, 20);
+    if (rawTitle.length > 20) {
+      console.warn(`[xhs] ⚠️ 标题共${rawTitle.length}字，超过20字限制，已截断为: "${titleText}"`);
+    }
     await titleInput.click({ clickCount: 3 });
     await page.keyboard.press("Backspace");
     if (titleText) {
