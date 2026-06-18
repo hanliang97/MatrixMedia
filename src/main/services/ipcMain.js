@@ -43,10 +43,15 @@ function requestGiteeJson(path, fallback) {
       });
 
       res.on("end", () => {
+        if (res.statusCode !== 200) {
+          console.warn(`Gitee API ${path} 返回 ${res.statusCode}，跳过解析`);
+          resolve(fallback);
+          return;
+        }
         try {
           resolve(JSON.parse(data));
         } catch (error) {
-          console.error("Error parsing Gitee release:", error);
+          console.warn("Gitee 响应非 JSON，跳过:", data.slice(0, 80));
           resolve(fallback);
         }
       });

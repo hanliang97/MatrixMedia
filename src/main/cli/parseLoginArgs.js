@@ -3,11 +3,15 @@
 const PLATFORM_ALIASES = {
   dy: '抖音',
   douyin: '抖音',
-  抖音: '抖音'
+  抖音: '抖音',
+  sph: '视频号',
+  shipin: '视频号',
+  shipinhao: '视频号',
+  视频号: '视频号'
 }
 
-/** 当前仅实现抖音扫码/网页登录 */
-const SUPPORTED_LOGIN = ['抖音']
+/** 当前支持抖音、视频号扫码登录 */
+const SUPPORTED_LOGIN = ['抖音', '视频号']
 
 /**
  * 解析 `cli login` 后的 argv（不含子命令名 login）
@@ -27,7 +31,8 @@ export function parseLoginArgs(subArgv) {
     terminalQr: true,
     timeoutSec: 900,
     saveQrPng: null,
-    puppeteerHeadless: false
+    puppeteerHeadless: false,
+    force: false
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -54,13 +59,15 @@ export function parseLoginArgs(subArgv) {
       out.saveQrPng = args[++i] || null
     } else if (a === '--puppeteer-headless') {
       out.puppeteerHeadless = true
+    } else if (a === '--force') {
+      out.force = true
     }
   }
 
   if (!out.platform) {
     return {
       ok: false,
-      error: '缺少 --platform（或 -p），抖音登录请使用 dy / 抖音'
+      error: '缺少 --platform（或 -p），抖音请使用 dy / 抖音，视频号请使用 sph / 视频号'
     }
   }
   const raw = String(out.platform).trim()
@@ -69,7 +76,7 @@ export function parseLoginArgs(subArgv) {
   if (!SUPPORTED_LOGIN.includes(pt)) {
     return {
       ok: false,
-      error: `cli login 当前仅支持抖音，收到: ${out.platform}。其它平台请先用 GUI 登录或后续再扩展。`
+      error: `cli login 当前支持抖音和视频号，收到: ${out.platform}。其它平台请先用 GUI 登录或后续再扩展。`
     }
   }
   out.platform = pt
@@ -86,10 +93,10 @@ export function parseLoginArgs(subArgv) {
     out.partition = `persist:${phoneSeg}${out.platform}`
   }
 
-  if (out.show) {
+  if (out.show && out.platform !== '视频号') {
     console.warn('MatrixMedia: CLI 模式不打开登录窗口，已忽略 --show。')
+    out.show = false
   }
-  out.show = false
 
   if (!out.puppeteerHeadless) {
     if (!out.terminalQr) {
@@ -98,6 +105,12 @@ export function parseLoginArgs(subArgv) {
         error:
           'CLI 模式不打开浏览器登录窗口。请保留默认终端二维码（勿加 --no-terminal-qr），或使用 --puppeteer-headless。'
       }
+    }
+  } else if (out.platform === '视频号') {
+    return {
+      ok: false,
+      error:
+        '视频号暂不支持 --puppeteer-headless 模式，请使用默认终端二维码方式登录。'
     }
   } else if (!out.terminalQr && !out.saveQrPng) {
     return {
@@ -114,23 +127,23 @@ export function loginHelpText() {
   return `
 用法: <应用> cli login [选项]
 
-与 GUI 共用同一 session partition（Cookie 持久化）。当前仅支持抖音。
+与 GUI 共用同一 session partition（Cookie 持久化）。当前支持抖音、视频号。
 
 终端扫码（默认）：同一 Electron 窗口 + puppeteer-in-electron 的 CDP 截图（page.screenshot），无需屏外坐标。Linux 无图形环境或 SSH 建议用 xvfb-run -a 包一层。
 
-可选 --puppeteer-headless：用系统 Chrome/Chromium 真无头 + page.screenshot，userDataDir 与 partition 一致（需 PUPPETEER_EXECUTABLE_PATH 或已安装 Chrome/Chromium）。无 TTY 时请配合 --save-qr-png。
+可选 --puppeteer-headless（仅抖音）：用系统 Chrome/Chromium 真无头 + page.screenshot，userDataDir 与 partition 一致（需 PUPPETEER_EXECUTABLE_PATH 或已安装 Chrome/Chromium）。无 TTY 时请配合 --save-qr-png。
 
-CLI 下不会打开 Electron 登录窗口；请使用终端二维码（默认）或 --puppeteer-headless。传入 --show 将被忽略并提示。
+视频号登录支持 --show 弹出登录窗口，扫码后窗口自动关闭。
 
 选项:
-  -p, --platform <id>   仅支持 dy / 抖音
+  -p, --platform <id>   支持 dy / 抖音、sph / 视频号
       --phone <id>      账号手机号（与 GUI 一致，与 --partition 二选一）
       --partition <p>   完整 partition，如 persist:13800138000抖音
-      --show              （已忽略）历史兼容，CLI 不显示登录窗口
+      --show              弹出登录窗口（视频号默认支持；抖音 CLI 不支持）
       --hide              不显示窗口（默认即为隐藏）
       --no-terminal-qr    关闭终端二维码时须使用 --puppeteer-headless
       --save-qr-png <p>   每次刷新写 PNG（优先 #animate_qrcode_container 内 data: 原图）
-      --puppeteer-headless  使用 Puppeteer 无头 Chromium 截图/写 Cookie（非 Electron 窗口）
+      --puppeteer-headless  使用 Puppeteer 无头 Chromium（仅抖音，视频号不支持）
       --timeout-sec <n>   最长等待秒数，默认 900（15 分钟）
   -h, --help            显示本帮助
 
@@ -143,6 +156,8 @@ CLI 下不会打开 Electron 登录窗口；请使用终端二维码（默认）
 
 示例:
   electron . cli login -p dy --phone 13800138000
+  electron . cli login -p sph --phone 13800138000 --show
+  electron . cli login -p sph --phone 宠物
   xvfb-run -a ./矩媒.AppImage cli login -p dy --phone 13800138000
   electron . cli login -p dy --phone 13800138000 --puppeteer-headless
   矩媒.exe cli login -p dy --phone 13800138000

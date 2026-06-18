@@ -15,6 +15,7 @@ import { runHistoryCli } from "./runHistoryCli";
 import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
+import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
@@ -420,14 +421,20 @@ export async function runCliMain(argv = process.argv) {
     }
     const v = parsed.value;
     try {
-      return await runDouyinCliLogin({
+      const loginOpts = {
         partition: v.partition,
         show: v.show,
         terminalQr: v.terminalQr,
         timeoutMs: v.timeoutSec * 1000,
         saveQrPngPath: v.saveQrPng || null,
         puppeteerHeadless: v.puppeteerHeadless,
-      });
+        phone: v.phone || null,
+        force: v.force || false,
+      };
+      if (v.platform === "视频号") {
+        return await runSphCliLogin(loginOpts);
+      }
+      return await runDouyinCliLogin(loginOpts);
     } catch (e) {
       console.error(e);
       return 1;

@@ -1,6 +1,6 @@
 "use strict";
 
-import { BrowserWindow, app } from "electron";
+import { BrowserWindow, app, session as electronSession } from "electron";
 import pie from "puppeteer-in-electron";
 import puppeteerCore from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
@@ -88,12 +88,25 @@ export async function runDouyinCliLogin({
      * @param {number} code
      * @param {{ clearTerminal?: boolean, log?: string }} [opts]
      */
-    const finish = (code, opts = {}) => {
+    const finish = async (code, opts = {}) => {
       if (settled) return;
       settled = true;
       if (pollTimer) clearInterval(pollTimer);
       if (qrTimer) clearInterval(qrTimer);
       if (deadlineTimer) clearTimeout(deadlineTimer);
+
+      // 登录成功时，先将 Cookie / Storage 刷盘，再关窗口
+      // 否则新 BrowserWindow 读同一 partition 时可能拿不到最新数据
+      if (code === 0) {
+        try {
+          const ses = electronSession.fromPartition(part);
+          await ses.cookies.flushStore();
+          ses.flushStorageData();
+        } catch (_) {
+          // 忽略
+        }
+      }
+
       try {
         if (pieBrowser && typeof pieBrowser.disconnect === "function") {
           pieBrowser.disconnect();
