@@ -22,9 +22,9 @@ matrixmedia cli publish \
   -t "测试标题"
 ```
 
-## Example 2: Login then publish
+## Example 2: Login then publish (Douyin)
 
-User intent: 首次登录后发布。
+User intent: 首次登录后发布抖音。
 
 ```bash
 matrixmedia cli login -p dy --phone 13800138000
@@ -35,6 +35,26 @@ matrixmedia cli publish \
   -f "/Users/me/videos/demo.mp4" \
   -t "矩媒CLI发布演示" \
   --name "CLI演示任务" \
+  --tags "#开源 #CLI #自动化 #矩媒"
+```
+
+## Example 2b: Login then publish (视频号)
+
+User intent: 首次登录后发布视频号。
+
+```bash
+# 终端二维码登录（无弹窗，透明窗口）
+matrixmedia cli login -p sph --phone 13800138000
+
+# 或弹出可见窗口登录
+matrixmedia cli login -p sph --phone 13800138000 --show
+
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "矩媒CLI发布演示" \
+  --bt2 "CLI发布测试" \
   --tags "#开源 #CLI #自动化 #矩媒"
 ```
 
@@ -155,7 +175,7 @@ matrixmedia cli publish \
   --address "北京市朝阳区三里屯"
 ```
 
-## Example 12: Pre-publish preflight
+## Example 12: Pre-publish preflight (Douyin)
 
 User intent: 发布前顺手核一次登录态。
 
@@ -175,4 +195,28 @@ matrixmedia cli publish \
 
 # 4) 回查最近一条记录
 matrixmedia cli history --phone 13800138000 -p dy -n 1
+```
+
+## Example 13: Pre-publish preflight (视频号)
+
+User intent: 视频号发布前检查并登录。
+
+```bash
+# 1) 检查账号在线
+matrixmedia cli accounts -p sph --phone 13800138000
+
+# 2) 若返回「未登录」，CLI 扫码登录（终端 QR）
+matrixmedia cli login -p sph --phone 13800138000
+
+# 3) 发布
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "视频号发布测试" \
+  --bt2 "发布测试" \
+  --tags "#测试 #矩媒"
+
+# 4) 回查最近一条记录
+matrixmedia cli history --phone 13800138000 -p sph -n 1
 ```

@@ -36,6 +36,12 @@ import {
 const cliMode = isCliMode(process.argv);
 installMainProcessLogFile(app);
 
+// 确保 dev / cli / 打包后 userData 路径一致（都用 matrix-video）
+// 否则 persist: partition 的 cookie 会存在不同目录，登录状态不共享
+if (app.name !== "matrix-video") {
+  app.name = "matrix-video";
+}
+
 if (process.platform === "win32") {
   app.setAppUserModelId("com.matrix.video");
 }

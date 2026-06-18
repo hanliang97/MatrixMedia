@@ -9,12 +9,12 @@ description: Run MatrixMedia in CLI mode for login, video publishing, account st
 
 | Subcommand | Platform coverage | Purpose | Writes state? |
 |------------|-------------------|---------|---------------|
-| `cli login` | **Douyin only** (`-p dy`) | Scan-to-login via terminal QR or headless puppeteer | yes (session cookies) |
+| `cli login` | **Douyin** (`-p dy`) and **视频号** (`-p sph`) | Scan-to-login via terminal QR, `--show` window, or headless puppeteer (Douyin only) | yes (session cookies) |
 | `cli publish` | **All 7 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`) | Publish a local video via puppeteer automation | yes (pushData log) |
 | `cli accounts` | All platforms | List all accounts from the GUI account tree and report current login state | no |
 | `cli history` | All platforms | Read local publish records (pushData) with platform/phone/status filters | no |
 
-> **Non-Douyin platforms cannot log in via CLI.** Ask the user to log in **once in the GUI**; CLI then reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`. If `cli accounts` reports `cookie 已过期`, send the user back to the GUI to re-login — there is no CLI flow for bilibili/kuaishou/baijiahao/toutiao/shipinhao login today.
+> **Douyin and 视频号 support CLI login.** Other platforms cannot log in via CLI — ask the user to log in **once in the GUI**; CLI then reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`. If `cli accounts` reports `cookie 已过期`, send the user back to the GUI to re-login (or use `cli login` for Douyin/视频号).
 
 ## Quick Start
 
@@ -54,8 +54,14 @@ Installed app (recommended) examples:
 # show login help
 matrixmedia cli login --help
 
-# login (Douyin)
+# login (Douyin — terminal QR, no window)
 matrixmedia cli login -p dy --phone 13800138000
+
+# login (视频号 — terminal QR, transparent window)
+matrixmedia cli login -p sph --phone 13800138000
+
+# login (视频号 — visible window for debugging)
+matrixmedia cli login -p sph --phone 13800138000 --show
 
 # show publish help
 matrixmedia cli publish --help
@@ -207,12 +213,15 @@ Good vs bad（哔哩哔哩 / 小红书）：
 
 ## Login Rules
 
-- `cli login` **only implements Douyin** today. Do not attempt `cli login -p tt/ks/blbl/bjh/sph` — the parser rejects it.
-- For non-Douyin platforms: instruct the user to log in once in the GUI; CLI automatically reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`.
+- `cli login` supports **Douyin** (`-p dy`) and **视频号** (`-p sph`). Do not attempt `cli login -p tt/ks/blbl/bjh` — the parser rejects it.
+- **Douyin login**: default hidden window + terminal QR; supports `--puppeteer-headless` for true headless mode. `--show` is ignored.
+- **视频号 login**: default transparent window (`opacity: 0`) + terminal QR; supports `--show` to open a visible login window. Does not support `--puppeteer-headless`. UA is injected via CDP `page.setUserAgent()` (WeChat UA) before navigation to cover all iframe requests. Re-login is always supported (detects new `sessionid` different from the old one).
+- For non-Douyin/视频号 platforms: instruct the user to log in once in the GUI; CLI automatically reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`.
 - If a publish fails with login/session errors:
   - Douyin → run `cli login -p dy --phone <phone>` first, then retry publish.
+  - 视频号 → run `cli login -p sph --phone <phone>` first, then retry publish.
   - Other platforms → ask the user to re-login in the GUI, then retry `cli publish`.
-- On Linux headless/SSH, prefer `xvfb-run -a` for the Douyin login display pipeline.
+- On Linux headless/SSH, prefer `xvfb-run -a` for the login display pipeline.
 - `cli accounts` is non-interactive — it only reads session cookies and never triggers login; use it to pick the right `--phone` / `--partition` before login or publish, and to diagnose expired cookies.
 
 ## Accounts Command
