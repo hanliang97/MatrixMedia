@@ -13,7 +13,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.15.1'
+          node-version: "20.15.1"
       - name: Extract repository name
         id: extract-repo-name
         run: |
@@ -39,10 +39,10 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.15.1'
+          node-version: "20.15.1"
       - name: Install dependencies
         run: yarn
-      - name: Build Electron app (macOS Intel + Apple Silicon)
+      - name: Build Electron app (macOS x64)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: yarn build:mac
@@ -59,7 +59,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.15.1'
+          node-version: "20.15.1"
       - name: Install dependencies
         run: yarn
       - name: Build Electron app (Linux x64 AppImage)
@@ -123,7 +123,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20.15.1'
+          node-version: "20.15.1"
       - name: Read version from package.json
         id: ver
         shell: bash
@@ -153,4 +153,3 @@ jobs:
           fi
           RELEASE_BODY="$(cat release-notes.md 2>/dev/null || true)" \
             node upload-gitee.js "${{ secrets.GITEE_ACCESS_TOKEN }}" "$VERSION" "${files[@]}"
-

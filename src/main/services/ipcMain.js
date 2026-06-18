@@ -124,8 +124,7 @@ function compareSemver(remoteRaw, localRaw) {
 /**
  * 与 CI 产物命名规则一致（v0.6.1 起 artifactName 统一为 MatrixMedia-${version}-${os}-${arch}.${ext}）：
  *   Win x64:      MatrixMedia-0.6.1-win-x64.exe
- *   Mac Intel:    MatrixMedia-0.6.1-mac-x64.dmg
- *   Mac Silicon:  MatrixMedia-0.6.1-mac-arm64.dmg
+ *   Mac (x64):    MatrixMedia-0.6.1-mac-x64.dmg（Apple Silicon 通过 Rosetta 运行）
  *   Linux x64:    MatrixMedia-0.6.1-linux-x64.AppImage（不发 Gitee）
  *
  * 兼容历史命名（旧 Release 包仍可正常升级）：
@@ -143,22 +142,18 @@ function pickReleaseInstaller(assets) {
   }
   if (platform === "darwin") {
     const dmgs = list.filter((a) => /\.dmg$/i.test(a.name));
-    const isAppleSilicon = process.arch === "arm64";
-    const armDmg = dmgs.find((a) => /-arm64\.dmg$/i.test(a.name));
     const x64Dmg = dmgs.find((a) => /-(mac-)?x64\.dmg$/i.test(a.name));
     const universalDmg = dmgs.find((a) => /-universal\.dmg$/i.test(a.name));
-    // 旧版裸命名(如 矩媒-0.6.0.dmg)做最后兜底
+    // 旧版裸命名(如 矩媒-0.6.0.dmg)做兜底；历史 arm64 包仅兼容旧 Release
     const plainDmg = dmgs.find(
       (a) =>
         !/-arm64\.dmg$/i.test(a.name) &&
         !/-(mac-)?x64\.dmg$/i.test(a.name) &&
         !/-universal\.dmg$/i.test(a.name)
     );
+    const armDmg = dmgs.find((a) => /-arm64\.dmg$/i.test(a.name));
 
-    if (isAppleSilicon) {
-      return armDmg || universalDmg || plainDmg || null;
-    }
-    return x64Dmg || universalDmg || plainDmg || null;
+    return x64Dmg || universalDmg || plainDmg || armDmg || null;
   }
   return null;
 }

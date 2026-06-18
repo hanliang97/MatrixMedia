@@ -108,6 +108,16 @@ export function cancelPuppeteerTasks(reason) {
   return puppeteerTaskRuntime.cancelPuppeteerTasks(reason);
 }
 
+let openPublishWindows = new Set();
+
+export function hasActivePublishTasks() {
+  return (
+    puppeteerTaskRuntime.isBusy() ||
+    puppeteerTaskRuntime.getQueueSize() > 0 ||
+    openPublishWindows.size > 0
+  );
+}
+
 function isExpectedPublishUrl(data, currentUrl) {
   if (currentUrl === data.url) return true;
   if (data && data.pt === "掘金") {
@@ -254,7 +264,14 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         err._mmUploadFailurePayload = payload;
         throw err;
       }
-      return transport.reply(channel, ...args);
+      const ok =
+        channel === "puppeteerFile-done" &&
+        payload &&
+        payload.status === true &&
+        !payload.skipped;
+      const replied = transport.reply(channel, ...args);
+      if (ok) finishOnce();
+      return replied;
     },
   });
 
@@ -300,6 +317,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         },
       });
       activeWin = win;
+      openPublishWindows.add(win);
       page = await pie.getPage(browser, win);
 
       // Block any window.open() calls from the publish page (e.g. Juejin OAuth popups)
@@ -375,6 +393,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       }
 
       win.on("closed", () => {
+        openPublishWindows.delete(win);
         if (autoCloseTimer) {
           clearTimeout(autoCloseTimer);
           autoCloseTimer = null;

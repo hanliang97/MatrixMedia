@@ -136,7 +136,9 @@ export function buildTaskPayloadFromRecord(record) {
     selectedFile: record.selectedFile || path.basename(record.filePath || ""),
     url: record.uploadUrl || cfg.upload || record.url,
     show: false,
-    mmCliSuppressWindow: true,
+    mmCliSuppressWindow: false,
+    publishMode: record.publishMode || "publish",
+    publishToDraft: record.publishMode === "draft",
     closeWindowAfterPublish: true,
     useragent: record.useragent || cfg.useragent,
     partition: record.partition,
@@ -242,11 +244,14 @@ function executeScheduledRecord(record) {
     lastPublishMessage: "定时任务开始发布",
     lastPublishAt: Date.now(),
   });
+  let publishSettled = false;
   const transport = {
     reply(channel, payload) {
       if (payload && payload.taskId != null && payload.taskId !== taskId)
         return;
       if (channel === "puppeteerFile-done") {
+        if (publishSettled) return;
+        publishSettled = true;
         finishScheduledRecord(record, payload);
       } else if (channel === "puppeteer-noLogin") {
         updateRecord(record, {

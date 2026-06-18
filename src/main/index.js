@@ -32,6 +32,10 @@ import {
   getMainProcessLogFilePath,
   clearMainProcessLogFile,
 } from "./services/mainProcessLogFile";
+import {
+  hasActivePublishTasks,
+  cancelPuppeteerTasks,
+} from "./services/puppeteerFile";
 
 const cliMode = isCliMode(process.argv);
 installMainProcessLogFile(app);
@@ -62,6 +66,52 @@ if (!cliMode) {
 }
 
 let tray;
+let mainWin = null;
+let allowQuit = false;
+
+function notifyQuitWarning() {
+  const win = mainWin && !mainWin.isDestroyed() ? mainWin : null;
+  if (win && win.webContents && !win.webContents.isDestroyed()) {
+    win.webContents.send("app-quit-toast");
+  }
+}
+
+function performQuit() {
+  if (hasActivePublishTasks()) {
+    cancelPuppeteerTasks("应用退出，已中断发布");
+  }
+  allowQuit = true;
+  app.quit();
+}
+
+function requestQuit() {
+  if (allowQuit) {
+    app.quit();
+    return;
+  }
+  notifyQuitWarning();
+  const parent = mainWin && !mainWin.isDestroyed() ? mainWin : undefined;
+  const choice = dialog.showMessageBoxSync(parent, {
+    type: "warning",
+    title: "退出程序",
+    message: "退出会停止正在发布的视频，确定要退出吗？",
+    buttons: ["退出", "取消"],
+    defaultId: 1,
+    cancelId: 1,
+    noLink: true,
+  });
+  if (choice === 0) performQuit();
+}
+
+if (!cliMode) {
+  app.on("before-quit", (event) => {
+    if (allowQuit) return;
+    event.preventDefault();
+    setImmediate(() => {
+      requestQuit();
+    });
+  });
+}
 
 pie.initialize(app).then(() => {
   if (cliMode) {
@@ -90,6 +140,7 @@ pie.initialize(app).then(() => {
 function onAppReady() {
   startScheduledPublishScheduler();
   initWindow((win) => {
+    mainWin = win;
     const iconPath = path.join(__static, "logo.png");
     console.log(iconPath);
     let icon = nativeImage.createFromPath(iconPath);
@@ -181,7 +232,8 @@ function onAppReady() {
           const first = await dialog.showMessageBox(win, {
             type: "warning",
             title: "清除日志",
-            message: "将清除日志目录下所有按天保存的日志，且不可恢复。是否继续？",
+            message:
+              "将清除日志目录下所有按天保存的日志，且不可恢复。是否继续？",
             buttons: ["继续", "取消"],
             defaultId: 1,
             cancelId: 1,

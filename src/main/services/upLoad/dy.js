@@ -16,6 +16,7 @@ async function selectDyCreativeStatement(page, data) {
 
   const opened = await page.evaluate(() => {
     const norm = (t) => String(t).replace(/\s+/g, "").trim();
+    const keywords = ["请选择自主声明", "添加自主声明", "自主声明"];
     const isSelectText = (el) => {
       const cls = el.className;
       if (typeof cls !== "string") return false;
@@ -23,15 +24,24 @@ async function selectDyCreativeStatement(page, data) {
     };
     for (const el of document.querySelectorAll("[class]")) {
       if (!isSelectText(el)) continue;
-      if (!norm(el.textContent).includes("请选择自主声明")) continue;
+      const text = norm(el.textContent);
+      if (!keywords.some((k) => text.includes(norm(k)))) continue;
+      el.click();
+      return true;
+    }
+    for (const el of document.querySelectorAll(
+      "span, div, label, [role='button'], .semi-select"
+    )) {
+      const text = norm(el.textContent);
+      if (!keywords.some((k) => text.includes(norm(k)))) continue;
+      if (text.length > 24) continue;
       el.click();
       return true;
     }
     return false;
   });
   if (!opened) {
-    console.warn("未找到抖音「请选择自主声明」入口，跳过");
-    return;
+    throw new Error("未找到抖音「请选择自主声明」入口");
   }
 
   await page.waitForSelector(".semi-modal-body .semi-radio-addon", {
@@ -54,34 +64,56 @@ async function selectDyCreativeStatement(page, data) {
   }, label);
 
   if (!picked) {
-    console.warn(`未找到抖音自主声明选项: ${label}`);
-    return;
+    throw new Error(`未找到抖音自主声明选项: ${label}`);
   }
   await page.waitForTimeout(400);
 
   // 点击弹窗里的「确认」按钮提交声明
-  try {
-    const confirmed = await page.evaluate(() => {
-      const modal = document.querySelector(".semi-modal-body");
-      const root = modal ? modal.closest(".semi-modal") || modal : document;
-      const btn = root.querySelector(".semi-button.semi-button-primary");
-      if (btn) {
-        btn.click();
-        return true;
-      }
-      return false;
-    });
-    if (!confirmed) {
-      console.warn(
-        "未找到抖音自主声明确认按钮 .semi-button.semi-button-primary"
-      );
-    } else {
-      console.log("[dy] 已点击声明确认按钮");
+  const confirmed = await page.evaluate(() => {
+    const modal = document.querySelector(".semi-modal-body");
+    const root = modal ? modal.closest(".semi-modal") || modal : document;
+    const btn = root.querySelector(".semi-button.semi-button-primary");
+    if (btn) {
+      btn.click();
+      return true;
     }
-    await page.waitForTimeout(400);
-  } catch (e) {
-    console.warn("点击抖音声明确认按钮失败:", e?.message || e);
+    return false;
+  });
+  if (!confirmed) {
+    throw new Error("未找到抖音自主声明确认按钮");
   }
+  console.log("[dy] 已点击声明确认按钮");
+  await page.waitForTimeout(400);
+}
+
+async function selectDyCreativeStatementWithRetry(page, data, maxMs = 60000) {
+  const deadline = Date.now() + maxMs;
+  let lastErr = null;
+  while (Date.now() < deadline) {
+    try {
+      await selectDyCreativeStatement(page, data);
+      return;
+    } catch (e) {
+      lastErr = e;
+      await page.waitForTimeout(2000);
+    }
+  }
+  throw lastErr || new Error("抖音自主声明选择失败");
+}
+
+async function clickDyPublish(page, isDraftMode) {
+  const submitSelector = isDraftMode
+    ? "#popover-tip-container+button"
+    : "#popover-tip-container";
+  const submitBtn = await page.waitForSelector(submitSelector, {
+    timeout: WAIT_SELECTOR_APPEAR_MS,
+  });
+  await submitBtn.click({ delay: 200 });
+  console.log(
+    isDraftMode
+      ? "[dy] 已点击存草稿按钮 (#popover-tip-container+button)"
+      : "[dy] 已点击发布入口 (#popover-tip-container)"
+  );
 }
 
 export default async function (page, data, window, event) {
@@ -121,13 +153,6 @@ export default async function (page, data, window, event) {
     console.error("❌ 输入标题失败", e);
   }
 
-  // 话题输入完后立即选择自主声明（必须声明）
-  try {
-    await selectDyCreativeStatement(page, data);
-  } catch (e) {
-    console.warn("抖音自主声明选择未完成:", e?.message || e);
-  }
-
   try {
     // 不依赖会随打包变化的 container-xxx：等预览区 video（抖音 CDN）与同容器内的 rc 进度条同时出现
     await pollPageUntil(
@@ -137,7 +162,10 @@ export default async function (page, data, window, event) {
           const src = v.currentSrc || v.getAttribute("src") || "";
           if (!src.includes("douyin.com")) continue;
           const parent = v.parentElement;
-          if (parent && parent.querySelector(".rc-slider.rc-slider-horizontal")) {
+          if (
+            parent &&
+            parent.querySelector(".rc-slider.rc-slider-horizontal")
+          ) {
             return true;
           }
         }
@@ -151,11 +179,14 @@ export default async function (page, data, window, event) {
       () => {
         const norm = (t) => String(t).replace(/\s+/g, "").trim();
         const hasSaveTitleIn = (root) =>
-          [...root.querySelectorAll("span")].some((s) => norm(s.textContent).includes("保存权限"));
+          [...root.querySelectorAll("span")].some((s) =>
+            norm(s.textContent).includes("保存权限")
+          );
         for (const label of document.querySelectorAll("label")) {
           if (!label.textContent.includes("不允许")) continue;
           const inp = label.querySelector('input[value="0"]');
-          if (!inp || (inp.type !== "checkbox" && inp.type !== "radio")) continue;
+          if (!inp || (inp.type !== "checkbox" && inp.type !== "radio"))
+            continue;
           let a = label;
           for (let i = 0; i < 28 && a; i++) {
             if (hasSaveTitleIn(a)) return true;
@@ -169,7 +200,9 @@ export default async function (page, data, window, event) {
     const saved = await page.evaluate(() => {
       const norm = (t) => String(t).replace(/\s+/g, "").trim();
       const hasSaveTitleIn = (root) =>
-        [...root.querySelectorAll("span")].some((s) => norm(s.textContent).includes("保存权限"));
+        [...root.querySelectorAll("span")].some((s) =>
+          norm(s.textContent).includes("保存权限")
+        );
       for (const label of document.querySelectorAll("label")) {
         if (!label.textContent.includes("不允许")) continue;
         const inp = label.querySelector('input[value="0"]');
@@ -186,9 +219,11 @@ export default async function (page, data, window, event) {
       return false;
     });
     if (!saved) throw new Error("未找到保存权限-不允许");
-    const submitSelector = isDraftMode ? "#popover-tip-container+button" : "#popover-tip-container";
-    const submitBtn = await page.waitForSelector(submitSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
-    await submitBtn.click({ delay: 200 });
+
+    // 自主声明入口在视频转码完成后才出现，必须在点击发布前完成
+    await selectDyCreativeStatementWithRetry(page, data);
+
+    await clickDyPublish(page, isDraftMode);
     console.log(isDraftMode ? "✅ 抖音视频已保存草稿" : "✅ 抖音视频上传成功");
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
@@ -199,10 +234,11 @@ export default async function (page, data, window, event) {
       maybeClosePublishWindow(data, window);
     }, 5000);
   } catch (e) {
+    const detail = (e && e.message) || String(e);
     event.reply("puppeteerFile-done", {
       ...data,
       status: false,
-      message: "上传失败",
+      message: detail.length > 200 ? `${detail.slice(0, 200)}…` : detail,
     });
     console.error("❌ 上传失败", e);
   }

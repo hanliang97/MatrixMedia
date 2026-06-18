@@ -87,7 +87,7 @@ function listen(app) {
   const buildDir = path.join(tempRoot, "build");
   fs.mkdirSync(path.join(buildDir, "nested"), { recursive: true });
   fs.writeFileSync(
-    path.join(buildDir, "MatrixMedia-0.6.2-mac-arm64.dmg"),
+    path.join(buildDir, "MatrixMedia-0.6.2-mac-x64.dmg"),
     "installer"
   );
   fs.writeFileSync(path.join(buildDir, "notes.txt"), "notes");
@@ -108,7 +108,7 @@ function listen(app) {
     assert.match(index.headers["content-type"], /text\/html/);
     assert.match(
       index.body.toString("utf8"),
-      /MatrixMedia-0\.6\.2-mac-arm64\.dmg/
+      /MatrixMedia-0\.6\.2-mac-x64\.dmg/
     );
     assert.match(index.body.toString("utf8"), /notes\.txt/);
     assert.match(index.body.toString("utf8"), /关闭下载服务/);
@@ -153,7 +153,7 @@ function listen(app) {
     assert.strictEqual(sanitizeUploadFileName("../evil.exe"), "evil.exe");
     assert.strictEqual(sanitizeUploadFileName(".."), null);
 
-    const file = await request(server, "/MatrixMedia-0.6.2-mac-arm64.dmg");
+    const file = await request(server, "/MatrixMedia-0.6.2-mac-x64.dmg");
     assert.strictEqual(file.statusCode, 200);
     assert.strictEqual(file.body.toString("utf8"), "installer");
     assert.match(file.headers["content-disposition"], /attachment/);

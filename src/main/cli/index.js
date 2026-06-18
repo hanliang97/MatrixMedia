@@ -1,12 +1,15 @@
 "use strict";
 
 import path from "path";
-import fs from 'fs';
-import xlsx from 'xlsx';
-import { normalizeCreativeStatement } from '../../shared/creativeStatement.js';
+import fs from "fs";
+import xlsx from "xlsx";
+import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
 import { getCliSubArgv, isCliMode } from "./detectArgv";
 import { parsePublishArgs, publishHelpText } from "./parsePublishArgs";
-import { parsePublishArticleArgs, publishArticleHelpText } from "./parsePublishArticleArgs";
+import {
+  parsePublishArticleArgs,
+  publishArticleHelpText,
+} from "./parsePublishArticleArgs";
 import { parseLoginArgs, loginHelpText } from "./parseLoginArgs";
 import { parseAccountsArgs, accountsHelpText } from "./parseAccountsArgs";
 import { parseHistoryArgs, historyHelpText } from "./parseHistoryArgs";
@@ -47,7 +50,7 @@ function articleFileName(filePath) {
 
 function todayYmd() {
   const d = new Date();
-  const pad = n => String(n).padStart(2, "0");
+  const pad = (n) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
@@ -66,26 +69,40 @@ function derivePhoneForRecord(v) {
 function parseXlsxRows(xlsxPath) {
   const workbook = xlsx.readFile(xlsxPath);
   const sheet = workbook.Sheets[workbook.SheetNames[0]];
-  const rows = xlsx.utils.sheet_to_json(sheet, { defval: '' });
+  const rows = xlsx.utils.sheet_to_json(sheet, { defval: "" });
   const cleanCell = (val) =>
-    String(val || '')
-      .replace(/[﻿​‌‍ ]/g, '')
-      .replace(/[\n\t]/g, '')
+    String(val || "")
+      .replace(/[﻿​‌‍ ]/g, "")
+      .replace(/[\n\t]/g, "")
       .trim();
-  return rows.map(row => {
-    const map = {};
-    Object.keys(row).forEach(k => { map[cleanCell(k).toLowerCase()] = row[k]; });
-    return {
-      fileName: cleanCell(map['文件名'] != null ? map['文件名'] : map['filename'] != null ? map['filename'] : map['file'] || ''),
-      title: cleanCell(map['标题'] != null ? map['标题'] : map['title'] || ''),
-      tags: cleanCell(map['标签'] != null ? map['标签'] : map['tags'] || ''),
-      creativeStatement: cleanCell(
-        map['创作声明'] != null ? map['创作声明']
-        : map['creativestatement'] != null ? map['creativestatement']
-        : map['cs'] || ''
-      ),
-    };
-  }).filter(r => r.fileName);
+  return rows
+    .map((row) => {
+      const map = {};
+      Object.keys(row).forEach((k) => {
+        map[cleanCell(k).toLowerCase()] = row[k];
+      });
+      return {
+        fileName: cleanCell(
+          map["文件名"] != null
+            ? map["文件名"]
+            : map["filename"] != null
+            ? map["filename"]
+            : map["file"] || ""
+        ),
+        title: cleanCell(
+          map["标题"] != null ? map["标题"] : map["title"] || ""
+        ),
+        tags: cleanCell(map["标签"] != null ? map["标签"] : map["tags"] || ""),
+        creativeStatement: cleanCell(
+          map["创作声明"] != null
+            ? map["创作声明"]
+            : map["creativestatement"] != null
+            ? map["creativestatement"]
+            : map["cs"] || ""
+        ),
+      };
+    })
+    .filter((r) => r.fileName);
 }
 
 /**
@@ -94,24 +111,30 @@ function parseXlsxRows(xlsxPath) {
  */
 function resolveFileInDir(dirPath, fileName) {
   const norm = (s) =>
-    String(s || '')
-      .replace(/[﻿​‌‍ ]/g, '')
-      .replace(/[\n\t]/g, '')
+    String(s || "")
+      .replace(/[﻿​‌‍ ]/g, "")
+      .replace(/[\n\t]/g, "")
       .trim()
       .toLowerCase();
   let entries;
-  try { entries = fs.readdirSync(dirPath); } catch { return null; }
+  try {
+    entries = fs.readdirSync(dirPath);
+  } catch {
+    return null;
+  }
   const indexByName = new Map();
   const indexByStem = new Map();
-  entries.forEach(entry => {
+  entries.forEach((entry) => {
     indexByName.set(norm(entry), entry);
-    const stem = entry.replace(/\.[^/.]+$/, '');
+    const stem = entry.replace(/\.[^/.]+$/, "");
     if (!indexByStem.has(norm(stem))) indexByStem.set(norm(stem), entry);
   });
   const normName = norm(fileName);
-  if (indexByName.has(normName)) return path.join(dirPath, indexByName.get(normName));
-  if (indexByStem.has(normName)) return path.join(dirPath, indexByStem.get(normName));
-  const stem = norm(String(fileName).replace(/\.[^/.]+$/, ''));
+  if (indexByName.has(normName))
+    return path.join(dirPath, indexByName.get(normName));
+  if (indexByStem.has(normName))
+    return path.join(dirPath, indexByStem.get(normName));
+  const stem = norm(String(fileName).replace(/\.[^/.]+$/, ""));
   if (indexByStem.has(stem)) return path.join(dirPath, indexByStem.get(stem));
   return null;
 }
@@ -137,11 +160,15 @@ function isSameArticleRecord(record, target) {
     record.textOtherName === target.textOtherName &&
     record.pt === target.pt &&
     record.textType === target.textType &&
-    articleRecordValue(record.partition) === articleRecordValue(target.partition) &&
-    articleRecordValue(record.articleFilePath) === articleRecordValue(target.articleFilePath) &&
+    articleRecordValue(record.partition) ===
+      articleRecordValue(target.partition) &&
+    articleRecordValue(record.articleFilePath) ===
+      articleRecordValue(target.articleFilePath) &&
     articleRecordValue(record.content) === articleRecordValue(target.content) &&
-    articleRecordValue(record.coverPath) === articleRecordValue(target.coverPath) &&
-    articleRecordValue(record.category) === articleRecordValue(target.category) &&
+    articleRecordValue(record.coverPath) ===
+      articleRecordValue(target.coverPath) &&
+    articleRecordValue(record.category) ===
+      articleRecordValue(target.category) &&
     articleTagsValue(record) === articleTagsValue(target) &&
     articleRecordValue(record.summary) === articleRecordValue(target.summary)
   );
@@ -156,12 +183,12 @@ function isSameArticleRecord(record, target) {
 async function runBatchDirPublish(v, cfg) {
   const resolvedDir = path.resolve(v.dir);
   if (!fs.existsSync(resolvedDir) || !fs.statSync(resolvedDir).isDirectory()) {
-    console.error('目录不存在或不是有效目录: ' + resolvedDir);
+    console.error("目录不存在或不是有效目录: " + resolvedDir);
     return 2;
   }
   const resolvedXlsx = path.resolve(v.config);
   if (!fs.existsSync(resolvedXlsx)) {
-    console.error('xlsx 文件不存在: ' + resolvedXlsx);
+    console.error("xlsx 文件不存在: " + resolvedXlsx);
     return 2;
   }
 
@@ -169,11 +196,13 @@ async function runBatchDirPublish(v, cfg) {
   try {
     rows = parseXlsxRows(resolvedXlsx);
   } catch (e) {
-    console.error('解析 xlsx 失败: ' + (e && e.message ? e.message : String(e)));
+    console.error(
+      "解析 xlsx 失败: " + (e && e.message ? e.message : String(e))
+    );
     return 2;
   }
   if (rows.length === 0) {
-    console.error('xlsx 中没有有效行（文件名列全部为空）');
+    console.error("xlsx 中没有有效行（文件名列全部为空）");
     return 2;
   }
 
@@ -191,9 +220,9 @@ async function runBatchDirPublish(v, cfg) {
         fileName: row.fileName,
         title: row.title,
         platform: v.platform,
-        phone: v.phone || '',
-        status: 'skipped',
-        message: '文件不存在: ' + row.fileName,
+        phone: v.phone || "",
+        status: "skipped",
+        message: "文件不存在: " + row.fileName,
       };
       results.push(r);
       console.log(JSON.stringify({ progress: true, ...r }));
@@ -201,44 +230,50 @@ async function runBatchDirPublish(v, cfg) {
     }
 
     const stem = fileStem(resolvedFile);
-    const bt1 = (row.title && row.title.trim()) ? row.title.trim() : stem;
+    const bt1 = row.title && row.title.trim() ? row.title.trim() : stem;
     const bt2 = bt1;
     const bookName = stem;
 
     // Format tags: split by comma (xlsx format), then # prefix for hashtag platforms
-    const rawTags = String(row.tags || '').trim();
-    let bq = '';
+    const rawTags = String(row.tags || "").trim();
+    let bq = "";
     if (rawTags) {
-      const tagList = rawTags.split(',').map(t => t.trim()).filter(Boolean);
-      const hashtagPlatforms = new Set(['视频号', '抖音', '快手']);
+      const tagList = rawTags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean);
+      const hashtagPlatforms = new Set(["视频号", "抖音", "快手"]);
       if (hashtagPlatforms.has(v.platform)) {
-        bq = tagList.map(t => t.startsWith('#') ? t : '#' + t).join(' ');
+        bq = tagList.map((t) => (t.startsWith("#") ? t : "#" + t)).join(" ");
       } else {
-        bq = tagList.map(t => t.replace(/^#/, '')).join(' ');
+        bq = tagList.map((t) => t.replace(/^#/, "")).join(" ");
       }
     }
 
-    const cs = normalizeCreativeStatement(row.creativeStatement || '');
+    const cs = normalizeCreativeStatement(row.creativeStatement || "");
 
     const taskId = Date.now() + Math.random();
     const taskPayload = {
       taskId,
       bookName,
-      textType: 'local',
+      textType: "local",
       data: {
         textOtherName: stem,
         bt1,
         bt2,
         bq,
-        bdText: '',
+        bdText: "",
         creativeStatement: cs,
       },
       url: cfg.upload,
       show: false,
-      mmCliSuppressWindow: true,
+      mmCliSuppressWindow: false,
+      publishMode: "publish",
+      publishToDraft: false,
       closeWindowAfterPublish: true,
       useragent: cfg.useragent,
       partition: v.partition,
+      phone: derivePhoneForRecord(v),
       filePath: resolvedFile,
       pt: v.platform,
     };
@@ -247,7 +282,7 @@ async function runBatchDirPublish(v, cfg) {
     const recordItem = {
       bookName,
       textOtherName: stem,
-      textType: 'local',
+      textType: "local",
       pt: v.platform,
       selectedFile,
       bt: bt1,
@@ -264,61 +299,75 @@ async function runBatchDirPublish(v, cfg) {
       republishCount: 0,
       publishSuccessCount: 0,
       publishFailCount: 0,
-      publishStatus: 'publishing',
-      lastPublishMessage: '等待发布结果',
+      publishStatus: "publishing",
+      lastPublishMessage: "等待发布结果",
       lastPublishAt: Date.now(),
     };
 
     let recordId = null;
     try {
-      const addRes = changeData({ fileName: 'pushData', type: 'add', item: recordItem });
+      const addRes = changeData({
+        fileName: "pushData",
+        type: "add",
+        item: recordItem,
+      });
       if (addRes && addRes.success && Array.isArray(addRes.data)) {
-        const found = [...addRes.data].reverse().find(
-          it =>
-            it.textOtherName === recordItem.textOtherName &&
-            it.pt === recordItem.pt &&
-            it.selectedFile === recordItem.selectedFile &&
-            it.textType === recordItem.textType
-        );
+        const found = [...addRes.data]
+          .reverse()
+          .find(
+            (it) =>
+              it.textOtherName === recordItem.textOtherName &&
+              it.pt === recordItem.pt &&
+              it.selectedFile === recordItem.selectedFile &&
+              it.textType === recordItem.textType
+          );
         if (found) recordId = found.id;
       }
     } catch (e) {
-      console.error('MatrixMedia: 写入 pushData 初始记录失败 [' + row.fileName + ']:', e && e.message);
+      console.error(
+        "MatrixMedia: 写入 pushData 初始记录失败 [" + row.fileName + "]:",
+        e && e.message
+      );
     }
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
       try {
         changeData({
-          fileName: 'pushData',
-          type: 'update',
+          fileName: "pushData",
+          type: "update",
           item: {
             id: recordId,
             date: recordDate,
             publishStatus: status,
-            publishSuccessCount: status === 'success' ? 1 : 0,
-            publishFailCount: status === 'failed' ? 1 : 0,
-            lastPublishMessage: message || '',
+            publishSuccessCount: status === "success" ? 1 : 0,
+            publishFailCount: status === "failed" ? 1 : 0,
+            lastPublishMessage: message || "",
             lastPublishAt: Date.now(),
           },
         });
       } catch (e) {
-        console.error('MatrixMedia: 更新 pushData 记录失败 [' + row.fileName + ']:', e && e.message);
+        console.error(
+          "MatrixMedia: 更新 pushData 记录失败 [" + row.fileName + "]:",
+          e && e.message
+        );
       }
     };
 
-    console.log(JSON.stringify({
-      progress: true,
-      index: i + 1,
-      total: rows.length,
-      fileName: row.fileName,
-      title: bt1,
-      platform: v.platform,
-      phone: v.phone || '',
-      status: 'publishing',
-    }));
+    console.log(
+      JSON.stringify({
+        progress: true,
+        index: i + 1,
+        total: rows.length,
+        fileName: row.fileName,
+        title: bt1,
+        platform: v.platform,
+        phone: v.phone || "",
+        status: "publishing",
+      })
+    );
 
-    const taskResult = await new Promise(resolve => {
+    const taskResult = await new Promise((resolve) => {
       let settled = false;
       const finish = (ok, message) => {
         if (settled) return;
@@ -329,31 +378,37 @@ async function runBatchDirPublish(v, cfg) {
 
       const timer = setTimeout(() => {
         const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
-        const msg = 'CLI publish 超时（' + min + ' 分钟）';
-        console.error('[' + row.fileName + '] ' + msg);
-        updateRecord('failed', msg);
+        const msg = "CLI publish 超时（" + min + " 分钟）";
+        console.error("[" + row.fileName + "] " + msg);
+        updateRecord("failed", msg);
         finish(false, msg);
       }, CLI_PUBLISH_TIMEOUT_MS);
 
       const transport = {
         reply(channel, payload) {
-          if (channel === 'puppeteerFile-done') {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) return;
+          if (channel === "puppeteerFile-done") {
+            if (payload && payload.taskId != null && payload.taskId !== taskId)
+              return;
             if (payload && payload.skipped) {
-              const msg = payload.message || '用户关闭窗口，已跳过发布';
-              updateRecord('skipped', msg);
+              const msg = payload.message || "用户关闭窗口，已跳过发布";
+              updateRecord("skipped", msg);
               finish(true, msg);
               return;
             }
             const ok = payload && payload.status === true;
-            const msg = (payload && payload.message) || (ok ? '上传成功' : '上传失败');
-            updateRecord(ok ? 'success' : 'failed', msg);
+            const msg =
+              (payload && payload.message) || (ok ? "上传成功" : "上传失败");
+            updateRecord(ok ? "success" : "failed", msg);
             finish(ok, msg);
-          } else if (channel === 'puppeteer-noLogin') {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) return;
-            const msg = '登录态异常或未登录';
-            console.error('[' + row.fileName + '] ' + msg + ':', JSON.stringify(payload));
-            updateRecord('failed', msg);
+          } else if (channel === "puppeteer-noLogin") {
+            if (payload && payload.taskId != null && payload.taskId !== taskId)
+              return;
+            const msg = "登录态异常或未登录";
+            console.error(
+              "[" + row.fileName + "] " + msg + ":",
+              JSON.stringify(payload)
+            );
+            updateRecord("failed", msg);
             finish(false, msg);
           }
         },
@@ -368,8 +423,8 @@ async function runBatchDirPublish(v, cfg) {
       fileName: row.fileName,
       title: bt1,
       platform: v.platform,
-      phone: v.phone || '',
-      status: taskResult.ok ? 'success' : 'failed',
+      phone: v.phone || "",
+      status: taskResult.ok ? "success" : "failed",
       message: taskResult.message,
     };
     results.push(r);
@@ -377,16 +432,20 @@ async function runBatchDirPublish(v, cfg) {
   }
 
   // Summary
-  const succeeded = results.filter(r => r.status === 'success').length;
-  const failed = results.filter(r => r.status === 'failed' || r.status === 'skipped').length;
-  console.log(JSON.stringify({
-    summary: true,
-    total: rows.length,
-    succeeded,
-    failed,
-    message: '成功 ' + succeeded + ' / 失败 ' + failed,
-    results,
-  }));
+  const succeeded = results.filter((r) => r.status === "success").length;
+  const failed = results.filter(
+    (r) => r.status === "failed" || r.status === "skipped"
+  ).length;
+  console.log(
+    JSON.stringify({
+      summary: true,
+      total: rows.length,
+      succeeded,
+      failed,
+      message: "成功 " + succeeded + " / 失败 " + failed,
+      results,
+    })
+  );
 
   if (failed === 0) return 0;
   if (succeeded === 0) return 2;
@@ -399,7 +458,9 @@ async function runBatchDirPublish(v, cfg) {
 export async function runCliMain(argv = process.argv) {
   const sub = getCliSubArgv(argv);
   if (!sub || sub.length === 0) {
-    console.error("用法: <应用> cli <publish|publish-article|login|accounts|history> ...");
+    console.error(
+      "用法: <应用> cli <publish|publish-article|login|accounts|history> ..."
+    );
     console.error("  cli publish --help");
     console.error("  cli publish-article --help");
     console.error("  cli login --help");
@@ -480,14 +541,19 @@ export async function runCliMain(argv = process.argv) {
         bt2,
         bq: String(v.bq || "").trim(),
         bdText: "",
-        creativeStatement: normalizeCreativeStatement(v.creativeStatement || ''),
+        creativeStatement: normalizeCreativeStatement(
+          v.creativeStatement || ""
+        ),
       },
       url: cfg.upload,
       show: v.show,
-      mmCliSuppressWindow: true,
+      mmCliSuppressWindow: false,
+      publishMode: "publish",
+      publishToDraft: false,
       closeWindowAfterPublish: v.show ? v.closeWindowAfterPublish : true,
       useragent: cfg.useragent,
       partition: v.partition,
+      phone: derivePhoneForRecord(v),
       filePath: resolvedFile,
       pt: v.platform,
     };
@@ -507,6 +573,7 @@ export async function runCliMain(argv = process.argv) {
       bt: bt1,
       bt2,
       bq: String(v.bq || "").trim(),
+      creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
       filePath: resolvedFile,
       useragent: cfg.useragent,
       phone: derivePhoneForRecord(v),
@@ -532,18 +599,24 @@ export async function runCliMain(argv = process.argv) {
         return 2;
       }
       try {
-        const addRes = changeData({ fileName: "pushData", type: "add", item: scheduledRecord });
+        const addRes = changeData({
+          fileName: "pushData",
+          type: "add",
+          item: scheduledRecord,
+        });
         let recordId = null;
         if (addRes && addRes.success && Array.isArray(addRes.data)) {
-          const found = [...addRes.data].reverse().find(
-            it =>
-              it.scheduledTask === true &&
-              it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
-              it.textOtherName === scheduledRecord.textOtherName &&
-              it.pt === scheduledRecord.pt &&
-              it.selectedFile === scheduledRecord.selectedFile &&
-              it.textType === scheduledRecord.textType
-          );
+          const found = [...addRes.data]
+            .reverse()
+            .find(
+              (it) =>
+                it.scheduledTask === true &&
+                it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
+                it.textOtherName === scheduledRecord.textOtherName &&
+                it.pt === scheduledRecord.pt &&
+                it.selectedFile === scheduledRecord.selectedFile &&
+                it.textType === scheduledRecord.textType
+            );
           if (found) recordId = found.id;
         }
         console.log(
@@ -564,15 +637,21 @@ export async function runCliMain(argv = process.argv) {
 
     let recordId = null;
     try {
-      const addRes = changeData({ fileName: "pushData", type: "add", item: recordItem });
+      const addRes = changeData({
+        fileName: "pushData",
+        type: "add",
+        item: recordItem,
+      });
       if (addRes && addRes.success && Array.isArray(addRes.data)) {
-        const found = [...addRes.data].reverse().find(
-          it =>
-            it.textOtherName === recordItem.textOtherName &&
-            it.pt === recordItem.pt &&
-            it.selectedFile === recordItem.selectedFile &&
-            it.textType === recordItem.textType
-        );
+        const found = [...addRes.data]
+          .reverse()
+          .find(
+            (it) =>
+              it.textOtherName === recordItem.textOtherName &&
+              it.pt === recordItem.pt &&
+              it.selectedFile === recordItem.selectedFile &&
+              it.textType === recordItem.textType
+          );
         if (found) recordId = found.id;
       }
     } catch (e) {
@@ -600,9 +679,9 @@ export async function runCliMain(argv = process.argv) {
       }
     };
 
-    return await new Promise(resolve => {
+    return await new Promise((resolve) => {
       let settled = false;
-      const finish = code => {
+      const finish = (code) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -619,7 +698,11 @@ export async function runCliMain(argv = process.argv) {
       const transport = {
         reply(channel, payload) {
           if (channel === "puppeteerFile-done") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) {
+            if (
+              payload &&
+              payload.taskId != null &&
+              payload.taskId !== taskId
+            ) {
               return;
             }
             if (payload && payload.skipped) {
@@ -638,16 +721,31 @@ export async function runCliMain(argv = process.argv) {
               return;
             }
             const ok = payload && payload.status === true;
-            console.log(JSON.stringify({ channel, status: ok, message: payload && payload.message }));
-            updateRecord(ok ? "success" : "failed", (payload && payload.message) || (ok ? "上传成功" : "上传失败"));
+            console.log(
+              JSON.stringify({
+                channel,
+                status: ok,
+                message: payload && payload.message,
+              })
+            );
+            updateRecord(
+              ok ? "success" : "failed",
+              (payload && payload.message) || (ok ? "上传成功" : "上传失败")
+            );
             finish(ok ? 0 : 3);
           } else if (channel === "puppeteer-noLogin") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) {
+            if (
+              payload &&
+              payload.taskId != null &&
+              payload.taskId !== taskId
+            ) {
               return;
             }
             console.error("登录态异常或未登录:", JSON.stringify(payload));
             if (payload && payload.pt === "抖音") {
-              console.error("提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。");
+              console.error(
+                "提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"
+              );
             }
             updateRecord("failed", "登录态异常或未登录");
             finish(3);
@@ -754,15 +852,21 @@ export async function runCliMain(argv = process.argv) {
         return 2;
       }
       try {
-        const addRes = changeData({ fileName: "pushData", type: "add", item: scheduledRecord });
+        const addRes = changeData({
+          fileName: "pushData",
+          type: "add",
+          item: scheduledRecord,
+        });
         let recordId = null;
         if (addRes && addRes.success && Array.isArray(addRes.data)) {
-          const found = [...addRes.data].reverse().find(
-            it =>
-              it.scheduledTask === true &&
-              it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
-              isSameArticleRecord(it, scheduledRecord)
-          );
+          const found = [...addRes.data]
+            .reverse()
+            .find(
+              (it) =>
+                it.scheduledTask === true &&
+                it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
+                isSameArticleRecord(it, scheduledRecord)
+            );
           if (found) recordId = found.id;
         }
         console.log(
@@ -783,15 +887,22 @@ export async function runCliMain(argv = process.argv) {
 
     let recordId = null;
     try {
-      const addRes = changeData({ fileName: "pushData", type: "add", item: recordItem });
+      const addRes = changeData({
+        fileName: "pushData",
+        type: "add",
+        item: recordItem,
+      });
       if (addRes && addRes.success && Array.isArray(addRes.data)) {
-        const found = [...addRes.data].reverse().find(
-          it => isSameArticleRecord(it, recordItem)
-        );
+        const found = [...addRes.data]
+          .reverse()
+          .find((it) => isSameArticleRecord(it, recordItem));
         if (found) recordId = found.id;
       }
     } catch (e) {
-      console.error("MatrixMedia: 写入文章 pushData 初始记录失败:", e && e.message);
+      console.error(
+        "MatrixMedia: 写入文章 pushData 初始记录失败:",
+        e && e.message
+      );
     }
 
     const updateRecord = (status, message) => {
@@ -811,13 +922,16 @@ export async function runCliMain(argv = process.argv) {
           },
         });
       } catch (e) {
-        console.error("MatrixMedia: 更新文章 pushData 记录失败:", e && e.message);
+        console.error(
+          "MatrixMedia: 更新文章 pushData 记录失败:",
+          e && e.message
+        );
       }
     };
 
-    return await new Promise(resolve => {
+    return await new Promise((resolve) => {
       let settled = false;
-      const finish = code => {
+      const finish = (code) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -826,7 +940,9 @@ export async function runCliMain(argv = process.argv) {
 
       const timer = setTimeout(() => {
         const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
-        console.error(`CLI publish-article 超时（${min} 分钟），请检查网络或登录态`);
+        console.error(
+          `CLI publish-article 超时（${min} 分钟），请检查网络或登录态`
+        );
         updateRecord("failed", `CLI publish-article 超时 ${min} 分钟`);
         finish(1);
       }, CLI_PUBLISH_TIMEOUT_MS);
@@ -834,7 +950,11 @@ export async function runCliMain(argv = process.argv) {
       const transport = {
         reply(channel, payload) {
           if (channel === "puppeteerFile-done") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) {
+            if (
+              payload &&
+              payload.taskId != null &&
+              payload.taskId !== taskId
+            ) {
               return;
             }
             if (payload && payload.skipped) {
@@ -853,11 +973,25 @@ export async function runCliMain(argv = process.argv) {
               return;
             }
             const ok = payload && payload.status === true;
-            console.log(JSON.stringify({ channel, status: ok, message: payload && payload.message }));
-            updateRecord(ok ? "success" : "failed", (payload && payload.message) || (ok ? "文章发布成功" : "文章发布失败"));
+            console.log(
+              JSON.stringify({
+                channel,
+                status: ok,
+                message: payload && payload.message,
+              })
+            );
+            updateRecord(
+              ok ? "success" : "failed",
+              (payload && payload.message) ||
+                (ok ? "文章发布成功" : "文章发布失败")
+            );
             finish(ok ? 0 : 3);
           } else if (channel === "puppeteer-noLogin") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId) {
+            if (
+              payload &&
+              payload.taskId != null &&
+              payload.taskId !== taskId
+            ) {
               return;
             }
             console.error("登录态异常或未登录:", JSON.stringify(payload));
@@ -910,7 +1044,9 @@ export async function runCliMain(argv = process.argv) {
   }
 
   if (cmd === "--help" || cmd === "-h") {
-    console.log("可用子命令: publish | publish-article | login | accounts | history");
+    console.log(
+      "可用子命令: publish | publish-article | login | accounts | history"
+    );
     console.log("各自 --help 查看详细参数。");
     return 0;
   }

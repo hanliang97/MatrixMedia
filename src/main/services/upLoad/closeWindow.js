@@ -3,7 +3,11 @@
  * @param {import("electron").BrowserWindow | null | undefined} window
  */
 export function skipCloseConfirmation(window) {
-  if (window && typeof window.isDestroyed === "function" && !window.isDestroyed()) {
+  if (
+    window &&
+    typeof window.isDestroyed === "function" &&
+    !window.isDestroyed()
+  ) {
     window._mmAllowCloseWithoutConfirm = true;
   }
 }
@@ -16,7 +20,16 @@ export function skipCloseConfirmation(window) {
 export default function maybeClosePublishWindow(data, window) {
   if (data.closeWindowAfterPublish === false) return;
   try {
-    if (window && typeof window.isDestroyed === "function" && window.isDestroyed()) return;
+    if (
+      window &&
+      typeof window.isDestroyed === "function" &&
+      window.isDestroyed()
+    )
+      return;
+    // 与 puppeteerFile.closePublishWinProgrammatically 一致，避免 closed 回调误判为用户关窗
+    if (window && !window.isDestroyed()) {
+      window._mmClosedByProgram = true;
+    }
     skipCloseConfirmation(window);
     if (window) window.close();
   } catch (e) {

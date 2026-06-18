@@ -32,13 +32,13 @@
 
 统一约定：
 
-| 约定项 | 内容 |
-|--------|------|
-| 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`） |
-| 子命令 | `cli login \| publish \| accounts \| history`，每个均支持 `--help` |
-| 退出码 | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等） |
-| 机器可读输出 | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费 |
-| 登录态共享 | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰 |
+| 约定项        | 内容                                                                      |
+| ------------- | ------------------------------------------------------------------------- |
+| 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`）   |
+| 子命令        | `cli login \| publish \| accounts \| history`，每个均支持 `--help`        |
+| 退出码        | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等）         |
+| 机器可读输出  | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费 |
+| 登录态共享    | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰       |
 
 仓库顶部的 `<!-- openclaw-integrable ... -->` HTML 注释以 OpenClaw 的 schema 示例上述约定；其它平台如需类似的仓库级可发现标记，可沿用同一 `argv-marker=cli` 语义，或加上自家的注释标签（例如 `<!-- hermes-integrable ... -->`），互不冲突。
 
@@ -93,10 +93,10 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 重启 AI 工具后，以下 3 个 tool 即可在对话中直接调用：
 
-| Tool | 说明 |
-|---|---|
-| `list_accounts` | 列出本机已登录账号，支持按平台过滤 |
-| `list_history` | 查询本机发布记录，支持按平台 / 状态 / 天数过滤 |
+| Tool            | 说明                                             |
+| --------------- | ------------------------------------------------ |
+| `list_accounts` | 列出本机已登录账号，支持按平台过滤               |
+| `list_history`  | 查询本机发布记录，支持按平台 / 状态 / 天数过滤   |
 | `publish_video` | 发布视频到指定平台（最长 35 分钟，支持定时发布） |
 
 > **登录说明**：所有平台均需在 GUI 中完成登录后再通过 MCP 发布。MCP 运行在无头 stdio 环境，无法弹出扫码窗口。
@@ -115,29 +115,29 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 [番茄视频创作平台](https://pugc.yueduwuxian.com/fqvideo/login) 已写入 URL 配置，GUI 可添加账号并通过独立 BrowserWindow 登录；自动上传、填表、点发布及审核状态查询尚未实现。
 
-| 用途 | URL |
-|------|-----|
-| 登录页 | https://pugc.yueduwuxian.com/fqvideo/login |
+| 用途   | URL                                                     |
+| ------ | ------------------------------------------------------- |
+| 登录页 | https://pugc.yueduwuxian.com/fqvideo/login              |
 | 发布页 | https://pugc.yueduwuxian.com/fqvideo/home/publish-video |
 
-| 能力 | 状态 |
-|------|------|
-| GUI 添加账号 / 登录窗口 | 可用 |
-| GUI / CLI 自动发布 | 待完善（会提示「番茄视频自动发布流程待完善」） |
-| 登录 Cookie 自动检测 | 待完善 |
-| 发布审核状态回查 | 待完善 |
+| 能力                    | 状态                                           |
+| ----------------------- | ---------------------------------------------- |
+| GUI 添加账号 / 登录窗口 | 可用                                           |
+| GUI / CLI 自动发布      | 待完善（会提示「番茄视频自动发布流程待完善」） |
+| 登录 Cookie 自动检测    | 待完善                                         |
+| 发布审核状态回查        | 待完善                                         |
 
 **CLI / 配置别名**：`fqsp`、`fanqie`、`fq`、`番茄视频`
 
 **主要代码位置**（完善发布流程时改这些文件）：
 
-| 文件 | 说明 |
-|------|------|
-| `src/renderer/utils/configUrl.js` | 渲染层 URL（与主进程保持一致） |
-| `src/main/config/ptConfig.js` | 主进程 / CLI 用 URL |
-| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑（当前为占位） |
-| `src/main/services/zt/fqsp.js` | 审核状态查询（当前为占位） |
-| `src/main/services/getCookie.js` | 登录态 Cookie 规则（待补充） |
+| 文件                               | 说明                           |
+| ---------------------------------- | ------------------------------ |
+| `src/renderer/utils/configUrl.js`  | 渲染层 URL（与主进程保持一致） |
+| `src/main/config/ptConfig.js`      | 主进程 / CLI 用 URL            |
+| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑（当前为占位）     |
+| `src/main/services/zt/fqsp.js`     | 审核状态查询（当前为占位）     |
+| `src/main/services/getCookie.js`   | 登录态 Cookie 规则（待补充）   |
 
 侧栏图标（可选）：将 `fqsp.png` 放到 `src/renderer/layout/components/Sidebar/ptcion/`。
 
@@ -145,12 +145,12 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。子命令一览：
 
-| 子命令 | 支持平台 | 作用 |
-|--------|----------|------|
-| `cli login` | **仅抖音**（`-p dy`） | 抖音扫码登录 / puppeteer 无头登录 |
-| `cli publish` | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布本地视频（与 GUI「本地视频发布」等价） |
-| `cli accounts` | 全平台（含 `fqsp` 番茄视频） | 列出所有账号并实时检测 cookie 登录态 |
-| `cli history` | 全平台（含 `fqsp` 番茄视频） | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
+| 子命令         | 支持平台                                                                                             | 作用                                                          |
+| -------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `cli login`    | **仅抖音**（`-p dy`）                                                                                | 抖音扫码登录 / puppeteer 无头登录                             |
+| `cli publish`  | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布本地视频（与 GUI「本地视频发布」等价）                    |
+| `cli accounts` | 全平台（含 `fqsp` 番茄视频）                                                                         | 列出所有账号并实时检测 cookie 登录态                          |
+| `cli history`  | 全平台（含 `fqsp` 番茄视频）                                                                         | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
 
 > **非抖音平台的登录怎么办？** 当前 CLI 登录只实现了抖音一家；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
@@ -196,7 +196,7 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 
 ### macOS：提示“已损坏，无法打开”
 
-如果 Apple Silicon（M1/M2/M3）设备安装 `arm64` 包后提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。`x64` 包在 Apple Silicon 上会通过 Rosetta 运行，系统校验路径可能不同，所以会出现 `x64` 可打开、`arm64` 被拦截的情况。
+macOS 目前仅分发 `x64` 安装包；Apple Silicon（M1/M2/M3）会通过 Rosetta 2 运行。若提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。
 
 临时处理方式：
 
@@ -229,25 +229,30 @@ open /Applications/matrixmedia.app
 4. 部分平台（如哔哩哔哩）可能需要人工参与（例如手动上传封面），请以平台当前页面规则为准。
 
 ## 开源免费
-国内gitee下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
 
-github下载地址为 https://github.com/hanliang97/MatrixMedia/releases
+国内 gitee 下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
+
+github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
 
 ## 用户反馈
 
-用 MatrixMedia 了？**[填 5 题告诉我](https://wj.qq.com/s2/26553035/aefd/)**（2分钟，帮助决定下一步功能优先级）
+用 MatrixMedia 了？**[填 5 题告诉我](https://wj.qq.com/s2/26553035/aefd/)**（2 分钟，帮助决定下一步功能优先级）
 
 ## 工具使用文档
+
 国内文档地址
 https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
 
 ## 开发环境 node 20
 
-##### 使用yarn安装
+##### 使用 yarn 安装
+
 yarn
 
-##### 启动之后，会在9080端口监听
+##### 启动之后，会在 9080 端口监听
+
 yarn dev
 
-##### build命令在不同系统环境中，需要的的不一样，需要自己根据自身环境进行配置
+##### build 命令在不同系统环境中，需要的的不一样，需要自己根据自身环境进行配置
+
 yarn build
