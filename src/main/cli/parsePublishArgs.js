@@ -77,11 +77,11 @@ export function parsePublishArgs(subArgv) {
       out.show = true;
     } else if (a === "--no-close-window") {
       out.closeWindowAfterPublish = false;
-    } else if (a === '--dir') {
+    } else if (a === "--dir") {
       out.dir = args[++i];
-    } else if (a === '--config' || a === '--xlsx') {
+    } else if (a === "--config" || a === "--xlsx") {
       out.config = args[++i];
-    } else if (a === '--creative-statement' || a === '--cs') {
+    } else if (a === "--creative-statement" || a === "--cs") {
       out.creativeStatement = args[++i];
     }
   }
@@ -92,20 +92,36 @@ export function parsePublishArgs(subArgv) {
   const raw = String(out.platform).trim();
   const lower = raw.toLowerCase();
   const pt = PLATFORM_ALIASES[raw] || PLATFORM_ALIASES[lower] || raw;
-  const canonical = ["抖音", "视频号", "哔哩哔哩", "百家号", "头条", "快手", "小红书", "番茄视频"];
+  const canonical = [
+    "抖音",
+    "视频号",
+    "哔哩哔哩",
+    "百家号",
+    "头条",
+    "快手",
+    "小红书",
+    "番茄视频",
+  ];
   if (!canonical.includes(pt)) {
     return { ok: false, error: `未知平台: ${out.platform}` };
   }
   out.platform = pt;
 
   if (!out.file && !out.dir) {
-    return { ok: false, error: '缺少 --file（或 -f）视频文件路径，或 --dir + --config 批量目录模式' };
+    return {
+      ok: false,
+      error:
+        "缺少 --file（或 -f）视频文件路径，或 --dir + --config 批量目录模式",
+    };
   }
   if (out.file && out.dir) {
-    return { ok: false, error: '--file 和 --dir 不能同时使用' };
+    return { ok: false, error: "--file 和 --dir 不能同时使用" };
   }
   if (out.dir && !out.config) {
-    return { ok: false, error: '--dir 批量模式必须同时提供 --config <xlsx路径>' };
+    return {
+      ok: false,
+      error: "--dir 批量模式必须同时提供 --config <xlsx路径>",
+    };
   }
 
   if (!out.partition) {
@@ -123,7 +139,8 @@ export function parsePublishArgs(subArgv) {
   if (!out.dir && (!out.title || !String(out.title).trim())) {
     return {
       ok: false,
-      error: '缺少 --title（或 -t）视频标题（与 GUI「视频标题」一致，写入 data.bt1）',
+      error:
+        "缺少 --title（或 -t）视频标题（与 GUI「视频标题」一致，写入 data.bt1）",
     };
   }
   // in dir mode title comes from xlsx per row, no global --title needed
@@ -182,6 +199,59 @@ export function parsePublishArgs(subArgv) {
   return { ok: true, value: out };
 }
 
+function pickBodyValue(body, keys) {
+  for (const key of keys) {
+    const val = body[key];
+    if (val != null && String(val).trim() !== "") {
+      return String(val);
+    }
+  }
+  return null;
+}
+
+/**
+ * 将 HTTP JSON 请求体转为 cli publish 等价 argv
+ * @param {object} body
+ * @returns {string[]}
+ */
+export function publishBodyToArgv(body) {
+  if (!body || typeof body !== "object") return [];
+  const argv = [];
+  const pushPair = (keys, flag) => {
+    const val = pickBodyValue(body, keys);
+    if (val != null) {
+      argv.push(flag, val);
+    }
+  };
+
+  pushPair(["platform", "p"], "-p");
+  pushPair(["file", "f"], "-f");
+  pushPair(["phone"], "--phone");
+  pushPair(["partition"], "--partition");
+  pushPair(["title", "t"], "-t");
+  pushPair(["bookName", "name", "book-name"], "--name");
+  pushPair(["bt2"], "--bt2");
+  pushPair(["tags", "bq"], "--tags");
+  pushPair(["publishAt", "publish-at"], "--publish-at");
+  pushPair(
+    ["creativeStatement", "creative-statement", "cs"],
+    "--creative-statement"
+  );
+
+  if (body.show === true) argv.push("--show");
+  if (body.closeWindowAfterPublish === false) argv.push("--no-close-window");
+
+  return argv;
+}
+
+/**
+ * 解析 HTTP / CLI 共用的发布参数
+ * @param {object} body
+ */
+export function parsePublishRequest(body) {
+  return parsePublishArgs(publishBodyToArgv(body));
+}
+
 export function publishHelpText() {
   return `
 用法: <应用> cli publish [选项]
@@ -190,7 +260,7 @@ export function publishHelpText() {
 
 选项:
   -p, --platform <id>   平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号、xhs|小红书、fqsp|番茄视频
-  -f, --file <path>     本地视频文件路径
+  -f, --file <path>     本地视频文件路径，或 http(s) 远程视频 URL（远程会先下载到临时目录，发布结束后自动删除）
       --dir <path>          [batch] video directory path; must be paired with --config
       --config <path>       [batch] xlsx declaration file path (columns: 文件名/标题/标签/创作声明)
       --cs, --creative-statement <val>  creative statement value for single-file mode.

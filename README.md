@@ -12,8 +12,9 @@
 
 - **支持平台**：Windows、macOS、CLI。
 - **CLI 登录**：目前仅支持**抖音**（终端二维码 / puppeteer 无头）。
-- **CLI 发布**：**7 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书；**番茄视频**已接入配置与 GUI 登录，自动发布流程开发中。
+- **CLI 发布**：**7 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书；**番茄视频**已接入配置与 GUI 登录，自动发布流程开发中。`file` 支持本地路径或 `http(s)` 远程 URL（自动下载，上传后清理临时文件）。
 - **CLI 查询**：`cli accounts` 实时检测登录态，`cli history` 查看本机发布记录。
+- **HTTP API**：GUI 启动后可通过 `POST http://127.0.0.1:30088/publish` 由其它程序触发发布（见下文「内置 HTTP API」）。
 
 便于脚本与智能体编排。
 
@@ -32,13 +33,14 @@
 
 统一约定：
 
-| 约定项        | 内容                                                                      |
-| ------------- | ------------------------------------------------------------------------- |
-| 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`）   |
-| 子命令        | `cli login \| publish \| accounts \| history`，每个均支持 `--help`        |
-| 退出码        | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等）         |
-| 机器可读输出  | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费 |
-| 登录态共享    | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰       |
+| 约定项        | 内容                                                                                 |
+| ------------- | ------------------------------------------------------------------------------------ |
+| 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`）              |
+| 子命令        | `cli login \| publish \| accounts \| history`，每个均支持 `--help`                   |
+| 退出码        | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等）                    |
+| 机器可读输出  | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费            |
+| 登录态共享    | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰                  |
+| HTTP API      | GUI 启动后 `POST http://127.0.0.1:30088/publish` 发布视频（见下文「内置 HTTP API」） |
 
 仓库顶部的 `<!-- openclaw-integrable ... -->` HTML 注释以 OpenClaw 的 schema 示例上述约定；其它平台如需类似的仓库级可发现标记，可沿用同一 `argv-marker=cli` 语义，或加上自家的注释标签（例如 `<!-- hermes-integrable ... -->`），互不冲突。
 
@@ -148,7 +150,7 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | 子命令         | 支持平台                                                                                             | 作用                                                          |
 | -------------- | ---------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
 | `cli login`    | **仅抖音**（`-p dy`）                                                                                | 抖音扫码登录 / puppeteer 无头登录                             |
-| `cli publish`  | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布本地视频（与 GUI「本地视频发布」等价）                    |
+| `cli publish`  | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布视频（本地路径或 http(s) URL，与 GUI「本地视频发布」等价） |
 | `cli accounts` | 全平台（含 `fqsp` 番茄视频）                                                                         | 列出所有账号并实时检测 cookie 登录态                          |
 | `cli history`  | 全平台（含 `fqsp` 番茄视频）                                                                         | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤 |
 
@@ -212,6 +214,92 @@ open /Applications/matrixmedia.app
 - 中英文可执行文件名已统一为 `matrixmedia`，无需区分。
 - 若环境变量 `ELECTRON_RUN_AS_NODE` 被误开启，请先按提示关闭后再启动。
 - `cli accounts` / `cli history` 仅读取本机数据，不会触发任何登录或发布动作，适合在 pipeline 里做 preflight 检查。
+
+## 内置 HTTP API（需 GUI 已启动）
+
+应用图形界面启动后，会自动在本机 **30088** 端口（`BuiltInServerPort`，见 `env/.env`）监听内置 Express 服务。其它程序可通过 HTTP 调用，与 GUI / CLI 共用同一套登录态与 `pushData` 发布记录。
+
+> **与 CLI 的区别**：HTTP API 依赖 GUI 主进程已运行（托盘/窗口在即可）；CLI 可独立启动。长时间发布请求会阻塞直到上传完成或超时（与 `cli publish` 一致，默认约 35 分钟）。
+
+### 数据接口
+
+| 方法 | 路径          | 说明                                     |
+| ---- | ------------- | ---------------------------------------- |
+| POST | `/changeData` | 读写本地 JSON 数据（账号树、发布历史等） |
+
+### 发布视频
+
+| 方法 | 路径       | 说明                                                                    |
+| ---- | ---------- | ----------------------------------------------------------------------- |
+| POST | `/publish` | 发布视频（本地路径或 http(s) URL），字段与 `cli publish` 单文件模式一致 |
+
+**请求体（JSON）**：
+
+| 字段                | 必填   | 说明                                                                                                                             |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------------------- |
+| `platform`          | 是     | 平台：`dy` / `抖音`、`sph` / `视频号`、`ks` / `快手` 等（同 CLI `-p`）                                                           |
+| `file`              | 是     | 本地视频绝对路径，或 `http://` / `https://` 远程视频 URL（会先下载到临时目录，上传结束后自动删除；定时发布则在到点执行时再下载） |
+| `title`             | 是     | 视频标题                                                                                                                         |
+| `phone`             | 二选一 | 账号手机号（与 GUI 账号树一致）                                                                                                  |
+| `partition`         | 二选一 | 完整 session，如 `persist:13800138000抖音`                                                                                       |
+| `bt2`               | 否     | 视频号短标（视频号强烈建议填写）                                                                                                 |
+| `tags`              | 否     | 标签，空格分隔                                                                                                                   |
+| `publishAt`         | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`                                                                                       |
+| `creativeStatement` | 否     | 创作声明：`none` / `ai_generated` 等（哔哩哔哩等）                                                                               |
+
+**响应体（JSON）**：
+
+| 字段                      | 说明                                                                 |
+| ------------------------- | -------------------------------------------------------------------- |
+| `success`                 | 是否成功（`exitCode === 0`）                                         |
+| `status`                  | `success` / `failed` / `scheduled` / `skipped`                       |
+| `exitCode`                | 与 CLI 一致：`0` 成功 / `1` 异常或超时 / `2` 参数错误 / `3` 业务失败 |
+| `message`                 | 结果说明                                                             |
+| `id`                      | 写入 `pushData` 的记录 id（如有）                                    |
+| `scheduled` / `publishAt` | 定时发布时返回                                                       |
+
+**示例**：
+
+```bash
+curl -X POST http://127.0.0.1:30088/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "dy",
+    "phone": "13800138000",
+    "file": "/Users/me/video.mp4",
+    "title": "我的视频标题",
+    "tags": "减脂 健身"
+  }'
+```
+
+远程视频 URL 示例：
+
+```bash
+curl -X POST http://127.0.0.1:30088/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "dy",
+    "phone": "13800138000",
+    "file": "https://example.com/video.mp4",
+    "title": "我的视频标题"
+  }'
+```
+
+成功响应示例：
+
+```json
+{
+  "success": true,
+  "status": "success",
+  "exitCode": 0,
+  "id": "abc123",
+  "publishAt": null,
+  "scheduled": false,
+  "message": "上传成功"
+}
+```
+
+参数错误时返回 HTTP `400`；发布失败（如未登录）仍返回 HTTP `200`，但 `success: false`、`exitCode: 3`。服务已配置 CORS，浏览器或本机脚本均可调用。
 
 ## Contributors
 

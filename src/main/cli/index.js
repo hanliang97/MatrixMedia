@@ -19,6 +19,7 @@ import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
+import { runSingleFilePublish } from "../services/publishVideo";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
@@ -525,238 +526,36 @@ export async function runCliMain(argv = process.argv) {
       return await runBatchDirPublish(v, cfg);
     }
 
-    const resolvedFile = path.resolve(v.file);
-    const stem = fileStem(resolvedFile);
-    const bt1 = String(v.title).trim();
-    const bt2 = (v.bt2 && String(v.bt2).trim()) || bt1;
-    const bookName = (v.bookName && String(v.bookName).trim()) || stem;
-
-    const taskPayload = {
-      taskId: Date.now() + Math.random(),
-      bookName,
-      textType: "local",
-      data: {
-        textOtherName: stem,
-        bt1,
-        bt2,
-        bq: String(v.bq || "").trim(),
-        bdText: "",
-        creativeStatement: normalizeCreativeStatement(
-          v.creativeStatement || ""
-        ),
-      },
-      url: cfg.upload,
-      show: v.show,
-      mmCliSuppressWindow: false,
-      publishMode: "publish",
-      publishToDraft: false,
-      closeWindowAfterPublish: v.show ? v.closeWindowAfterPublish : true,
-      useragent: cfg.useragent,
-      partition: v.partition,
-      phone: derivePhoneForRecord(v),
-      filePath: resolvedFile,
-      pt: v.platform,
-    };
-
-    const taskId = taskPayload.taskId;
-
-    // 与 GUI LocalVideoPublish.buildVideoPayload / handleBatchPublish 的 pushData 写入保持一致，
-    // 使 cli publish 的记录同时出现在 GUI 视频管理与 `cli history`。
-    const recordDate = todayYmd();
-    const selectedFile = path.basename(resolvedFile);
-    const recordItem = {
-      bookName,
-      textOtherName: stem,
-      textType: "local",
-      pt: v.platform,
-      selectedFile,
-      bt: bt1,
-      bt2,
-      bq: String(v.bq || "").trim(),
-      creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
-      filePath: resolvedFile,
-      useragent: cfg.useragent,
-      phone: derivePhoneForRecord(v),
-      partition: v.partition,
-      url: cfg.listIndex,
-      uploadUrl: cfg.upload,
-      date: recordDate,
-      publishAttemptCount: 1,
-      republishCount: 0,
-      publishSuccessCount: 0,
-      publishFailCount: 0,
-      publishStatus: "publishing",
-      lastPublishMessage: "等待发布结果",
-      lastPublishAt: Date.now(),
-    };
-
-    if (v.publishAt) {
-      let scheduledRecord;
-      try {
-        scheduledRecord = createScheduledRecord(recordItem, v.publishAt);
-      } catch (e) {
-        console.error(e && e.message ? e.message : e);
-        return 2;
-      }
-      try {
-        const addRes = changeData({
-          fileName: "pushData",
-          type: "add",
-          item: scheduledRecord,
-        });
-        let recordId = null;
-        if (addRes && addRes.success && Array.isArray(addRes.data)) {
-          const found = [...addRes.data]
-            .reverse()
-            .find(
-              (it) =>
-                it.scheduledTask === true &&
-                it.scheduledPublishAt === scheduledRecord.scheduledPublishAt &&
-                it.textOtherName === scheduledRecord.textOtherName &&
-                it.pt === scheduledRecord.pt &&
-                it.selectedFile === scheduledRecord.selectedFile &&
-                it.textType === scheduledRecord.textType
-            );
-          if (found) recordId = found.id;
-        }
-        console.log(
-          JSON.stringify({
-            status: true,
-            scheduled: true,
-            id: recordId,
-            publishAt: scheduledRecord.scheduledPublishAtText,
-            message: "定时发布任务已创建，已写入发布历史",
-          })
+    const result = await runSingleFilePublish(v);
+    if (result.scheduled) {
+      console.log(
+        JSON.stringify({
+          status: true,
+          scheduled: true,
+          id: result.id,
+          publishAt: result.publishAt,
+          message: result.message,
+        })
+      );
+    } else if (result.exitCode === 0) {
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: true,
+          message: result.message,
+        })
+      );
+    } else if (result.exitCode === 3) {
+      console.error("登录态异常或未登录");
+      if (v.platform === "抖音") {
+        console.error(
+          "提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"
         );
-        return 0;
-      } catch (e) {
-        console.error("MatrixMedia: 写入定时发布记录失败:", e && e.message);
-        return 1;
       }
+    } else if (result.message) {
+      console.error(result.message);
     }
-
-    let recordId = null;
-    try {
-      const addRes = changeData({
-        fileName: "pushData",
-        type: "add",
-        item: recordItem,
-      });
-      if (addRes && addRes.success && Array.isArray(addRes.data)) {
-        const found = [...addRes.data]
-          .reverse()
-          .find(
-            (it) =>
-              it.textOtherName === recordItem.textOtherName &&
-              it.pt === recordItem.pt &&
-              it.selectedFile === recordItem.selectedFile &&
-              it.textType === recordItem.textType
-          );
-        if (found) recordId = found.id;
-      }
-    } catch (e) {
-      console.error("MatrixMedia: 写入 pushData 初始记录失败:", e && e.message);
-    }
-
-    const updateRecord = (status, message) => {
-      if (!recordId) return;
-      try {
-        changeData({
-          fileName: "pushData",
-          type: "update",
-          item: {
-            id: recordId,
-            date: recordDate,
-            publishStatus: status,
-            publishSuccessCount: status === "success" ? 1 : 0,
-            publishFailCount: status === "failed" ? 1 : 0,
-            lastPublishMessage: message || "",
-            lastPublishAt: Date.now(),
-          },
-        });
-      } catch (e) {
-        console.error("MatrixMedia: 更新 pushData 记录失败:", e && e.message);
-      }
-    };
-
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(code);
-      };
-
-      const timer = setTimeout(() => {
-        const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
-        console.error(`CLI publish 超时（${min} 分钟），请检查网络或登录态`);
-        updateRecord("failed", `CLI publish 超时 ${min} 分钟`);
-        finish(1);
-      }, CLI_PUBLISH_TIMEOUT_MS);
-
-      const transport = {
-        reply(channel, payload) {
-          if (channel === "puppeteerFile-done") {
-            if (
-              payload &&
-              payload.taskId != null &&
-              payload.taskId !== taskId
-            ) {
-              return;
-            }
-            if (payload && payload.skipped) {
-              console.log(
-                JSON.stringify({
-                  channel,
-                  skipped: true,
-                  message: payload.message,
-                })
-              );
-              updateRecord(
-                "skipped",
-                payload.message || "用户关闭窗口，已跳过发布"
-              );
-              finish(0);
-              return;
-            }
-            const ok = payload && payload.status === true;
-            console.log(
-              JSON.stringify({
-                channel,
-                status: ok,
-                message: payload && payload.message,
-              })
-            );
-            updateRecord(
-              ok ? "success" : "failed",
-              (payload && payload.message) || (ok ? "上传成功" : "上传失败")
-            );
-            finish(ok ? 0 : 3);
-          } else if (channel === "puppeteer-noLogin") {
-            if (
-              payload &&
-              payload.taskId != null &&
-              payload.taskId !== taskId
-            ) {
-              return;
-            }
-            console.error("登录态异常或未登录:", JSON.stringify(payload));
-            if (payload && payload.pt === "抖音") {
-              console.error(
-                "提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"
-              );
-            }
-            updateRecord("failed", "登录态异常或未登录");
-            finish(3);
-          } else {
-            console.log(channel, payload);
-          }
-        },
-      };
-
-      runPuppeteerTask(taskPayload, transport, () => {});
-    });
+    return result.exitCode;
   }
 
   if (cmd === "publish-article") {

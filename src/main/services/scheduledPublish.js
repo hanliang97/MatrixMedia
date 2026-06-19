@@ -7,6 +7,7 @@ import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "./puppeteerFile";
 import { changeData } from "../server/utils";
 import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
+import { isRemotePublishFile, resolvePublishFile } from "./resolvePublishFile";
 
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 1000;
@@ -212,18 +213,59 @@ function finishScheduledRecord(record, payload) {
 
 function executeScheduledRecord(record) {
   if (!record || !record.id) return;
-  if (
-    record.textType !== "article" &&
-    (!record.filePath || !fs.existsSync(record.filePath))
-  ) {
+  executeScheduledRecordAsync(record).catch((e) => {
+    console.error("[scheduledPublish] 执行定时发布失败:", e && e.message);
     updateRecord(record, {
       publishStatus: "failed",
       publishFailCount: 1,
-      lastPublishMessage: "本地视频文件不存在",
+      lastPublishMessage: (e && e.message) || "定时发布执行失败",
       lastPublishAt: Date.now(),
     });
-    return;
+  });
+}
+
+async function executeScheduledRecordAsync(record) {
+  if (!record || !record.id) return;
+
+  let cleanupDownload = null;
+  let publishFilePath = record.filePath;
+
+  if (record.textType !== "article") {
+    if (!publishFilePath) {
+      updateRecord(record, {
+        publishStatus: "failed",
+        publishFailCount: 1,
+        lastPublishMessage: "本地视频文件不存在",
+        lastPublishAt: Date.now(),
+      });
+      return;
+    }
+
+    if (isRemotePublishFile(publishFilePath)) {
+      try {
+        const resolved = await resolvePublishFile(publishFilePath);
+        publishFilePath = resolved.localPath;
+        cleanupDownload = resolved.cleanup;
+      } catch (e) {
+        updateRecord(record, {
+          publishStatus: "failed",
+          publishFailCount: 1,
+          lastPublishMessage: `下载视频失败: ${e && e.message ? e.message : e}`,
+          lastPublishAt: Date.now(),
+        });
+        return;
+      }
+    } else if (!fs.existsSync(publishFilePath)) {
+      updateRecord(record, {
+        publishStatus: "failed",
+        publishFailCount: 1,
+        lastPublishMessage: "本地视频文件不存在",
+        lastPublishAt: Date.now(),
+      });
+      return;
+    }
   }
+
   if (
     record.textType === "article" &&
     !String(record.content || "").trim() &&
@@ -237,33 +279,49 @@ function executeScheduledRecord(record) {
     });
     return;
   }
-  const taskPayload = buildTaskPayloadFromRecord(record);
-  const taskId = taskPayload.taskId;
-  updateRecord(record, {
-    publishStatus: "publishing",
-    lastPublishMessage: "定时任务开始发布",
-    lastPublishAt: Date.now(),
-  });
-  let publishSettled = false;
-  const transport = {
-    reply(channel, payload) {
-      if (payload && payload.taskId != null && payload.taskId !== taskId)
-        return;
-      if (channel === "puppeteerFile-done") {
+
+  try {
+    const taskPayload = buildTaskPayloadFromRecord({
+      ...record,
+      filePath: publishFilePath,
+    });
+    const taskId = taskPayload.taskId;
+    updateRecord(record, {
+      publishStatus: "publishing",
+      lastPublishMessage: "定时任务开始发布",
+      lastPublishAt: Date.now(),
+    });
+
+    await new Promise((resolve) => {
+      let publishSettled = false;
+      const finish = () => {
         if (publishSettled) return;
         publishSettled = true;
-        finishScheduledRecord(record, payload);
-      } else if (channel === "puppeteer-noLogin") {
-        updateRecord(record, {
-          publishStatus: "failed",
-          publishFailCount: 1,
-          lastPublishMessage: "登录态异常或未登录",
-          lastPublishAt: Date.now(),
-        });
-      }
-    },
-  };
-  runPuppeteerTask(taskPayload, transport, () => {});
+        resolve();
+      };
+      const transport = {
+        reply(channel, payload) {
+          if (payload && payload.taskId != null && payload.taskId !== taskId)
+            return;
+          if (channel === "puppeteerFile-done") {
+            finishScheduledRecord(record, payload);
+            finish();
+          } else if (channel === "puppeteer-noLogin") {
+            updateRecord(record, {
+              publishStatus: "failed",
+              publishFailCount: 1,
+              lastPublishMessage: "登录态异常或未登录",
+              lastPublishAt: Date.now(),
+            });
+            finish();
+          }
+        },
+      };
+      runPuppeteerTask(taskPayload, transport, () => {});
+    });
+  } finally {
+    if (cleanupDownload) cleanupDownload();
+  }
 }
 
 export function schedulePublishRecord(record, nowMs = Date.now()) {
