@@ -1,22 +1,32 @@
 "use strict";
 
-import fs from "fs";
-import path from "path";
 import { nativeImage } from "electron";
-import { clearTerminalScreen, nativeImageToTerminalQrLines } from "./qrBitmapToBlocks.js";
+import {
+  clearTerminalScreen,
+  nativeImageToTerminalQrLines,
+} from "./qrBitmapToBlocks.js";
 import { DOUYIN_LOGIN_RECT_SCRIPT } from "./douyinLoginRectScript.js";
 import { cliLoginQrTerminalBlockWidth } from "./cliLoginQrRefresh.js";
 import {
   tryDecodeQrPayloadFromNativeImage,
   renderQrPayloadWithQrcodeTerminal,
+  writeLoginQrPngFile,
 } from "./terminalQrQrcodeTerminal.js";
 
 export { clearTerminalScreen, nativeImageToTerminalQrLines };
-export { nativeImageToBlockLines, nativeImageToHalfBlockLines } from "./qrBitmapToBlocks.js";
+export {
+  nativeImageToBlockLines,
+  nativeImageToHalfBlockLines,
+} from "./qrBitmapToBlocks.js";
 
 function cliQrDebugEnabled() {
   const v = process.env.MATRIX_CLI_QR_DEBUG;
-  return v !== undefined && v !== null && String(v).trim() !== "" && String(v).trim() !== "0";
+  return (
+    v !== undefined &&
+    v !== null &&
+    String(v).trim() !== "" &&
+    String(v).trim() !== "0"
+  );
 }
 
 function cliQrDebugLog(...args) {
@@ -59,7 +69,7 @@ export async function writeDouyinLoginQrToStdout(image, opts) {
   }
   const visualW = Math.max(
     28,
-    ...bodyLines.map(l => stripAnsi(l).length),
+    ...bodyLines.map((l) => stripAnsi(l).length),
     termW
   );
   const barLen = Math.min(visualW, 76);
@@ -246,7 +256,12 @@ export async function paintLoginQrToTerminalFromPuppeteerPage(page, opts) {
       if (rect) {
         buf = await page.screenshot({
           type: "png",
-          clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          clip: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
         });
       } else {
         buf = await page.screenshot({ type: "png" });
@@ -270,7 +285,12 @@ export async function paintLoginQrToTerminalFromPuppeteerPage(page, opts) {
       if (rect) {
         buf = await page.screenshot({
           type: "png",
-          clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          clip: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
         });
       } else {
         buf = await page.screenshot({ type: "png" });
@@ -292,13 +312,12 @@ export async function paintLoginQrToTerminalFromPuppeteerPage(page, opts) {
 
   if (opts.saveQrPngPath) {
     try {
-      const out = path.resolve(opts.saveQrPngPath);
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      if (fromBase64) {
-        fs.writeFileSync(out, fromBase64);
-      } else {
-        fs.writeFileSync(out, image.toPNG());
-      }
+      writeLoginQrPngFile({
+        image,
+        saveQrPngPath: opts.saveQrPngPath,
+        rawBuf: fromBase64 ? buf : null,
+        fromDataUrl: Boolean(fromBase64),
+      });
     } catch (e) {
       console.error("写入 --save-qr-png 失败:", e.message);
     }

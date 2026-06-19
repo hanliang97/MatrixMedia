@@ -1,7 +1,6 @@
 "use strict";
 
 import fs from "fs";
-import path from "path";
 import { nativeImage, session } from "electron";
 import puppeteerCore from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
@@ -12,8 +11,12 @@ import {
   tryReadAnimateQrImageBufferFromPage,
   writeDouyinLoginQrToStdout,
 } from "./terminalQrFromCapture.js";
+import { writeLoginQrPngFile } from "./terminalQrQrcodeTerminal.js";
 import { clearTerminalScreen } from "./qrBitmapToBlocks.js";
-import { hasDouyinSession, normalizeDouyinPartition } from "./douyinSessionUtil.js";
+import {
+  hasDouyinSession,
+  normalizeDouyinPartition,
+} from "./douyinSessionUtil.js";
 import {
   CLI_LOGIN_QR_FIRST_DELAY_MS,
   CLI_LOGIN_QR_REFRESH_MS,
@@ -21,7 +24,12 @@ import {
 
 function cliQrDebugLog(...args) {
   const v = process.env.MATRIX_CLI_QR_DEBUG;
-  if (v === undefined || v === null || String(v).trim() === "" || String(v).trim() === "0") {
+  if (
+    v === undefined ||
+    v === null ||
+    String(v).trim() === "" ||
+    String(v).trim() === "0"
+  ) {
     return;
   }
   console.error("[MatrixMedia][cli-qr]", ...args);
@@ -33,7 +41,8 @@ puppeteer.use(StealthPlugin());
 const CREATOR_ORIGIN = "https://creator.douyin.com";
 
 function resolveChromiumExecutable() {
-  const env = process.env.PUPPETEER_EXECUTABLE_PATH || process.env.MATRIX_CHROMIUM_PATH;
+  const env =
+    process.env.PUPPETEER_EXECUTABLE_PATH || process.env.MATRIX_CHROMIUM_PATH;
   if (env && fs.existsSync(env)) {
     return env;
   }
@@ -44,13 +53,13 @@ function resolveChromiumExecutable() {
           "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
         ]
       : process.platform === "darwin"
-        ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
-        : [
-            "/usr/bin/chromium",
-            "/usr/bin/chromium-browser",
-            "/usr/bin/google-chrome-stable",
-            "/usr/bin/google-chrome",
-          ];
+      ? ["/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"]
+      : [
+          "/usr/bin/chromium",
+          "/usr/bin/chromium-browser",
+          "/usr/bin/google-chrome-stable",
+          "/usr/bin/google-chrome",
+        ];
   for (const p of candidates) {
     if (fs.existsSync(p)) {
       return p;
@@ -64,7 +73,9 @@ function resolveChromiumExecutable() {
  * @param {{ partitionLabel: string, saveQrPngPath?: string | null, drawTerminalBlocks?: boolean }} opts
  */
 async function refreshLoginQrFromPuppeteerPage(page, opts) {
-  const drawTerminalBlocks = Boolean(opts.drawTerminalBlocks && process.stdout.isTTY);
+  const drawTerminalBlocks = Boolean(
+    opts.drawTerminalBlocks && process.stdout.isTTY
+  );
   if (!drawTerminalBlocks && !opts.saveQrPngPath) {
     return;
   }
@@ -77,7 +88,12 @@ async function refreshLoginQrFromPuppeteerPage(page, opts) {
       if (rect) {
         buf = await page.screenshot({
           type: "png",
-          clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          clip: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
         });
       } else {
         buf = await page.screenshot({ type: "png" });
@@ -99,7 +115,12 @@ async function refreshLoginQrFromPuppeteerPage(page, opts) {
       if (rect) {
         buf = await page.screenshot({
           type: "png",
-          clip: { x: rect.x, y: rect.y, width: rect.width, height: rect.height },
+          clip: {
+            x: rect.x,
+            y: rect.y,
+            width: rect.width,
+            height: rect.height,
+          },
         });
       } else {
         buf = await page.screenshot({ type: "png" });
@@ -119,13 +140,12 @@ async function refreshLoginQrFromPuppeteerPage(page, opts) {
   }
   if (opts.saveQrPngPath) {
     try {
-      const out = path.resolve(opts.saveQrPngPath);
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      if (fromBase64) {
-        fs.writeFileSync(out, fromBase64);
-      } else {
-        fs.writeFileSync(out, image.toPNG());
-      }
+      writeLoginQrPngFile({
+        image,
+        saveQrPngPath: opts.saveQrPngPath,
+        rawBuf: fromBase64 ? buf : null,
+        fromDataUrl: Boolean(fromBase64),
+      });
     } catch (e) {
       console.error("写入 --save-qr-png 失败:", e.message);
     }
@@ -141,7 +161,7 @@ async function refreshLoginQrFromPuppeteerPage(page, opts) {
 
 async function hasPassportCookieOnPage(page) {
   const cookies = await page.cookies(CREATOR_ORIGIN);
-  return cookies.some(c => c.name === "passport_assist_user" && c.value);
+  return cookies.some((c) => c.name === "passport_assist_user" && c.value);
 }
 
 /**
@@ -162,16 +182,22 @@ export async function runDouyinPuppeteerHeadlessLogin({
   }
   const part = normalizeDouyinPartition(partition);
   if (await hasDouyinSession(part)) {
-    console.log("抖音：当前 partition 已存在登录 Cookie（passport_assist_user），无需再次登录。");
+    console.log(
+      "抖音：当前 partition 已存在登录 Cookie（passport_assist_user），无需再次登录。"
+    );
     return 0;
   }
 
   const useTerminalQr = Boolean(terminalQr && process.stdout.isTTY);
   if (terminalQr && !process.stdout.isTTY) {
-    console.warn("提示: stdout 非 TTY，无法在终端绘制方块图；请使用 --save-qr-png 查看二维码 PNG。");
+    console.warn(
+      "提示: stdout 非 TTY，无法在终端绘制方块图；请使用 --save-qr-png 查看二维码 PNG。"
+    );
   }
   if (!useTerminalQr && !saveQrPngPath) {
-    console.error("错误: 无头模式须保留终端二维码（TTY）或指定 --save-qr-png。");
+    console.error(
+      "错误: 无头模式须保留终端二维码（TTY）或指定 --save-qr-png。"
+    );
     return 2;
   }
 
@@ -198,10 +224,17 @@ export async function runDouyinPuppeteerHeadlessLogin({
       headless: true,
       executablePath,
       userDataDir,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--disable-dev-shm-usage",
+      ],
     });
   } catch (e) {
-    console.error("Puppeteer 启动失败（可能与 Electron 同时占用同一用户数据目录有关）:", e.message);
+    console.error(
+      "Puppeteer 启动失败（可能与 Electron 同时占用同一用户数据目录有关）:",
+      e.message
+    );
     return 1;
   }
 
@@ -227,7 +260,7 @@ export async function runDouyinPuppeteerHeadlessLogin({
   }
 
   let settled = false;
-  return await new Promise(resolve => {
+  return await new Promise((resolve) => {
     let pollTimer = null;
     let qrTimer = null;
     let deadlineTimer = null;
@@ -262,7 +295,7 @@ export async function runDouyinPuppeteerHeadlessLogin({
       pollTimer = setInterval(() => {
         if (settled) return;
         hasPassportCookieOnPage(page)
-          .then(ok => {
+          .then((ok) => {
             if (ok && !settled) {
               finish(0, {
                 clearTerminal: useTerminalQr,
@@ -286,7 +319,9 @@ export async function runDouyinPuppeteerHeadlessLogin({
     deadlineTimer = setTimeout(() => {
       if (!settled) {
         console.error(
-          `登录等待超时（${Math.round(timeoutMs / 1000)}s），仍未检测到 passport_assist_user。`
+          `登录等待超时（${Math.round(
+            timeoutMs / 1000
+          )}s），仍未检测到 passport_assist_user。`
         );
         finish(3, {});
       }

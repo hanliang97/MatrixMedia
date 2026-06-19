@@ -5,17 +5,23 @@ import pie from "puppeteer-in-electron";
 import puppeteerCore from "puppeteer-core";
 import { addExtra } from "puppeteer-extra";
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
-import fs from "fs";
-import path from "path";
 import { nativeImage } from "electron";
 import ptConfig from "../../config/ptConfig";
-import { clearTerminalScreen, nativeImageToTerminalQrLines } from "./qrBitmapToBlocks.js";
+import {
+  clearTerminalScreen,
+  nativeImageToTerminalQrLines,
+} from "./qrBitmapToBlocks.js";
 import { cliLoginQrTerminalBlockWidth } from "./cliLoginQrRefresh.js";
 import {
   tryDecodeQrPayloadFromNativeImage,
   renderQrPayloadWithQrcodeTerminal,
+  writeLoginQrPngFile,
 } from "./terminalQrQrcodeTerminal.js";
-import { hasSphSession, getSphSessionId, normalizeSphPartition } from "./sphSessionUtil.js";
+import {
+  hasSphSession,
+  getSphSessionId,
+  normalizeSphPartition,
+} from "./sphSessionUtil.js";
 import { applyAccountProxyForTask } from "../proxyConfig.js";
 import {
   CLI_LOGIN_QR_FIRST_DELAY_MS,
@@ -27,7 +33,12 @@ puppeteer.use(StealthPlugin());
 
 function cliQrDebugLog(...args) {
   const v = process.env.MATRIX_CLI_QR_DEBUG;
-  if (v === undefined || v === null || String(v).trim() === "" || String(v).trim() === "0") {
+  if (
+    v === undefined ||
+    v === null ||
+    String(v).trim() === "" ||
+    String(v).trim() === "0"
+  ) {
     return;
   }
   console.error("[MatrixMedia][cli-qr][sph]", ...args);
@@ -39,7 +50,7 @@ function stripAnsi(s) {
 
 /* ---- iframe 内二维码选择器（按优先级排列） ---- */
 const QR_SELECTORS_IN_IFRAME = [
-  "img.qrcode",               // 视频号登录页二维码：<img class="qrcode" src="data:...">
+  "img.qrcode", // 视频号登录页二维码：<img class="qrcode" src="data:...">
   ".qrcode-wrap img.qrcode",
   ".qrcode-wrap img",
   ".login-qrcode-wrap img",
@@ -58,7 +69,7 @@ const LOGIN_IFRAME_URL_PATTERN = "login-for-iframe";
  * 在所有 frame（含主 frame）中查找二维码 img 截图。
  * 视频号登录页的 QR 可能在 login-for-iframe 子 frame 里，也可能直接在主 frame 的 #app 下。
  * @param {import("puppeteer").Page} page
- * @returns {Promise<Buffer | null>}
+ * @returns {Promise<{ buf: Buffer, fromDataUrl: boolean } | null>}
  */
 async function captureQrFromIframe(page) {
   try {
@@ -68,11 +79,15 @@ async function captureQrFromIframe(page) {
   }
 
   const frames = page.frames();
-  cliQrDebugLog("当前 frame 数量:", frames.length, frames.map(f => f.url()));
+  cliQrDebugLog(
+    "当前 frame 数量:",
+    frames.length,
+    frames.map((f) => f.url())
+  );
 
   // 优先检查子 frame（login-for-iframe），再检查主 frame
   const sortedFrames = [
-    ...frames.filter(f => f !== page.mainFrame()),
+    ...frames.filter((f) => f !== page.mainFrame()),
     page.mainFrame(),
   ];
 
@@ -86,16 +101,26 @@ async function captureQrFromIframe(page) {
       const bodySnippet = await frame.evaluate(() => {
         if (!document.body) return "(no body)";
         const imgs = Array.from(document.querySelectorAll("img")).map(
-          el => `<img class="${el.className}" src="${String(el.src).slice(0, 80)}" ${el.offsetWidth}x${el.offsetHeight}>`
+          (el) =>
+            `<img class="${el.className}" src="${String(el.src).slice(
+              0,
+              80
+            )}" ${el.offsetWidth}x${el.offsetHeight}>`
         );
         const canvases = Array.from(document.querySelectorAll("canvas")).map(
-          el => `<canvas class="${el.className}" ${el.offsetWidth}x${el.offsetHeight}>`
+          (el) =>
+            `<canvas class="${el.className}" ${el.offsetWidth}x${el.offsetHeight}>`
         );
-        const qrEls = Array.from(document.querySelectorAll(
-          "[class*='qr'],[class*='QR'],[class*='Qr'],[id*='qr']," +
-          "[class*='qrcode'],[class*='login-qrcode'],[class*='qrcode-wrap']"
-        )).map(
-          el => `<${el.tagName.toLowerCase()} class="${el.className}" ${el.offsetWidth}x${el.offsetHeight}>`
+        const qrEls = Array.from(
+          document.querySelectorAll(
+            "[class*='qr'],[class*='QR'],[class*='Qr'],[id*='qr']," +
+              "[class*='qrcode'],[class*='login-qrcode'],[class*='qrcode-wrap']"
+          )
+        ).map(
+          (el) =>
+            `<${el.tagName.toLowerCase()} class="${el.className}" ${
+              el.offsetWidth
+            }x${el.offsetHeight}>`
         );
         const app = document.querySelector("#app");
         let appTree = "(no #app)";
@@ -103,13 +128,25 @@ async function captureQrFromIframe(page) {
           const walk = (node, depth) => {
             if (depth > 8) return "";
             const tag = node.tagName ? node.tagName.toLowerCase() : "";
-            const cls = node.className && typeof node.className === "string" ? "." + node.className.split(/\s+/).join(".") : "";
-            const kids = Array.from(node.children || []).map(c => walk(c, depth + 1)).filter(Boolean).join(",");
+            const cls =
+              node.className && typeof node.className === "string"
+                ? "." + node.className.split(/\s+/).join(".")
+                : "";
+            const kids = Array.from(node.children || [])
+              .map((c) => walk(c, depth + 1))
+              .filter(Boolean)
+              .join(",");
             return tag + cls + (kids ? "[" + kids + "]" : "");
           };
           appTree = walk(app, 0);
         }
-        return JSON.stringify({ imgs, canvases, qrEls, bodyLen: document.body.innerHTML.length, appTree: appTree.slice(0, 3000) });
+        return JSON.stringify({
+          imgs,
+          canvases,
+          qrEls,
+          bodyLen: document.body.innerHTML.length,
+          appTree: appTree.slice(0, 3000),
+        });
       });
       cliQrDebugLog("frame 结构:", bodySnippet);
     } catch (e) {
@@ -123,7 +160,7 @@ async function captureQrFromIframe(page) {
         const handle = await frame.$(sel);
         if (!handle) continue;
 
-        const info = await frame.evaluate(el => {
+        const info = await frame.evaluate((el) => {
           return {
             tag: el.tagName,
             cls: el.className || "",
@@ -135,20 +172,28 @@ async function captureQrFromIframe(page) {
         cliQrDebugLog("选择器命中:", sel, "=>", JSON.stringify(info));
 
         // 跳过 SVG sprite / logo 等无意义元素
-        if (info.tag === "IMG" && (!info.src || info.w < 10 || info.h < 10)) continue;
+        if (info.tag === "IMG" && (!info.src || info.w < 10 || info.h < 10))
+          continue;
         // 跳过明显不是 QR 的图片（logo 等非正方形大图）
-        if (info.tag === "IMG" && sel === "img" && info.cls && !info.cls.match(/qr/i) && Math.abs(info.w - info.h) > 50) continue;
+        if (
+          info.tag === "IMG" &&
+          sel === "img" &&
+          info.cls &&
+          !info.cls.match(/qr/i) &&
+          Math.abs(info.w - info.h) > 50
+        )
+          continue;
 
         // data: URL 直接解码
         if (info.src && info.src.startsWith("data:")) {
-          const fullSrc = await frame.evaluate(el => el.src, handle);
+          const fullSrc = await frame.evaluate((el) => el.src, handle);
           const comma = fullSrc.indexOf(",");
           if (comma > 0) {
             const b64 = fullSrc.slice(comma + 1);
             const buf = Buffer.from(b64, "base64");
             if (buf.length > 32) {
               cliQrDebugLog("从 data: URL 解码成功，字节:", buf.length);
-              return buf;
+              return { buf, fromDataUrl: true };
             }
           }
         }
@@ -159,7 +204,7 @@ async function captureQrFromIframe(page) {
             const buf = await handle.screenshot({ type: "png" });
             if (buf && buf.length > 32) {
               cliQrDebugLog("elementHandle.screenshot 成功，字节:", buf.length);
-              return buf;
+              return { buf, fromDataUrl: false };
             }
           } catch (e) {
             cliQrDebugLog("elementHandle.screenshot 失败:", e && e.message);
@@ -175,7 +220,7 @@ async function captureQrFromIframe(page) {
   try {
     cliQrDebugLog("最终回退: 全页截图");
     const buf = await page.screenshot({ type: "png" });
-    if (buf && buf.length > 32) return buf;
+    if (buf && buf.length > 32) return { buf, fromDataUrl: false };
   } catch (e) {
     cliQrDebugLog("全页截图失败:", e && e.message);
   }
@@ -210,7 +255,11 @@ async function writeSphLoginQrToStdout(image, opts) {
     modeHint = opts.srcHint || "（栅格）";
   }
 
-  const visualW = Math.max(28, ...bodyLines.map(l => stripAnsi(l).length), termW);
+  const visualW = Math.max(
+    28,
+    ...bodyLines.map((l) => stripAnsi(l).length),
+    termW
+  );
   const barLen = Math.min(visualW, 76);
   const bar = "-".repeat(barLen);
 
@@ -232,9 +281,10 @@ async function writeSphLoginQrToStdout(image, opts) {
 async function paintSphLoginQr(page, opts) {
   if (!process.stdout.isTTY && !opts.saveQrPngPath) return;
 
-  const buf = await captureQrFromIframe(page);
-  if (!buf || !buf.length) return;
+  const captured = await captureQrFromIframe(page);
+  if (!captured || !captured.buf || !captured.buf.length) return;
 
+  const { buf, fromDataUrl } = captured;
   const image = nativeImage.createFromBuffer(buf);
   if (!image || image.isEmpty()) return;
 
@@ -243,9 +293,12 @@ async function paintSphLoginQr(page, opts) {
 
   if (opts.saveQrPngPath) {
     try {
-      const out = path.resolve(opts.saveQrPngPath);
-      fs.mkdirSync(path.dirname(out), { recursive: true });
-      fs.writeFileSync(out, image.toPNG());
+      writeLoginQrPngFile({
+        image,
+        saveQrPngPath: opts.saveQrPngPath,
+        rawBuf: buf,
+        fromDataUrl,
+      });
     } catch (e) {
       console.error("写入 --save-qr-png 失败:", e.message);
     }
@@ -280,7 +333,12 @@ export async function runSphCliLogin({
   }
 
   const part = normalizeSphPartition(partition);
-  console.log("[sph-cli-login] 原始 partition:", partition, "=> 实际使用:", part);
+  console.log(
+    "[sph-cli-login] 原始 partition:",
+    partition,
+    "=> 实际使用:",
+    part
+  );
 
   // 与 GUI open-account-login-window 保持一致：先应用代理配置
   try {
@@ -303,7 +361,9 @@ export async function runSphCliLogin({
     );
   }
   if (!useTerminalQr && !show) {
-    console.error("错误: 当前环境无法使用终端二维码且未指定 --show，无法继续登录。");
+    console.error(
+      "错误: 当前环境无法使用终端二维码且未指定 --show，无法继续登录。"
+    );
     return 2;
   }
 
@@ -312,7 +372,7 @@ export async function runSphCliLogin({
   /** @type {import("puppeteer").Page | null} */
   let piePage = null;
 
-  return await new Promise(resolve => {
+  return await new Promise((resolve) => {
     let settled = false;
     let pollTimer = null;
     let qrTimer = null;
@@ -367,7 +427,10 @@ export async function runSphCliLogin({
       try {
         pieBrowser = await pie.connect(app, puppeteer);
       } catch (e) {
-        console.error("无法连接 Puppeteer-in-Electron（终端扫码依赖 CDP）:", e.message);
+        console.error(
+          "无法连接 Puppeteer-in-Electron（终端扫码依赖 CDP）:",
+          e.message
+        );
         finish(1, {});
         return;
       }
@@ -416,19 +479,28 @@ export async function runSphCliLogin({
           await piePage.setUserAgent(cfg.useragent);
           cliQrDebugLog("CDP UA 已设置:", cfg.useragent.slice(0, 60));
         } catch (e) {
-          console.warn("[sph-cli-login] piePage.setUserAgent 失败:", e && e.message);
+          console.warn(
+            "[sph-cli-login] piePage.setUserAgent 失败:",
+            e && e.message
+          );
         }
       }
 
       // UA 设置完毕后再导航
       try {
-        await piePage.goto(cfg.index, { waitUntil: "domcontentloaded", timeout: 30000 }).catch(() => {});
+        await piePage
+          .goto(cfg.index, { waitUntil: "domcontentloaded", timeout: 30000 })
+          .catch(() => {});
       } catch (e) {
-        console.warn("[sph-cli-login] 导航失败（可能是重定向）:", e && e.code, e && e.message);
+        console.warn(
+          "[sph-cli-login] 导航失败（可能是重定向）:",
+          e && e.code,
+          e && e.message
+        );
       }
 
       // 等待重定向后的登录页 + iframe 加载完成
-      await new Promise(r => setTimeout(r, 8000));
+      await new Promise((r) => setTimeout(r, 8000));
 
       if (show) {
         win.focus();
@@ -463,7 +535,7 @@ export async function runSphCliLogin({
       // 轮询 sessionid Cookie —— 检测到与旧值不同的新 sessionid 才算登录成功
       pollTimer = setInterval(() => {
         getSphSessionId(part)
-          .then(newId => {
+          .then((newId) => {
             if (!newId || settled) return;
             // 无旧值 → 新出现即可；有旧值 → 必须不同
             if (!oldSessionId || newId !== oldSessionId) {
@@ -473,7 +545,7 @@ export async function runSphCliLogin({
               });
             }
           })
-          .catch(e => {
+          .catch((e) => {
             console.error("轮询 Cookie 失败:", e.message);
           });
       }, 2000);
@@ -481,12 +553,14 @@ export async function runSphCliLogin({
       deadlineTimer = setTimeout(() => {
         if (!settled) {
           console.error(
-            `登录等待超时（${Math.round(timeoutMs / 1000)}s），仍未检测到 sessionid。`
+            `登录等待超时（${Math.round(
+              timeoutMs / 1000
+            )}s），仍未检测到 sessionid。`
           );
           finish(3, {});
         }
       }, timeoutMs);
-    })().catch(e => {
+    })().catch((e) => {
       console.error("视频号 CLI 登录初始化失败:", e.message);
       finish(1, {});
     });
