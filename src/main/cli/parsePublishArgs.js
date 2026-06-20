@@ -5,6 +5,10 @@ import {
   VIDEO_PUBLISH_CANONICAL,
   resolvePublishPlatform,
 } from "../../shared/publishPlatforms.js";
+import {
+  resolveCreativeStatementForPlatform,
+  getCreativeStatementPlatformKey,
+} from "../../shared/creativeStatement.js";
 
 export { PLATFORM_ALIASES, VIDEO_PUBLISH_CANONICAL, resolvePublishPlatform };
 
@@ -278,6 +282,61 @@ function normalizePublishTargets(body) {
     .filter(Boolean);
 }
 
+function pickCreativeStatementFromMap(map, platformPt) {
+  if (!map || typeof map !== "object" || Array.isArray(map)) return null;
+  const keys = new Set([
+    platformPt,
+    getCreativeStatementPlatformKey(platformPt),
+  ]);
+  for (const [alias, canonical] of Object.entries(PLATFORM_ALIASES)) {
+    if (canonical === platformPt) keys.add(alias);
+  }
+  for (const key of keys) {
+    if (key && map[key] != null && String(map[key]).trim() !== "") {
+      return map[key];
+    }
+  }
+  return null;
+}
+
+function pickTargetCreativeStatement(target) {
+  if (!target || typeof target !== "object") return null;
+  return pickBodyValue(target, [
+    "creativeStatement",
+    "creative-statement",
+    "cs",
+  ]);
+}
+
+/**
+ * HTTP 创作声明解析（对齐 LocalVideoPublish 批量设置 + 单账号覆盖）
+ */
+export function resolveHttpPublishCreativeStatement(body, platformPt, target) {
+  let raw = pickTargetCreativeStatement(target);
+  if (raw == null) {
+    raw = pickCreativeStatementFromMap(body.creativeStatements, platformPt);
+  }
+  if (raw == null) {
+    raw = pickBodyValue(body, [
+      "creativeStatement",
+      "creative-statement",
+      "cs",
+    ]);
+  }
+  return resolveCreativeStatementForPlatform(raw, platformPt);
+}
+
+function applyHttpCreativeStatements(body, parsedValue, target = {}) {
+  return {
+    ...parsedValue,
+    creativeStatement: resolveHttpPublishCreativeStatement(
+      body,
+      parsedValue.platform,
+      target
+    ),
+  };
+}
+
 /**
  * 解析 HTTP 发布请求；支持单平台 platform 或多平台 platforms
  * @returns {{ ok: true, multi: boolean, value: object|object[] } | { ok: false, error: string }}
@@ -291,7 +350,11 @@ export function parseMultiPublishRequest(body) {
   if (!targets || targets.length === 0) {
     const single = parsePublishRequest(body);
     if (!single.ok) return single;
-    return { ok: true, multi: false, value: single.value };
+    return {
+      ok: true,
+      multi: false,
+      value: applyHttpCreativeStatements(body, single.value, body),
+    };
   }
 
   if (body.platform != null && String(body.platform).trim() !== "") {
@@ -318,7 +381,7 @@ export function parseMultiPublishRequest(body) {
         error: "HTTP API 暂不支持批量目录发布，请使用 cli publish --dir",
       };
     }
-    parsed.push(item.value);
+    parsed.push(applyHttpCreativeStatements(body, item.value, targets[i]));
   }
 
   const publishAtSet = new Set(

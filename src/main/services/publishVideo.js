@@ -353,6 +353,7 @@ export async function runMultiPlatformPublish(parsedList) {
         {
           platform: parsedList[0].platform,
           phone: parsedList[0].phone || "",
+          creativeStatement: parsedList[0].creativeStatement || "none",
           success: result.exitCode === 0,
           exitCode: result.exitCode,
           status: result.status,
@@ -402,6 +403,7 @@ export async function runMultiPlatformPublish(parsedList) {
       results.push({
         platform: item.platform,
         phone: item.phone || "",
+        creativeStatement: item.creativeStatement || "none",
         success: result.exitCode === 0,
         exitCode: result.exitCode,
         status: result.status,

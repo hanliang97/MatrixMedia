@@ -26,6 +26,24 @@ router.get("/platforms", async function (req, res) {
   }
 });
 
+router.get("/creative-statements", async function (req, res) {
+  try {
+    const { getCreativeStatementApiSpec } = await import(
+      "../../../shared/creativeStatement.js"
+    );
+    res.json({
+      success: true,
+      ...getCreativeStatementApiSpec(),
+    });
+  } catch (error) {
+    console.error("[HTTP /creative-statements]", error);
+    res.status(500).json({
+      success: false,
+      message: error && error.message ? error.message : String(error),
+    });
+  }
+});
+
 router.post("/changeData", function (req, res) {
   res.send(changeData({ ...req.body }));
 });

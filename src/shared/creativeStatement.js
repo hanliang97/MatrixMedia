@@ -1,5 +1,7 @@
 "use strict";
 
+import { VIDEO_PUBLISH_PLATFORM_DOCS } from "./publishPlatforms.js";
+
 /** 创作声明统一 value（发布表单、历史记录、各平台上传脚本共用） */
 export const CREATIVE_STATEMENT_VALUES = {
   NONE: "none",
@@ -109,7 +111,9 @@ export const CREATIVE_STATEMENT_PLATFORM_KEYS = {
 
 export function getCreativeStatementPlatformKey(pt) {
   const name = String(pt || "");
-  for (const [fragment, key] of Object.entries(CREATIVE_STATEMENT_PLATFORM_KEYS)) {
+  for (const [fragment, key] of Object.entries(
+    CREATIVE_STATEMENT_PLATFORM_KEYS
+  )) {
     if (name.includes(fragment)) return key;
   }
   return null;
@@ -123,7 +127,8 @@ export function getCreativeStatementOptionsForPlatform(pt) {
   const platformKey = getCreativeStatementPlatformKey(pt);
   if (!platformKey) return [];
   return CREATIVE_STATEMENT_OPTIONS.filter((opt) => {
-    if (opt.onlyPlatforms && !opt.onlyPlatforms.includes(platformKey)) return false;
+    if (opt.onlyPlatforms && !opt.onlyPlatforms.includes(platformKey))
+      return false;
     return !!(opt.platformLabels && opt.platformLabels[platformKey]);
   });
 }
@@ -174,7 +179,10 @@ export function normalizeCreativeStatement(value) {
 }
 
 export function getCreativeStatementOption(value) {
-  return VALUE_TO_OPTION.get(normalizeCreativeStatement(value)) || CREATIVE_STATEMENT_OPTIONS[0];
+  return (
+    VALUE_TO_OPTION.get(normalizeCreativeStatement(value)) ||
+    CREATIVE_STATEMENT_OPTIONS[0]
+  );
 }
 
 export function getCreativeStatementLabel(value, platform) {
@@ -207,4 +215,58 @@ export function resolveTtCreativeStatementLabel(value) {
 
 export function resolveXhsCreativeStatementLabel(value) {
   return getCreativeStatementLabel(value, "xhs");
+}
+
+/**
+ * 按平台解析创作声明（与 LocalVideoPublish.applyBatchCreativeStatement 一致：
+ * 当前值在该平台无对应选项时回退为 none）
+ * @param {string} value
+ * @param {string} pt 平台中文名，如「抖音」「哔哩哔哩」
+ */
+export function resolveCreativeStatementForPlatform(value, pt) {
+  const normalized = normalizeCreativeStatement(value);
+  if (!platformSupportsCreativeStatement(pt)) {
+    return CREATIVE_STATEMENT_DEFAULT;
+  }
+  const opts = getCreativeStatementOptionsForPlatform(pt);
+  const matched = opts.find((opt) => opt.value === normalized);
+  return matched ? matched.value : CREATIVE_STATEMENT_DEFAULT;
+}
+
+/**
+ * 供 HTTP GET /creative-statements 与文档生成
+ */
+export function getCreativeStatementApiSpec() {
+  const platforms = {};
+  for (const item of VIDEO_PUBLISH_PLATFORM_DOCS) {
+    const supports = platformSupportsCreativeStatement(item.name);
+    platforms[item.code] = {
+      name: item.name,
+      supports,
+      options: supports
+        ? getCreativeStatementOptionsForPlatform(item.name).map((opt) => ({
+            value: opt.value,
+            label: getCreativeStatementShortLabel(opt.value, item.name),
+          }))
+        : [],
+    };
+  }
+
+  return {
+    default: CREATIVE_STATEMENT_DEFAULT,
+    batchOptions: CREATIVE_STATEMENT_OPTIONS.map((opt) => ({
+      value: opt.value,
+      label: opt.label,
+      onlyPlatforms: opt.onlyPlatforms || null,
+    })),
+    platforms,
+    input: {
+      creativeStatement:
+        "全局默认声明，等同 GUI「批量设置创作声明」；支持 value、中文 label 或各平台页面原文案",
+      creativeStatements:
+        '按平台覆盖，key 可用 code（dy/blbl）或中文名；如 { "dy": "ai_generated", "blbl": "fiction" }',
+      perPlatform: "platforms 对象数组内可传 creativeStatement / cs 覆盖单平台",
+      fallback: "所选声明在某平台无对应选项时自动回退为 none（无标注）",
+    },
+  };
 }
