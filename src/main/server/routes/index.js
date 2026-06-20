@@ -7,6 +7,25 @@ router.get("/", function (req, res) {
   res.send("<h1>MatrixMedia API</h1>");
 });
 
+router.get("/platforms", async function (req, res) {
+  try {
+    const { getVideoPublishPlatformList } = await import(
+      "../../../shared/publishPlatforms.js"
+    );
+    const ptConfig = (await import("../../config/ptConfig.js")).default;
+    res.json({
+      success: true,
+      platforms: getVideoPublishPlatformList(ptConfig),
+    });
+  } catch (error) {
+    console.error("[HTTP /platforms]", error);
+    res.status(500).json({
+      success: false,
+      message: error && error.message ? error.message : String(error),
+    });
+  }
+});
+
 router.post("/changeData", function (req, res) {
   res.send(changeData({ ...req.body }));
 });

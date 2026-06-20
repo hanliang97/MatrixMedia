@@ -9,9 +9,23 @@ export const constantRouterMap = [
     children: [
       {
         path: "/",
+        name: "项目详情",
+        component: () => import("@/views/projectDetail/index"),
+        meta: { noSlide: true, title: "项目详情" },
+      },
+    ],
+  },
+  {
+    path: "/video-manager",
+    component: Layout,
+    redirect: "/video-manager",
+    hidden: true,
+    children: [
+      {
+        path: "/video-manager",
         name: "视频管理",
         component: () => import("@/views/videoManager/index"),
-        meta: { noSlide: true },
+        meta: { noSlide: true, title: "视频管理" },
       },
     ],
   },

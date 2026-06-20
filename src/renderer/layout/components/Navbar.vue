@@ -7,7 +7,8 @@
         mode="horizontal"
         @select="selectFn"
       >
-        <el-menu-item index="/">视频管理</el-menu-item>
+        <el-menu-item index="/">项目详情</el-menu-item>
+        <el-menu-item index="/video-manager">视频管理</el-menu-item>
         <el-menu-item :index="mediaMenuItemIndex">媒体平台管理</el-menu-item>
       </el-menu>
       <div class="account-actions">
@@ -108,11 +109,7 @@ export default {
   watch: {
     '$route.path'(path) {
       this.applyIsRouteFromPath(path)
-      if (path === '/') {
-        this.activeIndex = '/'
-      } else if (path.startsWith('/accountManager') && this.getAccoutIndex) {
-        this.activeIndex = this.getAccoutIndex
-      }
+      this.syncActiveIndexToCurrentRoute()
     }
   },
   methods: {

@@ -1,30 +1,12 @@
 "use strict";
 
-const PLATFORM_ALIASES = {
-  dy: "抖音",
-  douyin: "抖音",
-  抖音: "抖音",
-  sph: "视频号",
-  视频号: "视频号",
-  blbl: "哔哩哔哩",
-  bilibili: "哔哩哔哩",
-  哔哩哔哩: "哔哩哔哩",
-  bjh: "百家号",
-  百家号: "百家号",
-  tt: "头条",
-  toutiao: "头条",
-  头条: "头条",
-  ks: "快手",
-  kuaishou: "快手",
-  快手: "快手",
-  xhs: "小红书",
-  xiaohongshu: "小红书",
-  小红书: "小红书",
-  fqsp: "番茄视频",
-  fanqie: "番茄视频",
-  fq: "番茄视频",
-  番茄视频: "番茄视频",
-};
+import {
+  PLATFORM_ALIASES,
+  VIDEO_PUBLISH_CANONICAL,
+  resolvePublishPlatform,
+} from "../../shared/publishPlatforms.js";
+
+export { PLATFORM_ALIASES, VIDEO_PUBLISH_CANONICAL, resolvePublishPlatform };
 
 /**
  * 解析 `cli publish` 后的 argv（不含子命令名 publish）
@@ -89,20 +71,8 @@ export function parsePublishArgs(subArgv) {
   if (!out.platform) {
     return { ok: false, error: "缺少 --platform（或 -p），例如 dy / 抖音" };
   }
-  const raw = String(out.platform).trim();
-  const lower = raw.toLowerCase();
-  const pt = PLATFORM_ALIASES[raw] || PLATFORM_ALIASES[lower] || raw;
-  const canonical = [
-    "抖音",
-    "视频号",
-    "哔哩哔哩",
-    "百家号",
-    "头条",
-    "快手",
-    "小红书",
-    "番茄视频",
-  ];
-  if (!canonical.includes(pt)) {
+  const pt = resolvePublishPlatform(out.platform);
+  if (!VIDEO_PUBLISH_CANONICAL.includes(pt)) {
     return { ok: false, error: `未知平台: ${out.platform}` };
   }
   out.platform = pt;

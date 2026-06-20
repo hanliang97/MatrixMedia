@@ -1,6 +1,8 @@
-# 命令行（CLI）说明
+## 命令行（CLI）说明
 
 在保留图形界面的前提下，同一可执行文件支持 CLI 子命令。入口为参数中出现 `cli`。
+
+> 返回 [README](../README.md) · 相关：[HTTP API](./http-api.md) · [MCP](./mcp.md)
 
 ## 故障排除
 

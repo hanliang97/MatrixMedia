@@ -47,6 +47,14 @@ export default {
       "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
     listIndex: "https://cp.kuaishou.com/article/manage/video",
   },
+  小红书: {
+    index: "https://creator.xiaohongshu.com/new/home",
+    upload:
+      "https://creator.xiaohongshu.com/publish/publish?from=menu&target=video",
+    useragent:
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/138.0.0.0 Safari/537.36",
+    listIndex: "https://creator.xiaohongshu.com/new/note-manager",
+  },
   掘金: {
     index: "https://juejin.cn/login",
     upload: "https://juejin.cn/editor/drafts/new",
