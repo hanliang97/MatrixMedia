@@ -1,6 +1,7 @@
 "use strict";
 
 const assert = require("assert");
+const { spawnSync } = require("child_process");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -55,9 +56,39 @@ try {
 
   clearMainProcessLogFile(app);
 
-  assert.strictEqual(fs.existsSync(path.join(tempDir, "2026-05-15.log")), false);
+  assert.strictEqual(
+    fs.existsSync(path.join(tempDir, "2026-05-15.log")),
+    false
+  );
   assert.strictEqual(fs.existsSync(path.join(tempDir, todayLogName())), false);
-  assert.strictEqual(fs.readFileSync(path.join(tempDir, "keep.txt"), "utf8"), "keep");
+  assert.strictEqual(
+    fs.readFileSync(path.join(tempDir, "keep.txt"), "utf8"),
+    "keep"
+  );
+
+  const epipeTempDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), "matrixmedia-epipe-test-")
+  );
+  const result = spawnSync(
+    process.execPath,
+    [
+      "-e",
+      `
+const { installMainProcessLogFile } = require(${JSON.stringify(logFileBundle)});
+const app = { getPath(name) { if (name !== "logs") throw new Error(name); return ${JSON.stringify(
+        epipeTempDir
+      )}; } };
+const err = new Error("write EPIPE");
+err.code = "EPIPE";
+console.log = function () { throw err; };
+installMainProcessLogFile(app);
+console.log("closed stdout pipe");
+`,
+    ],
+    { encoding: "utf8" }
+  );
+  fs.rmSync(epipeTempDir, { recursive: true, force: true });
+  assert.strictEqual(result.status, 0, result.stderr || result.stdout);
 } finally {
   fs.rmSync(tempDir, { recursive: true, force: true });
 }

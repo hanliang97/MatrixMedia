@@ -10,6 +10,13 @@ let installed = false;
 let logFilePath = "";
 const sink = { stream: null };
 
+function isBrokenPipeError(err) {
+  return (
+    err &&
+    (err.code === "EPIPE" || /write EPIPE/.test(String(err.message || err)))
+  );
+}
+
 function formatLogDate(date = new Date()) {
   const yyyy = String(date.getFullYear());
   const mm = String(date.getMonth() + 1).padStart(2, "0");
@@ -53,7 +60,8 @@ export function installMainProcessLogFile(app) {
   );
 
   const stamp = () => new Date().toISOString();
-  const line = (level, args) => `[${stamp()}] [${level}] ${util.format(...args)}\n`;
+  const line = (level, args) =>
+    `[${stamp()}] [${level}] ${util.format(...args)}\n`;
 
   const wrap = (level, orig) =>
     function (...args) {
@@ -62,7 +70,12 @@ export function installMainProcessLogFile(app) {
       } catch (_) {
         /* ignore disk errors so console still works */
       }
-      return orig.apply(console, args);
+      try {
+        return orig.apply(console, args);
+      } catch (err) {
+        if (isBrokenPipeError(err)) return undefined;
+        throw err;
+      }
     };
 
   console.log = wrap("LOG", console.log);

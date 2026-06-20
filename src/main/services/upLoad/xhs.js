@@ -4,7 +4,11 @@ import {
   isCreativeStatementNone,
   resolveXhsCreativeStatementLabel,
 } from "../../../shared/creativeStatement.js";
-import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import {
+  WAIT_SELECTOR_APPEAR_MS,
+  WAIT_UPLOAD_PROCESSING_MS,
+  pollPageUntil,
+} from "./uploadTimeouts.js";
 
 // 小红书下拉里直接展示的支持选项；未匹配则跳过。
 const XHS_SUPPORTED_STATEMENT_LABELS = new Set([
@@ -33,16 +37,16 @@ async function selectXhsCreativeStatement(page, data) {
     "(function(){" +
       "var ps=document.querySelectorAll('.d-select-placeholder');" +
       "for(var i=0;i<ps.length;i++){" +
-        "if((ps[i].textContent||'').replace(/\\s+/g,'').trim()==='添加内容类型声明'){" +
-          "var sel=ps[i].closest('.d-select')||ps[i].parentElement;" +
-          "if(!sel)return '';" +
-          "var id='__xhs_stmt_'+Date.now();" +
-          "sel.setAttribute('id',id);" +
-          "return id;" +
-        "}" +
+      "if((ps[i].textContent||'').replace(/\\s+/g,'').trim()==='添加内容类型声明'){" +
+      "var sel=ps[i].closest('.d-select')||ps[i].parentElement;" +
+      "if(!sel)return '';" +
+      "var id='__xhs_stmt_'+Date.now();" +
+      "sel.setAttribute('id',id);" +
+      "return id;" +
+      "}" +
       "}" +
       "return '';" +
-    "})()"
+      "})()"
   );
   if (!triggerId) {
     console.warn("未找到小红书「添加内容类型声明」入口，跳过");
@@ -52,7 +56,10 @@ async function selectXhsCreativeStatement(page, data) {
     await page.click("#" + triggerId, { delay: 80 });
     console.log("[xhs] 已 page.click 打开内容类型声明下拉");
   } catch (e) {
-    console.warn("[xhs] page.click 失败，尝试 DOM 派发 mousedown:", e?.message || e);
+    console.warn(
+      "[xhs] page.click 失败，尝试 DOM 派发 mousedown:",
+      e?.message || e
+    );
     await page.evaluate(
       "(function(id){" +
         "var el=document.getElementById(id);" +
@@ -62,7 +69,9 @@ async function selectXhsCreativeStatement(page, data) {
         "el.dispatchEvent(new MouseEvent('mousedown',o));" +
         "el.dispatchEvent(new MouseEvent('mouseup',o));" +
         "el.dispatchEvent(new MouseEvent('click',o));" +
-      "})(" + JSON.stringify(triggerId) + ")"
+        "})(" +
+        JSON.stringify(triggerId) +
+        ")"
     );
   }
 
@@ -72,10 +81,12 @@ async function selectXhsCreativeStatement(page, data) {
       "(function(){" +
         "var ns=document.querySelectorAll('.d-options-wrapper .d-option-name');" +
         "for(var i=0;i<ns.length;i++){" +
-          "if((ns[i].textContent||'').replace(/\\s+/g,'').trim()===" + JSON.stringify(label.replace(/\s+/g, "").trim()) + ")return true;" +
+        "if((ns[i].textContent||'').replace(/\\s+/g,'').trim()===" +
+        JSON.stringify(label.replace(/\s+/g, "").trim()) +
+        ")return true;" +
         "}" +
         "return false;" +
-      "})()",
+        "})()",
       { timeout: WAIT_SELECTOR_APPEAR_MS }
     );
   } catch (e) {
@@ -87,37 +98,39 @@ async function selectXhsCreativeStatement(page, data) {
   //    用 style="grid-area: N / x / ..." 里的行号 N 对齐。打临时 id 后用 page.click 真鼠标事件。
   const optId = await page.evaluate(
     "(function(){" +
-      "var target=" + JSON.stringify(label.replace(/\s+/g, "").trim()) + ";" +
+      "var target=" +
+      JSON.stringify(label.replace(/\s+/g, "").trim()) +
+      ";" +
       "var items=document.querySelectorAll('.d-options-wrapper .d-option-name');" +
       "for(var i=0;i<items.length;i++){" +
-        "var t=(items[i].textContent||'').replace(/\\s+/g,'').trim();" +
-        "if(t!==target)continue;" +
-        "var row=items[i].closest('.d-grid-item');" +
-        "if(!row)return '';" +
-        // 解析 grid-area 起始行号
-        "var ga=row.getAttribute('style')||'';" +
-        "var m=ga.match(/grid-area:\\s*(\\d+)/);" +
-        "var rowNum=m?m[1]:'';" +
-        "var handler=null;" +
-        "if(rowNum&&row.parentElement){" +
-          "var sibs=row.parentElement.querySelectorAll('.d-grid-item');" +
-          "for(var s=0;s<sibs.length;s++){" +
-            "var sga=sibs[s].getAttribute('style')||'';" +
-            "var sm=sga.match(/grid-area:\\s*(\\d+)/);" +
-            "if(sm&&sm[1]===rowNum){" +
-              "var h=sibs[s].querySelector('.d-option-handler');" +
-              "if(h){handler=h;break;}" +
-            "}" +
-          "}" +
-        "}" +
-        // 兜底：找不到对应行的 handler 就退到 content 行容器
-        "if(!handler)handler=items[i].closest('.d-option')||row;" +
-        "var id='__xhs_opt_'+Date.now();" +
-        "handler.setAttribute('id',id);" +
-        "return id;" +
+      "var t=(items[i].textContent||'').replace(/\\s+/g,'').trim();" +
+      "if(t!==target)continue;" +
+      "var row=items[i].closest('.d-grid-item');" +
+      "if(!row)return '';" +
+      // 解析 grid-area 起始行号
+      "var ga=row.getAttribute('style')||'';" +
+      "var m=ga.match(/grid-area:\\s*(\\d+)/);" +
+      "var rowNum=m?m[1]:'';" +
+      "var handler=null;" +
+      "if(rowNum&&row.parentElement){" +
+      "var sibs=row.parentElement.querySelectorAll('.d-grid-item');" +
+      "for(var s=0;s<sibs.length;s++){" +
+      "var sga=sibs[s].getAttribute('style')||'';" +
+      "var sm=sga.match(/grid-area:\\s*(\\d+)/);" +
+      "if(sm&&sm[1]===rowNum){" +
+      "var h=sibs[s].querySelector('.d-option-handler');" +
+      "if(h){handler=h;break;}" +
+      "}" +
+      "}" +
+      "}" +
+      // 兜底：找不到对应行的 handler 就退到 content 行容器
+      "if(!handler)handler=items[i].closest('.d-option')||row;" +
+      "var id='__xhs_opt_'+Date.now();" +
+      "handler.setAttribute('id',id);" +
+      "return id;" +
       "}" +
       "return '';" +
-    "})()"
+      "})()"
   );
   if (!optId) {
     console.warn("未找到小红书声明选项: " + label);
@@ -136,7 +149,9 @@ async function selectXhsCreativeStatement(page, data) {
         "el.dispatchEvent(new MouseEvent('mousedown',o));" +
         "el.dispatchEvent(new MouseEvent('mouseup',o));" +
         "el.dispatchEvent(new MouseEvent('click',o));" +
-      "})(" + JSON.stringify(optId) + ")"
+        "})(" +
+        JSON.stringify(optId) +
+        ")"
     );
   }
   await page.waitForTimeout(400);
@@ -154,12 +169,18 @@ async function selectXhsCreativeStatement(page, data) {
       "var pt=p?(p.textContent||'').replace(/\\s+/g,'').trim():'';" +
       "if(pt&&pt!=='添加内容类型声明')return pt;" +
       "return '';" +
-    "})(" + JSON.stringify(triggerId) + ")"
+      "})(" +
+      JSON.stringify(triggerId) +
+      ")"
   );
   if (selectedNow) {
-    console.log("[xhs] 已选择内容类型声明: " + label + "（页面显示=" + selectedNow + "）");
+    console.log(
+      "[xhs] 已选择内容类型声明: " + label + "（页面显示=" + selectedNow + "）"
+    );
   } else {
-    console.warn("[xhs] 点了选项但未观察到 placeholder 被替换，可能没真正选中: " + label);
+    console.warn(
+      "[xhs] 点了选项但未观察到 placeholder 被替换，可能没真正选中: " + label
+    );
   }
 }
 
@@ -169,18 +190,21 @@ function normalizeTagList(rawTagText = "") {
 
   return tagText
     .split(/[\s,，;；、]+/)
-    .flatMap(tag => tag.split(/(?=#)/))
-    .map(tag => tag.replace(/^#/, "").trim())
+    .flatMap((tag) => tag.split(/(?=#)/))
+    .map((tag) => tag.replace(/^#/, "").trim())
     .filter(Boolean);
 }
 
 export default async function (page, data, window, event) {
-  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
+  const isDraftMode =
+    data.publishMode === "draft" || data.publishToDraft === true;
   console.log("小红书上传开始:", data);
 
   try {
     const uploadSelector = "input.upload-input[type='file']";
-    await page.waitForSelector(uploadSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(uploadSelector, {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     const uploadInput = await page.$(uploadSelector);
     if (!uploadInput) throw new Error("未找到上传 input");
     await uploadInput.uploadFile(path.resolve(data.filePath));
@@ -191,14 +215,19 @@ export default async function (page, data, window, event) {
   }
 
   try {
-    const titleSelector = ".publish-page-content-base .edit-container .d-input input.d-text";
-    await page.waitForSelector(titleSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
+    const titleSelector =
+      ".publish-page-content-base .edit-container .d-input input.d-text";
+    await page.waitForSelector(titleSelector, {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
     const rawTitle = (data.data?.bt1 || data.data?.bt2 || "").trim();
     const titleText = rawTitle.slice(0, 20);
     if (rawTitle.length > 20) {
-      console.warn(`[xhs] ⚠️ 标题共${rawTitle.length}字，超过20字限制，已截断为: "${titleText}"`);
+      console.warn(
+        `[xhs] ⚠️ 标题共${rawTitle.length}字，超过20字限制，已截断为: "${titleText}"`
+      );
     }
     await titleInput.click({ clickCount: 3 });
     await page.keyboard.press("Backspace");
@@ -216,7 +245,9 @@ export default async function (page, data, window, event) {
   // 正文/标签：用 keyboard.type + 字符串形式的 page.evaluate（避免 webpack 转译炸 "n is not defined"）
   try {
     const editorSelector = ".tiptap.ProseMirror";
-    await page.waitForSelector(editorSelector, { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(editorSelector, {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     const editor = await page.$(editorSelector);
     if (!editor) throw new Error("未找到正文编辑器");
 
@@ -311,17 +342,17 @@ export default async function (page, data, window, event) {
           // 1) 新版：.video-plugin-title-action 含"重新上传"
           "var actions=document.querySelectorAll('.video-plugin-title-action');" +
           "for(var i=0;i<actions.length;i++){" +
-            "var t=(actions[i].textContent||'').replace(/\\s+/g,'').trim();" +
-            "if(t.indexOf('重新上传')!==-1)return true;" +
+          "var t=(actions[i].textContent||'').replace(/\\s+/g,'').trim();" +
+          "if(t.indexOf('重新上传')!==-1)return true;" +
           "}" +
           // 2) 老版兜底：任何 video 元素有 src
           "var vs=document.querySelectorAll('video');" +
           "for(var j=0;j<vs.length;j++){" +
-            "var s=vs[j].getAttribute('src')||vs[j].currentSrc||'';" +
-            "if(String(s).trim().length>0)return true;" +
+          "var s=vs[j].getAttribute('src')||vs[j].currentSrc||'';" +
+          "if(String(s).trim().length>0)return true;" +
           "}" +
           "return false;" +
-        "})()",
+          "})()",
         WAIT_UPLOAD_PROCESSING_MS
       );
       console.log("[xhs] 视频上传完成（重新上传按钮已出现）");
@@ -359,7 +390,7 @@ export default async function (page, data, window, event) {
             "var h=document.querySelector('xhs-publish-btn');" +
             "if(!h)return false;" +
             "return h.getAttribute('submit-disabled')==='false';" +
-          "})()",
+            "})()",
           30 * 1000
         );
         console.log("[xhs] 发布按钮已可用");
@@ -372,12 +403,13 @@ export default async function (page, data, window, event) {
     const box = await hostHandle.boundingBox();
     if (!box) throw new Error("发布按钮宿主无 boundingBox（未渲染或被遮挡）");
     console.log(
-      "[xhs] 宿主 box=", JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
+      "[xhs] 宿主 box=",
+      JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
     );
     // 基于 .publish-page-publish-btn 左上角的固定偏移量：
-    //   暂存离开：left 250px, top 40px
-    //   发布：    left 400px, top 40px
-    const cx = box.x + (isDraftMode ? 250 : 400);
+    //   暂存离开：left 300px, top 40px
+    //   发布：    left 450px, top 40px
+    const cx = box.x + (isDraftMode ? 300 : 450);
     const cy = box.y + 40;
 
     const targetText = isDraftMode ? "暂存离开" : "发布";
@@ -385,7 +417,9 @@ export default async function (page, data, window, event) {
     for (let attempt = 1; attempt <= 5; attempt++) {
       await page.mouse.click(cx, cy, { delay: 80 });
       console.log(
-        `[xhs] 第 ${attempt} 次点击「${targetText}」at (${Math.round(cx)},${Math.round(cy)})`
+        `[xhs] 第 ${attempt} 次点击「${targetText}」at (${Math.round(
+          cx
+        )},${Math.round(cy)})`
       );
       await page.waitForTimeout(1500);
       // 验证成功：宿主消失/换页/属性变化
@@ -402,7 +436,7 @@ export default async function (page, data, window, event) {
         "(function(){" +
           "var dialog=document.querySelector('.originalContainer .footer .d-button, .d-modal .d-button-primary, .d-popconfirm .d-button-primary');" +
           "if(dialog)dialog.click();" +
-        "})()"
+          "})()"
       );
       await page.waitForTimeout(500);
     }
@@ -414,13 +448,15 @@ export default async function (page, data, window, event) {
           "var h=document.querySelector('xhs-publish-btn');" +
           "if(!h)return 'host-gone';" +
           "var o={};for(var i=0;i<h.attributes.length;i++){o[h.attributes[i].name]=h.attributes[i].value;}return o;" +
-        "})()"
+          "})()"
       );
       console.warn("[xhs] 5 次点击后宿主仍在，属性:", JSON.stringify(attrDump));
       throw new Error(`未能成功点击「${targetText}」按钮`);
     }
 
-    console.log(isDraftMode ? "✅ 小红书视频已保存草稿" : "✅ 小红书视频上传成功");
+    console.log(
+      isDraftMode ? "✅ 小红书视频已保存草稿" : "✅ 小红书视频上传成功"
+    );
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,
