@@ -184,6 +184,58 @@ async function selectXhsCreativeStatement(page, data) {
   }
 }
 
+async function closeCheckedXhsPkCoverSwitch(page) {
+  const switchId = await page.evaluate(
+    "(function(){" +
+      "var input=document.querySelector('.pk-cover-title-wrapper input[type=\"checkbox\"]');" +
+      "if(!input||!input.checked)return '';" +
+      "var id='__xhs_pk_cover_switch_'+Date.now();" +
+      "input.setAttribute('id',id);" +
+      "return id;" +
+      "})()"
+  );
+  if (!switchId) {
+    console.log("[xhs] PK封面开关未开启，无需关闭");
+    return;
+  }
+
+  try {
+    await page.click("#" + switchId, { delay: 80 });
+  } catch (e) {
+    console.warn("[xhs] page.click 关闭PK封面失败，DOM 派发:", e?.message || e);
+    await page.evaluate(
+      "(function(id){" +
+        "var el=document.getElementById(id);" +
+        "if(!el)return;" +
+        "var r=el.getBoundingClientRect();" +
+        "var o={bubbles:true,cancelable:true,view:window,clientX:r.left+r.width/2,clientY:r.top+r.height/2,button:0};" +
+        "el.dispatchEvent(new MouseEvent('mousedown',o));" +
+        "el.dispatchEvent(new MouseEvent('mouseup',o));" +
+        "el.dispatchEvent(new MouseEvent('click',o));" +
+        "})(" +
+        JSON.stringify(switchId) +
+        ")"
+    );
+  }
+  await page.waitForTimeout(300);
+
+  const stillChecked = await page.evaluate(
+    "(function(id){" +
+      "var el=document.getElementById(id);" +
+      "if(!el)return false;" +
+      "var input=el.matches('input[type=\"checkbox\"]')?el:el.querySelector('input[type=\"checkbox\"]');" +
+      "return !!(input&&input.checked);" +
+      "})(" +
+      JSON.stringify(switchId) +
+      ")"
+  );
+  if (stillChecked) {
+    console.warn("[xhs] 已点击PK封面开关，但页面仍显示开启");
+  } else {
+    console.log("[xhs] 已关闭PK封面开关");
+  }
+}
+
 function normalizeTagList(rawTagText = "") {
   const tagText = String(rawTagText).trim();
   if (!tagText) return [];
@@ -312,18 +364,12 @@ export default async function (page, data, window, event) {
 
   await page.waitForTimeout(300);
 
-  // === 声明原创开关：默认不自动开启 ===
-  // 之前会自动点 .original-wrapper .custom-switch-switch 把原创打开，
-  // 进而在发布时弹出"原创承诺"二次确认弹窗，阻塞发布按钮的点击。
-  // 现在保留不点；如果以后要按账号开关原创，再做成一个 data.originalDeclaration 开关。
-  // try {
-  //   const originalSwitchSelector = ".original-wrapper .custom-switch-switch";
-  //   await page.waitForSelector(originalSwitchSelector, { timeout: 5000 });
-  //   const originalSwitch = await page.$(originalSwitchSelector);
-  //   if (originalSwitch) await originalSwitch.click();
-  //   ...
-  // } catch (err) { console.error("❌ 小红书声明原创失败:", err); }
-  console.log("[xhs] 跳过自动声明原创");
+  // === PK封面开关：不需要 PK 封面，若页面默认开启则关闭 ===
+  try {
+    await closeCheckedXhsPkCoverSwitch(page);
+  } catch (err) {
+    console.warn("小红书PK封面开关处理未完成:", err?.message || err);
+  }
 
   // 选择内容类型声明（无标注 / 不支持值会跳过）
   try {
