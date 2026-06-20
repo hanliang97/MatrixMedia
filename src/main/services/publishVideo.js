@@ -39,9 +39,10 @@ function derivePhoneForRecord(v) {
 /**
  * 单文件发布（与 cli publish 单文件模式一致）
  * @param {object} v parsePublishArgs 解析后的参数
+ * @param {{ sourceFile: string, resolvedFile: string } | null} fileContext 多平台复用已下载文件时传入
  * @returns {Promise<{ exitCode: number, status?: string, scheduled?: boolean, id?: string|null, publishAt?: string, message?: string }>}
  */
-export async function runSingleFilePublish(v) {
+export async function runSingleFilePublish(v, fileContext = null) {
   const cfg = ptConfig[v.platform];
   if (!cfg) {
     return {
@@ -59,9 +60,12 @@ export async function runSingleFilePublish(v) {
 
   let cleanupDownload = null;
   let resolvedFile = sourceFile;
-  const deferRemoteDownload = v.publishAt && isRemotePublishFile(sourceFile);
+  const deferRemoteDownload =
+    !fileContext && v.publishAt && isRemotePublishFile(sourceFile);
 
-  if (!deferRemoteDownload) {
+  if (fileContext) {
+    resolvedFile = fileContext.resolvedFile;
+  } else if (!deferRemoteDownload) {
     try {
       const resolved = await resolvePublishFile(sourceFile);
       resolvedFile = resolved.localPath;
@@ -94,7 +98,6 @@ async function runSingleFilePublishInner(
   cfg,
   { sourceFile, resolvedFile, stem, bt1, bt2, bookName }
 ) {
-
   const taskPayload = {
     taskId: Date.now() + Math.random(),
     bookName,
@@ -135,9 +138,10 @@ async function runSingleFilePublishInner(
     bt2,
     bq: String(v.bq || "").trim(),
     creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
-    filePath: v.publishAt && isRemotePublishFile(sourceFile)
-      ? sourceFile
-      : resolvedFile,
+    filePath:
+      v.publishAt && isRemotePublishFile(sourceFile)
+        ? sourceFile
+        : resolvedFile,
     useragent: cfg.useragent,
     phone: derivePhoneForRecord(v),
     partition: v.partition,
@@ -304,4 +308,127 @@ async function runSingleFilePublishInner(
 
     runPuppeteerTask(taskPayload, transport, () => {});
   });
+}
+
+function sortPublishPlatforms(list) {
+  return [...list].sort((a, b) => {
+    if (a.platform.includes("视频号")) return -1;
+    if (b.platform.includes("视频号")) return 1;
+    return 0;
+  });
+}
+
+/**
+ * 多平台顺序发布；远程视频只下载一次，全部完成后清理临时文件
+ * @param {object[]} parsedList
+ */
+export async function runMultiPlatformPublish(parsedList) {
+  if (!Array.isArray(parsedList) || parsedList.length === 0) {
+    return {
+      success: false,
+      exitCode: 2,
+      status: "failed",
+      message: "平台列表为空",
+      total: 0,
+      succeeded: 0,
+      failed: 0,
+      results: [],
+    };
+  }
+
+  if (parsedList.length === 1) {
+    const result = await runSingleFilePublish(parsedList[0]);
+    return {
+      success: result.exitCode === 0,
+      exitCode: result.exitCode,
+      status: result.status || (result.exitCode === 0 ? "success" : "failed"),
+      message: result.message || "",
+      id: result.id ?? null,
+      publishAt: result.publishAt ?? null,
+      scheduled: result.scheduled === true,
+      total: 1,
+      succeeded: result.exitCode === 0 ? 1 : 0,
+      failed: result.exitCode === 0 ? 0 : 1,
+      results: [
+        {
+          platform: parsedList[0].platform,
+          phone: parsedList[0].phone || "",
+          success: result.exitCode === 0,
+          exitCode: result.exitCode,
+          status: result.status,
+          message: result.message || "",
+          id: result.id ?? null,
+          publishAt: result.publishAt ?? null,
+          scheduled: result.scheduled === true,
+        },
+      ],
+    };
+  }
+
+  const sourceFile = String(parsedList[0].file || "").trim();
+  const allScheduled = parsedList.every((item) => item.publishAt);
+  const deferRemoteDownload = allScheduled && isRemotePublishFile(sourceFile);
+
+  let cleanupDownload = null;
+  let fileContext = null;
+
+  if (!deferRemoteDownload) {
+    try {
+      const resolved = await resolvePublishFile(sourceFile);
+      fileContext = {
+        sourceFile,
+        resolvedFile: resolved.localPath,
+      };
+      cleanupDownload = resolved.cleanup;
+    } catch (e) {
+      return {
+        success: false,
+        exitCode: 1,
+        status: "failed",
+        message: `下载视频失败: ${e && e.message ? e.message : e}`,
+        total: parsedList.length,
+        succeeded: 0,
+        failed: parsedList.length,
+        results: [],
+      };
+    }
+  }
+
+  const results = [];
+
+  try {
+    for (const item of sortPublishPlatforms(parsedList)) {
+      const result = await runSingleFilePublish(item, fileContext);
+      results.push({
+        platform: item.platform,
+        phone: item.phone || "",
+        success: result.exitCode === 0,
+        exitCode: result.exitCode,
+        status: result.status,
+        message: result.message || "",
+        id: result.id ?? null,
+        publishAt: result.publishAt ?? null,
+        scheduled: result.scheduled === true,
+      });
+    }
+  } finally {
+    if (cleanupDownload) cleanupDownload();
+  }
+
+  const succeeded = results.filter((item) => item.success).length;
+  const failed = results.length - succeeded;
+  let exitCode = 0;
+  if (failed > 0 && succeeded > 0) exitCode = 1;
+  else if (failed > 0) exitCode = 2;
+
+  return {
+    success: failed === 0,
+    exitCode,
+    status: failed === 0 ? "success" : succeeded === 0 ? "failed" : "partial",
+    message: `成功 ${succeeded} / 失败 ${failed}`,
+    total: results.length,
+    succeeded,
+    failed,
+    results,
+  };
 }

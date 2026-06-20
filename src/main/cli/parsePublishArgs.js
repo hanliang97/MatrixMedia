@@ -252,6 +252,123 @@ export function parsePublishRequest(body) {
   return parsePublishArgs(publishBodyToArgv(body));
 }
 
+const SHARED_PUBLISH_BODY_KEYS = [
+  "file",
+  "f",
+  "title",
+  "t",
+  "phone",
+  "partition",
+  "bookName",
+  "name",
+  "book-name",
+  "bt2",
+  "tags",
+  "bq",
+  "publishAt",
+  "publish-at",
+  "creativeStatement",
+  "creative-statement",
+  "cs",
+  "show",
+  "closeWindowAfterPublish",
+];
+
+function extractSharedPublishBody(body) {
+  const shared = {};
+  for (const key of SHARED_PUBLISH_BODY_KEYS) {
+    if (body[key] != null && body[key] !== "") {
+      shared[key] = body[key];
+    }
+  }
+  return shared;
+}
+
+function normalizePublishTargets(body) {
+  const raw = body.platforms;
+  if (raw == null) return null;
+  const list = Array.isArray(raw)
+    ? raw
+    : String(raw)
+        .split(/[,，|]/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+  if (list.length === 0) return null;
+
+  return list
+    .map((item) => {
+      if (typeof item === "string") {
+        return { platform: item };
+      }
+      if (item && typeof item === "object" && item.platform != null) {
+        return { ...item };
+      }
+      return null;
+    })
+    .filter(Boolean);
+}
+
+/**
+ * 解析 HTTP 发布请求；支持单平台 platform 或多平台 platforms
+ * @returns {{ ok: true, multi: boolean, value: object|object[] } | { ok: false, error: string }}
+ */
+export function parseMultiPublishRequest(body) {
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return { ok: false, error: "请求体必须是 JSON 对象" };
+  }
+
+  const targets = normalizePublishTargets(body);
+  if (!targets || targets.length === 0) {
+    const single = parsePublishRequest(body);
+    if (!single.ok) return single;
+    return { ok: true, multi: false, value: single.value };
+  }
+
+  if (body.platform != null && String(body.platform).trim() !== "") {
+    return {
+      ok: false,
+      error: "请只使用 platform 或 platforms 其一，不要同时传",
+    };
+  }
+
+  const shared = extractSharedPublishBody(body);
+  const parsed = [];
+
+  for (let i = 0; i < targets.length; i++) {
+    const merged = { ...shared, ...targets[i] };
+    const item = parsePublishRequest(merged);
+    if (!item.ok) {
+      const label =
+        targets[i].platform != null ? String(targets[i].platform) : `#${i + 1}`;
+      return { ok: false, error: `平台 ${label}: ${item.error}` };
+    }
+    if (item.value.dir) {
+      return {
+        ok: false,
+        error: "HTTP API 暂不支持批量目录发布，请使用 cli publish --dir",
+      };
+    }
+    parsed.push(item.value);
+  }
+
+  const publishAtSet = new Set(
+    parsed.map((item) => String(item.publishAt || "").trim()).filter(Boolean)
+  );
+  if (publishAtSet.size > 1) {
+    return {
+      ok: false,
+      error: "多平台定时发布时，各平台 publishAt 必须相同",
+    };
+  }
+
+  const fileSet = new Set(parsed.map((item) => String(item.file || "").trim()));
+  if (fileSet.size > 1) {
+    return { ok: false, error: "多平台发布需使用相同 file" };
+  }
+
+  return { ok: true, multi: parsed.length > 1, value: parsed };
+}
+
 export function publishHelpText() {
   return `
 用法: <应用> cli publish [选项]
