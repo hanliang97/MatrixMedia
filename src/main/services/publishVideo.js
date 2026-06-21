@@ -42,7 +42,11 @@ function derivePhoneForRecord(v) {
  * @param {{ sourceFile: string, resolvedFile: string } | null} fileContext 多平台复用已下载文件时传入
  * @returns {Promise<{ exitCode: number, status?: string, scheduled?: boolean, id?: string|null, publishAt?: string, message?: string }>}
  */
-export async function runSingleFilePublish(v, fileContext = null) {
+export async function runSingleFilePublish(
+  v,
+  fileContext = null,
+  options = {}
+) {
   const cfg = ptConfig[v.platform];
   if (!cfg) {
     return {
@@ -80,14 +84,19 @@ export async function runSingleFilePublish(v, fileContext = null) {
   }
 
   try {
-    return await runSingleFilePublishInner(v, cfg, {
-      sourceFile,
-      resolvedFile,
-      stem,
-      bt1,
-      bt2,
-      bookName,
-    });
+    return await runSingleFilePublishInner(
+      v,
+      cfg,
+      {
+        sourceFile,
+        resolvedFile,
+        stem,
+        bt1,
+        bt2,
+        bookName,
+      },
+      options
+    );
   } finally {
     if (cleanupDownload) cleanupDownload();
   }
@@ -96,7 +105,8 @@ export async function runSingleFilePublish(v, fileContext = null) {
 async function runSingleFilePublishInner(
   v,
   cfg,
-  { sourceFile, resolvedFile, stem, bt1, bt2, bookName }
+  { sourceFile, resolvedFile, stem, bt1, bt2, bookName },
+  options = {}
 ) {
   const taskPayload = {
     taskId: Date.now() + Math.random(),
@@ -251,12 +261,20 @@ async function runSingleFilePublishInner(
   };
 
   return await new Promise((resolve) => {
+    const waitForResult = options.waitForResult !== false;
     let settled = false;
     const finish = (result) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      resolve(result);
+      if (typeof options.onDone === "function") {
+        try {
+          options.onDone(result);
+        } catch (e) {
+          console.error("MatrixMedia: 发布完成回调失败:", e && e.message);
+        }
+      }
+      if (waitForResult) resolve(result);
     };
 
     const timer = setTimeout(() => {
@@ -307,6 +325,14 @@ async function runSingleFilePublishInner(
     };
 
     runPuppeteerTask(taskPayload, transport, () => {});
+    if (!waitForResult) {
+      resolve({
+        exitCode: 0,
+        status: "submitted",
+        message: "已提交发布任务",
+        id: recordId,
+      });
+    }
   });
 }
 
@@ -396,10 +422,21 @@ export async function runMultiPlatformPublish(parsedList) {
   }
 
   const results = [];
+  let pendingCleanupCount = parsedList.length;
+  const releaseSharedDownload = () => {
+    pendingCleanupCount -= 1;
+    if (pendingCleanupCount <= 0 && cleanupDownload) {
+      cleanupDownload();
+      cleanupDownload = null;
+    }
+  };
 
   try {
     for (const item of sortPublishPlatforms(parsedList)) {
-      const result = await runSingleFilePublish(item, fileContext);
+      const result = await runSingleFilePublish(item, fileContext, {
+        waitForResult: false,
+        onDone: releaseSharedDownload,
+      });
       results.push({
         platform: item.platform,
         phone: item.phone || "",
@@ -412,25 +449,22 @@ export async function runMultiPlatformPublish(parsedList) {
         publishAt: result.publishAt ?? null,
         scheduled: result.scheduled === true,
       });
+      if (item.platform.includes("视频号")) {
+        await new Promise((resolve) => setTimeout(resolve, 4000));
+      }
     }
   } finally {
-    if (cleanupDownload) cleanupDownload();
+    if (results.length === 0 && cleanupDownload) cleanupDownload();
   }
 
-  const succeeded = results.filter((item) => item.success).length;
-  const failed = results.length - succeeded;
-  let exitCode = 0;
-  if (failed > 0 && succeeded > 0) exitCode = 1;
-  else if (failed > 0) exitCode = 2;
-
   return {
-    success: failed === 0,
-    exitCode,
-    status: failed === 0 ? "success" : succeeded === 0 ? "failed" : "partial",
-    message: `成功 ${succeeded} / 失败 ${failed}`,
+    success: true,
+    exitCode: 0,
+    status: "submitted",
+    message: `已提交 ${results.length} 个平台发布`,
     total: results.length,
-    succeeded,
-    failed,
+    succeeded: 0,
+    failed: 0,
     results,
   };
 }

@@ -183,6 +183,14 @@ function pickBodyValue(body, keys) {
   return null;
 }
 
+function normalizeBodyTags(value) {
+  return String(value || "")
+    .split(/[\s,，、;；|]+/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .join(" ");
+}
+
 /**
  * 将 HTTP JSON 请求体转为 cli publish 等价 argv
  * @param {object} body
@@ -205,7 +213,8 @@ export function publishBodyToArgv(body) {
   pushPair(["title", "t"], "-t");
   pushPair(["bookName", "name", "book-name"], "--name");
   pushPair(["bt2"], "--bt2");
-  pushPair(["tags", "bq"], "--tags");
+  const tags = pickBodyValue(body, ["tags", "bq"]);
+  if (tags != null) argv.push("--tags", normalizeBodyTags(tags));
   pushPair(["publishAt", "publish-at"], "--publish-at");
   pushPair(
     ["creativeStatement", "creative-statement", "cs"],

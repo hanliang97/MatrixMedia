@@ -224,7 +224,7 @@ open /Applications/matrixmedia.app
 
 应用图形界面启动后，会自动在本机 **30088** 端口（`BuiltInServerPort`，见 `env/.env`）监听内置 Express 服务。完整路由与参数说明见 **[docs/http-api.md](./docs/http-api.md)**（应用内「项目详情」页亦有摘要）。
 
-> **与 CLI 的区别**：HTTP API 依赖 GUI 主进程已运行（托盘/窗口在即可）；CLI 可独立启动。长时间发布请求会阻塞直到上传完成或超时（与 `cli publish` 一致，默认约 35 分钟）。
+> **与 CLI 的区别**：HTTP API 依赖 GUI 主进程已运行（托盘/窗口在即可）；CLI 可独立启动。单平台请求会等待上传完成或超时；多平台请求与 GUI 批量发布一致，提交到发布队列后立即返回。
 
 ### 数据接口
 
@@ -250,23 +250,23 @@ open /Applications/matrixmedia.app
 | `phone`              | 二选一 | 账号手机号（与 GUI 账号树一致）；多平台时可作为默认值，单个平台对象内可覆盖                                                              |
 | `partition`          | 二选一 | 完整 session，如 `persist:13800138000抖音`                                                                                               |
 | `bt2`                | 否     | 视频号短标（含视频号时强烈建议填写）                                                                                                     |
-| `tags`               | 否     | 标签，空格分隔                                                                                                                           |
+| `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分                                                                                |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
 | `creativeStatement`  | 否     | 全局创作声明，等同 GUI「批量设置」；详见 [docs/http-api.md](./docs/http-api.md)                                                          |
 | `creativeStatements` | 否     | 按平台覆盖，如 `{ "dy": "ai_generated", "blbl": "fiction" }`                                                                             |
 
 **响应体（JSON）**：
 
-| 字段                             | 说明                                                           |
-| -------------------------------- | -------------------------------------------------------------- |
-| `success`                        | 是否全部成功（多平台时）                                       |
-| `status`                         | `success` / `failed` / `partial` / `scheduled` / `skipped`     |
-| `exitCode`                       | 单平台同 CLI；多平台：`0` 全成功 / `1` 部分失败 / `2` 全部失败 |
-| `message`                        | 结果说明                                                       |
-| `total` / `succeeded` / `failed` | 多平台汇总（单平台时也有）                                     |
-| `results`                        | 多平台时各平台明细数组                                         |
-| `id`                             | 单平台时写入 `pushData` 的记录 id                              |
-| `scheduled` / `publishAt`        | 定时发布时返回                                                 |
+| 字段                             | 说明                                               |
+| -------------------------------- | -------------------------------------------------- |
+| `success`                        | 请求是否被接受；多平台表示已成功提交到发布队列     |
+| `status`                         | 单平台为最终状态；多平台提交成功为 `submitted`     |
+| `exitCode`                       | 单平台同 CLI；多平台提交成功为 `0`                 |
+| `message`                        | 结果说明                                           |
+| `total` / `succeeded` / `failed` | 多平台提交汇总；最终成功失败以 `pushData` 记录为准 |
+| `results`                        | 多平台时各平台提交明细数组                         |
+| `id`                             | 单平台时写入 `pushData` 的记录 id                  |
+| `scheduled` / `publishAt`        | 定时发布时返回                                     |
 
 **示例**：
 
@@ -316,29 +316,32 @@ curl -X POST http://127.0.0.1:30088/publish \
 {
   "success": true,
   "exitCode": 0,
-  "status": "success",
-  "message": "成功 3 / 失败 0",
+  "status": "submitted",
+  "message": "已提交 3 个平台发布",
   "total": 3,
-  "succeeded": 3,
+  "succeeded": 0,
   "failed": 0,
   "results": [
     {
       "platform": "视频号",
       "success": true,
       "exitCode": 0,
-      "message": "上传成功"
+      "status": "submitted",
+      "message": "已提交发布任务"
     },
     {
       "platform": "抖音",
       "success": true,
       "exitCode": 0,
-      "message": "上传成功"
+      "status": "submitted",
+      "message": "已提交发布任务"
     },
     {
       "platform": "快手",
       "success": true,
       "exitCode": 0,
-      "message": "上传成功"
+      "status": "submitted",
+      "message": "已提交发布任务"
     }
   ]
 }
