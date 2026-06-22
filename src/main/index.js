@@ -36,6 +36,7 @@ import {
   hasActivePublishTasks,
   cancelPuppeteerTasks,
 } from "./services/puppeteerFile";
+import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
 
 const cliMode = isCliMode(process.argv);
 installMainProcessLogFile(app);
@@ -80,6 +81,7 @@ function performQuit() {
   if (hasActivePublishTasks()) {
     cancelPuppeteerTasks("应用退出，已中断发布");
   }
+  destroyAccountLoginWindows();
   allowQuit = true;
   app.quit();
 }
@@ -278,6 +280,7 @@ function onAppReady() {
       win.isVisible() ? win.hide() : win.show();
     });
     app.on("will-quit", () => {
+      destroyAccountLoginWindows();
       tray.destroy();
     });
   });

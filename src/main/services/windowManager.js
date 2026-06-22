@@ -7,6 +7,7 @@ import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
 import setIpc from "./ipcMain";
 import { winURL, loadingURL } from "../config/StaticPath";
 import baseMenu from "../config/menu";
+import { destroyAccountLoginWindows } from "./accountLoginWindowManager";
 
 let loadWindow = null;
 let mainWindow = null;
@@ -16,7 +17,10 @@ const version = require("../../../package.json").version;
 
 function resolveWindowsWindowIcon() {
   if (!platform().includes("win32")) return undefined;
-  const nextToExe = path.join(path.dirname(process.execPath), "matrixmedia.ico");
+  const nextToExe = path.join(
+    path.dirname(process.execPath),
+    "matrixmedia.ico"
+  );
   if (fs.existsSync(nextToExe)) return nextToExe;
   const inResources = path.join(process.resourcesPath, "matrixmedia.ico");
   if (fs.existsSync(inResources)) return inResources;
@@ -99,7 +103,8 @@ function createMainWindow(fn) {
     mainWindow.show();
 
     mainWindow.webContents.send("version", version);
-    if (process.env.NODE_ENV === "development" || openDevTools) mainWindow.webContents.openDevTools(true);
+    if (process.env.NODE_ENV === "development" || openDevTools)
+      mainWindow.webContents.openDevTools(true);
     if (UseStartupChart) loadWindow.destroy();
   });
   mainWindow.on("maximize", () => {
@@ -109,6 +114,7 @@ function createMainWindow(fn) {
     mainWindow.webContents.send("w-max", false);
   });
   mainWindow.on("closed", () => {
+    destroyAccountLoginWindows();
     mainWindow = null;
     electronApp.quit();
   });

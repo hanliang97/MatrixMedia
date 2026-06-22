@@ -14,6 +14,11 @@ import { registerPuppeteerIpc } from "./puppeteerFile";
 import { registerScheduledPublishIpc } from "./scheduledPublish";
 import { createLaunchInstallerHandler } from "./launchInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
+import {
+  closeOtherAccountLoginWindows,
+  getAccountLoginWindowByPartition,
+  registerAccountLoginWindow,
+} from "./accountLoginWindowManager";
 
 const https = require("https");
 const version = require("../../../package.json").version;
@@ -252,23 +257,11 @@ export default {
         };
       }
 
-      // 先扫一遍现有窗口：
+      // 先处理现有账号登录窗：
       //   - 同 partition：标记为'已存在'，等会儿 focus 复用
-      //   - 不同 partition 但属于'账号登录窗'：直接关掉
-      let existingWin = null;
-      for (const w of BrowserWindow.getAllWindows()) {
-        if (!w || w.isDestroyed()) continue;
-        if (!w._mmAccountLoginPartition) continue; // 不是账号登录窗，不动
-        if (w._mmAccountLoginPartition === partition) {
-          existingWin = w;
-        } else {
-          try {
-            w.close();
-          } catch (_) {
-            /* ignore */
-          }
-        }
-      }
+      //   - 不同 partition：直接关掉，避免用户切账号时桌面上堆一排登录窗口
+      closeOtherAccountLoginWindows(partition);
+      const existingWin = getAccountLoginWindowByPartition(partition);
 
       if (existingWin) {
         try {
@@ -293,7 +286,7 @@ export default {
           devTools: true,
         },
       });
-      win._mmAccountLoginPartition = partition;
+      registerAccountLoginWindow(win, partition);
 
       // 跟视频管理的发布窗口保持一致：强制设置 UA 为 ptConfig[平台].useragent，
       // 不要让站点看到 Electron/x.x.x 字样；扫码登录时种下的 cookie 自然就是

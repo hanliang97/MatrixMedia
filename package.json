@@ -24,7 +24,8 @@
     "test:cli-login": "node scripts/test-cli-login.js",
     "test:publish-article-args": "node scripts/test-publish-article-args.js",
     "test:article-republish": "node scripts/test-article-republish.js",
-    "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js"
+    "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
+    "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js"
   },
   "build": {
     "forceCodeSigning": false,
