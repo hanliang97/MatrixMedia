@@ -1,49 +1,75 @@
 <!--  -->
 <template>
-  <div class="window-title" v-if="!IsUseSysTitle&&!IsWeb">
+  <div class="window-title" v-if="!IsUseSysTitle && !IsWeb">
     <!-- 软件logo预留位置 -->
-      <img src="@/assets/icon.png" style="width: 30px;height: 30px;" :style="{ marginLeft: !isNotMac ? 'auto' : '' }" >
+    <img
+      src="@/assets/icon.png"
+      style="width: 30px; height: 30px"
+      :style="{ marginLeft: !isNotMac ? 'auto' : '' }"
+    />
     <!-- 菜单栏位置 -->
     <div></div>
     <!-- 中间标题位置 -->
-    <div style="-webkit-app-region: drag;" class="title"></div>
+    <div style="-webkit-app-region: drag" class="title"></div>
     <div class="controls-container" v-if="isNotMac">
       <div class="windows-icon-bg" @click="Mini">
         <svg-icon icon-class="mini" class-name="icon-size"></svg-icon>
       </div>
       <div class="windows-icon-bg" @click="MixOrReduction">
-        <svg-icon v-if="mix" icon-class="reduction" class-name="icon-size"></svg-icon>
+        <svg-icon
+          v-if="mix"
+          icon-class="reduction"
+          class-name="icon-size"
+        ></svg-icon>
         <svg-icon v-else icon-class="mix" class-name="icon-size"></svg-icon>
       </div>
       <div class="windows-icon-bg close-icon" @click="Close">
         <svg-icon icon-class="close" class-name="icon-size"></svg-icon>
       </div>
     </div>
-    <el-dialog title="自动更新" :visible.sync="dialogVisible" :show-close="false" :close-on-press-escape="false" :close-on-click-modal="false" center width="60%" top="10vh">
+    <el-dialog
+      title="自动更新"
+      :visible.sync="dialogVisible"
+      :show-close="false"
+      :close-on-press-escape="false"
+      :close-on-click-modal="false"
+      center
+      width="60%"
+      top="10vh"
+    >
       <el-tabs v-model="activeUpdateTab">
         <el-tab-pane label="更新记录" name="releaseNotes">
-          <div v-if="releaseNoteTitle" class="release-notes-title">{{ releaseNoteTitle }}</div>
-          <pre class="release-notes-body">{{ releaseNoteBody || "暂无更新记录" }}</pre>
+          <div v-if="releaseNoteTitle" class="release-notes-title">
+            {{ releaseNoteTitle }}
+          </div>
+          <pre class="release-notes-body">{{
+            releaseNoteBody || "暂无更新记录"
+          }}</pre>
         </el-tab-pane>
         <el-tab-pane label="安装提示" name="installTips">
-          <div style='color:red' >
-            提示未知来源请手动允许安装！！
-          </div>
+          <div style="color: red">提示未知来源请手动允许安装！！</div>
           <div>
             <el-image
-            style="width: 50%;"
-            v-for="(item, index) in srcList" :key="index"
-            :src="item"
-            z-index="999999999"
-            :preview-src-list="srcList">
-          </el-image>
+              style="width: 50%"
+              v-for="(item, index) in srcList"
+              :key="index"
+              :src="item"
+              z-index="999999999"
+              :preview-src-list="srcList"
+            >
+            </el-image>
           </div>
         </el-tab-pane>
       </el-tabs>
-     
-      <div v-if="percentage == 100" >等待文件处理就绪...</div>
+
+      <div v-if="percentage == 100">等待文件处理就绪...</div>
       <div class="conten">
-        <el-progress :stroke-width="20" :percentage="percentage" :color="colors" :status="progressStaus"></el-progress>
+        <el-progress
+          :stroke-width="20"
+          :percentage="percentage"
+          :color="colors"
+          :status="progressStaus"
+        ></el-progress>
       </div>
     </el-dialog>
   </div>
@@ -51,6 +77,7 @@
 
 <script>
 import { ipcRenderer } from "electron";
+import { shouldRunDailyUpdateCheck } from "./updateCheckPolicy";
 export default {
   data: () => ({
     mix: false,
@@ -63,15 +90,10 @@ export default {
     releaseNoteBody: "",
     progressStaus: null,
     filePath: "",
-    srcList: process.platform === "darwin"
-      ? [
-          require("@/assets/mac1.png"),
-          require("@/assets/mac2.png"),
-        ]
-      : [
-          require("@/assets/i1.png"),
-          require("@/assets/i2.png"),
-        ],
+    srcList:
+      process.platform === "darwin"
+        ? [require("@/assets/mac1.png"), require("@/assets/mac2.png")]
+        : [require("@/assets/i1.png"), require("@/assets/i2.png")],
     colors: [
       { color: "#f56c6c", percentage: 20 },
       { color: "#e6a23c", percentage: 40 },
@@ -84,9 +106,8 @@ export default {
 
   components: {},
   created() {
-    this.fetchReleaseNotes();
     this.checkForUpdates();
-    ipcRenderer.invoke("IsUseSysTitle").then(res => {
+    ipcRenderer.invoke("IsUseSysTitle").then((res) => {
       this.IsUseSysTitle = res;
     });
     // 下载进度
@@ -100,16 +121,16 @@ export default {
   },
 
   mounted() {
-      ipcRenderer.on("w-max",(event,state)=>{
-        this.mix = state
-      })
+    ipcRenderer.on("w-max", (event, state) => {
+      this.mix = state;
+    });
   },
 
   methods: {
     fetchReleaseNotes() {
       fetch("https://gitee.com/api/v5/repos/gzlingyi_0/pubtw/releases/latest")
-        .then(res => res.json())
-        .then(res => {
+        .then((res) => res.json())
+        .then((res) => {
           this.releaseNoteTitle = res.name || res.tag_name || "";
           this.releaseNoteBody = res.body || "";
         })
@@ -118,11 +139,16 @@ export default {
           this.releaseNoteBody = "";
         });
     },
-    checkForUpdates() {
-      ipcRenderer.invoke("check-for-updates").then(res => {
+    checkForUpdates(options = {}) {
+      if (!options.force && !shouldRunDailyUpdateCheck()) {
+        return Promise.resolve({ skipped: true });
+      }
+      this.fetchReleaseNotes();
+      return ipcRenderer.invoke("check-for-updates").then((res) => {
         if (res && res.hasUpdate) {
           this.activeUpdateTab = "releaseNotes";
         }
+        return res;
       });
     },
     _defaultProgressColors() {
@@ -158,8 +184,7 @@ export default {
           confirmButtonText: "重试",
           callback: () => {
             this.resetDownloadUi();
-            this.fetchReleaseNotes();
-            this.checkForUpdates();
+            this.checkForUpdates({ force: true });
           },
         });
       }
@@ -179,13 +204,13 @@ export default {
       ipcRenderer.invoke("windows-mini");
     },
     MixOrReduction() {
-      ipcRenderer.invoke("window-max").then(res=>{
-        this.mix = res.status
-      })
+      ipcRenderer.invoke("window-max").then((res) => {
+        this.mix = res.status;
+      });
     },
     Close() {
-     ipcRenderer.invoke("windows-mini");
-    }
+      ipcRenderer.invoke("windows-mini");
+    },
   },
   destroyed() {
     ipcRenderer.removeAllListeners("w-max");
@@ -193,10 +218,10 @@ export default {
     ipcRenderer.removeListener("download-error", this._onDownloadError);
     ipcRenderer.removeListener("download-paused", this._onDownloadPaused);
     ipcRenderer.removeListener("download-done", this._onDownloadDone);
-  }
+  },
 };
 </script>
-<style rel='stylesheet/scss' lang='scss' scoped>
+<style rel="stylesheet/scss" lang="scss" scoped>
 .window-title {
   width: 100%;
   height: 30px;
@@ -205,7 +230,7 @@ export default {
   -webkit-app-region: drag;
   position: fixed;
   top: 0;
-  background:linear-gradient(to right, #0c3c78, #fff);
+  background: linear-gradient(to right, #0c3c78, #fff);
   z-index: 99999;
   .title {
     text-align: center;
