@@ -109,7 +109,10 @@ import {
   normalizeAccountProxy,
   getAccountProxyDisplay,
 } from "../../../shared/accountProxy.js";
-import { normalizeAccountPublishSettings } from "../../../shared/accountPublishSettings.js";
+import {
+  normalizeAccountPublishSettings,
+  updateAccountTreePublishSettings,
+} from "../../../shared/accountPublishSettings.js";
 
 export default {
   data() {
@@ -198,14 +201,33 @@ export default {
           return;
         }
         this.defaultPublishToDraft = settings.defaultPublishToDraft;
+        this.urldata = {
+          ...this.urldata,
+          defaultPublishToDraft: settings.defaultPublishToDraft,
+        };
+        this.$route.meta.defaultPublishToDraft = settings.defaultPublishToDraft;
+        this.syncAccountTreePublishSettings(settings.defaultPublishToDraft);
         this.$message.success("发布设置已保存");
-        await usePermissionStore().GenerateRoutes();
       } catch (e) {
         this.$message.error(
           "保存发布设置失败：" + (e && e.message ? e.message : e)
         );
       } finally {
         this.savingPublishSettings = false;
+      }
+    },
+    syncAccountTreePublishSettings(defaultPublishToDraft) {
+      try {
+        const raw = localStorage.getItem("accountTree");
+        const tree = raw ? JSON.parse(raw) : {};
+        const nextTree = updateAccountTreePublishSettings(tree, {
+          phone: this.urldata.phone,
+          pt: this.title,
+          defaultPublishToDraft,
+        });
+        localStorage.setItem("accountTree", JSON.stringify(nextTree));
+      } catch (e) {
+        console.warn("同步账号树发布设置失败:", e && e.message);
       }
     },
     async saveProxyConfig() {

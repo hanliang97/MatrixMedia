@@ -10,6 +10,7 @@ const {
   isDefaultPublishToDraftEnabled,
   normalizeAccountPublishSettings,
   resolveEffectivePublishMode,
+  updateAccountTreePublishSettings,
 } = require("../src/shared/accountPublishSettings");
 
 assert.deepStrictEqual(normalizeAccountPublishSettings({}), {
@@ -41,5 +42,31 @@ assert.deepStrictEqual(resolveEffectivePublishMode(true, {}), {
   publishMode: "draft",
   publishToDraft: true,
 });
+
+const accountTree = {
+  13800138000: {
+    children: [
+      { pt: "小红书", phone: "13800138000", defaultPublishToDraft: false },
+      { pt: "抖音", phone: "13800138000", defaultPublishToDraft: false },
+    ],
+  },
+};
+const nextTree = updateAccountTreePublishSettings(accountTree, {
+  phone: "13800138000-备注",
+  pt: "小红书",
+  defaultPublishToDraft: true,
+});
+assert.strictEqual(
+  nextTree["13800138000"].children[0].defaultPublishToDraft,
+  true
+);
+assert.strictEqual(
+  nextTree["13800138000"].children[1].defaultPublishToDraft,
+  false
+);
+assert.strictEqual(
+  accountTree["13800138000"].children[0].defaultPublishToDraft,
+  false
+);
 
 console.log("test-account-publish-settings passed");

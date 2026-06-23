@@ -1,33 +1,42 @@
 <template>
-  <div style="background:#f0f2f5;margin-top: -20px;">
+  <div style="background: #f0f2f5; margin-top: -20px">
     <div class="wscn-http404">
       <div class="pic-404">
-        <img class="pic-404__parent" :src="img_404" alt="404">
-        <img class="pic-404__child left" :src="img_404_cloud" alt="404">
-        <img class="pic-404__child mid" :src="img_404_cloud" alt="404">
-        <img class="pic-404__child right" :src="img_404_cloud" alt="404">
+        <img class="pic-404__parent" :src="img_404" alt="404" />
+        <img class="pic-404__child left" :src="img_404_cloud" alt="404" />
+        <img class="pic-404__child mid" :src="img_404_cloud" alt="404" />
+        <img class="pic-404__child right" :src="img_404_cloud" alt="404" />
       </div>
       <div class="bullshit">
         <div class="bullshit__oops">OOPS!</div>
-        <div class="bullshit__info">您似乎进到了一个次元世界，请点击以下按钮返回主页或者发送错误报告</div>
-        <a href="/" class="bullshit__return-home">返回首页</a>
+        <div class="bullshit__info">
+          您似乎进到了一个次元世界，请点击以下按钮返回主页或者发送错误报告
+        </div>
+        <button type="button" class="bullshit__return-home" @click="goHome">
+          返回首页
+        </button>
       </div>
     </div>
   </div>
 </template>
 
 <script>
-import img_404 from '@/assets/404_images/404.png'
-import img_404_cloud from '@/assets/404_images/404_cloud.png'
+import img_404 from "@/assets/404_images/404.png";
+import img_404_cloud from "@/assets/404_images/404_cloud.png";
 
 export default {
   data() {
     return {
       img_404,
-      img_404_cloud
-    }
-  }
-}
+      img_404_cloud,
+    };
+  },
+  methods: {
+    goHome() {
+      this.$router.replace("/");
+    },
+  },
+};
 </script>
 
 <style rel="stylesheet/scss" lang="scss" scoped>
@@ -197,6 +206,7 @@ export default {
       border-radius: 100px;
       text-align: center;
       color: #ffffff;
+      border: 0;
       opacity: 0;
       font-size: 14px;
       line-height: 36px;
@@ -218,5 +228,4 @@ export default {
     }
   }
 }
-
 </style>
