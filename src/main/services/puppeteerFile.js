@@ -8,6 +8,11 @@ import Type from "./Type";
 import { UPLOAD_WINDOW_AUTO_CLOSE_MS } from "./upLoad/uploadTimeouts.js";
 import { skipCloseConfirmation } from "./upLoad/closeWindow.js";
 import { applyAccountProxyForTask } from "./proxyConfig.js";
+import {
+  applyXhsConservativePublishOptions,
+  getPublishAttemptLimit,
+  isXhsPlatform,
+} from "../../shared/xhsPublishPolicy.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -197,8 +202,10 @@ export function runPuppeteerTask(data, transport, onFinish) {
 }
 
 async function doUpload(data, transport, queueDone, runtimeTask) {
+  data = applyXhsConservativePublishOptions(data);
   data.partition = data.partition.split("-")[0];
-  const maxRetries = 5;
+  const isXhsTask = isXhsPlatform(data.pt);
+  const maxRetries = getPublishAttemptLimit(data, 5);
   let currentAttempt = 0;
   let finished = false;
   let activeBrowser = null;
@@ -305,7 +312,11 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       browser = await pie.connect(app, puppeteer);
       activeBrowser = browser;
       win = new BrowserWindow({
-        show: data.mmCliSuppressWindow ? false : data?.show ?? false,
+        show: isXhsTask
+          ? true
+          : data.mmCliSuppressWindow
+          ? false
+          : data?.show ?? false,
         width: data?.width ?? 1300,
         height: data?.height ?? 800,
         title: `${data.partition} (尝试${currentAttempt}/${maxRetries})`,
@@ -347,14 +358,16 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       });
 
       const AUTO_CLOSE_DELAY = UPLOAD_WINDOW_AUTO_CLOSE_MS;
-      autoCloseTimer = setTimeout(() => {
-        console.log(
-          `窗口 ${data.partition} 已自动关闭（${Math.round(
-            AUTO_CLOSE_DELAY / 60000
-          )} 分钟兜底超时）`
-        );
-        closePublishWinProgrammatically(win);
-      }, AUTO_CLOSE_DELAY);
+      if (!isXhsTask) {
+        autoCloseTimer = setTimeout(() => {
+          console.log(
+            `窗口 ${data.partition} 已自动关闭（${Math.round(
+              AUTO_CLOSE_DELAY / 60000
+            )} 分钟兜底超时）`
+          );
+          closePublishWinProgrammatically(win);
+        }, AUTO_CLOSE_DELAY);
+      }
 
       // 统一 UA：所有平台都强制设置 data.useragent。
       // 这一步很关键：账号管理里 <webview> 是用 ptConfig[pt].useragent（Chrome/138 桌面 UA）扫码登的，
@@ -478,6 +491,15 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
             console.log(
               `尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`
             );
+            if (isXhsTask) {
+              safeReply("puppeteerFile-done", {
+                ...data,
+                status: false,
+                message: `小红书页面地址异常，已保留窗口: ${currentUrl}`,
+              });
+              finishOnce();
+              return;
+            }
             if (win && !win.isDestroyed()) {
               win._mmRetryAfterClose = true;
               closePublishWinProgrammatically(win);
@@ -494,7 +516,8 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               status: false,
               message: (failurePayload && failurePayload.message) || "执行失败",
             });
-            if (win && !win.isDestroyed()) closePublishWinProgrammatically(win);
+            if (!isXhsTask && win && !win.isDestroyed())
+              closePublishWinProgrammatically(win);
             finishOnce();
             return;
           }
@@ -518,6 +541,15 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         return;
       }
       console.log(`尝试${currentAttempt}发生错误:`, error);
+      if (isXhsTask) {
+        safeReply("puppeteerFile-done", {
+          ...data,
+          status: false,
+          message: error.message || "小红书任务异常，已保留窗口",
+        });
+        finishOnce();
+        return;
+      }
       if (win && !win.isDestroyed()) {
         win._mmRetryAfterClose = true;
         closePublishWinProgrammatically(win);

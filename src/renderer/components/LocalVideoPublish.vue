@@ -379,6 +379,12 @@ import {
   isAccountProxyEnabled,
 } from "../../shared/accountProxy.js";
 import {
+  applyXhsConservativePublishOptions,
+  getXhsPlatformStaggerDelayMs,
+  isXhsPlatform,
+} from "../../shared/xhsPublishPolicy.js";
+import { resolveEffectivePublishMode } from "../../shared/accountPublishSettings.js";
+import {
   isBt2SelectAllShortcut,
   isVideohaoBt2AllowedChar,
   sanitizeVideohaoBt2Input,
@@ -412,6 +418,10 @@ function formatBqFromTags(tags) {
     .filter(Boolean)
     .map((t) => (t.startsWith("#") ? t : `#${t}`))
     .join(" ");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default {
@@ -1107,6 +1117,9 @@ export default {
       const scheduledAtMs = this.scheduledPublish
         ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf()
         : null;
+      let submitted = 0;
+      let draftSubmitted = 0;
+      let scheduledSubmitted = 0;
 
       platforms.sort((a, b) => {
         if (a.pt.includes("视频号")) return -1;
@@ -1123,7 +1136,8 @@ export default {
           ? this.closeWindow
           : true;
         const video = this.buildPlatformVideoPayload(p, baseVideo);
-        if (this.scheduledPublish && !isDraftMode) {
+        const effectiveMode = resolveEffectivePublishMode(isDraftMode, p);
+        if (this.scheduledPublish && !effectiveMode.publishToDraft) {
           scheduledWriteTasks.push(
             dataRequest({
               type: "add",
@@ -1152,36 +1166,39 @@ export default {
                 republishCount: 0,
                 publishSuccessCount: 0,
                 publishFailCount: 0,
+                publishMode: effectiveMode.publishMode,
+                publishToDraft: effectiveMode.publishToDraft,
                 publishStatus: "scheduled",
                 lastPublishMessage: "等待定时发布",
                 lastPublishAt: Date.now(),
               },
             })
           );
+          submitted++;
+          scheduledSubmitted++;
           continue;
         }
         // 用 JSON 兜底序列化，去掉 Vue 响应式代理 / 不可克隆对象，
         // 避免 Electron IPC 抛 "object could not be cloned" 导致页面会话提前关闭。
+        const publishPayload = applyXhsConservativePublishOptions({
+          ...p,
+          taskId,
+          ...video,
+          textOtherName: video.data.textOtherName,
+          selectedFile,
+          publishMode: effectiveMode.publishMode,
+          publishToDraft: effectiveMode.publishToDraft,
+          url: this.ptConfig[p.pt].upload,
+          show: shouldShow,
+          closeWindowAfterPublish: shouldCloseWindowAfterPublish,
+          useragent: this.ptConfig[p.pt].useragent,
+          partition,
+          filePath: this.localFilePath,
+          date: currentDate,
+        });
         ipcRenderer.send(
           "puppeteerFile",
-          JSON.parse(
-            JSON.stringify({
-              ...p,
-              taskId,
-              ...video,
-              textOtherName: video.data.textOtherName,
-              selectedFile,
-              publishMode: isDraftMode ? "draft" : "publish",
-              publishToDraft: isDraftMode,
-              url: this.ptConfig[p.pt].upload,
-              show: shouldShow,
-              closeWindowAfterPublish: shouldCloseWindowAfterPublish,
-              useragent: this.ptConfig[p.pt].useragent,
-              partition,
-              filePath: this.localFilePath,
-              date: currentDate,
-            })
-          )
+          JSON.parse(JSON.stringify(publishPayload))
         );
 
         const republishRecord = this.findRepublishRecord(p.pt, p.phone);
@@ -1207,9 +1224,12 @@ export default {
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
               republishCount: oldRepublish + 1,
-              publishMode: isDraftMode ? "draft" : "publish",
-              publishStatus: isDraftMode ? "drafting" : "publishing",
-              lastPublishMessage: isDraftMode
+              publishMode: effectiveMode.publishMode,
+              publishToDraft: effectiveMode.publishToDraft,
+              publishStatus: effectiveMode.publishToDraft
+                ? "drafting"
+                : "publishing",
+              lastPublishMessage: effectiveMode.publishToDraft
                 ? "等待保存草稿结果"
                 : "等待发布结果",
               lastPublishAt: Date.now(),
@@ -1235,13 +1255,16 @@ export default {
               partition,
               url: this.ptConfig[p.pt].listIndex,
               date: currentDate,
-              publishMode: isDraftMode ? "draft" : "publish",
+              publishMode: effectiveMode.publishMode,
+              publishToDraft: effectiveMode.publishToDraft,
               publishAttemptCount: 1,
               republishCount: 0,
               publishSuccessCount: 0,
               publishFailCount: 0,
-              publishStatus: isDraftMode ? "drafting" : "publishing",
-              lastPublishMessage: isDraftMode
+              publishStatus: effectiveMode.publishToDraft
+                ? "drafting"
+                : "publishing",
+              lastPublishMessage: effectiveMode.publishToDraft
                 ? "等待保存草稿结果"
                 : "等待发布结果",
               lastPublishAt: Date.now(),
@@ -1249,20 +1272,28 @@ export default {
           });
         }
 
-        if (p.pt === "视频号") {
-          await new Promise((resolve) => setTimeout(resolve, 4000));
+        if (isXhsPlatform(p.pt)) {
+          await sleep(getXhsPlatformStaggerDelayMs());
+        } else if (p.pt === "视频号") {
+          await sleep(4000);
         }
+        submitted++;
+        if (effectiveMode.publishToDraft) draftSubmitted++;
       }
 
       if (this.scheduledPublish && !isDraftMode) {
         await Promise.all(scheduledWriteTasks);
         ipcRenderer.send("scheduledPublish:refresh");
       }
-      let successMessage = `已提交 ${platforms.length} 个平台发布`;
-      if (isDraftMode) {
-        successMessage = `已提交 ${platforms.length} 个平台保存草稿`;
-      } else if (this.scheduledPublish) {
-        successMessage = `已创建 ${platforms.length} 个平台定时发布任务`;
+      if (submitted === 0) {
+        this.$message.warning("没有提交新的发布任务");
+        return;
+      }
+      let successMessage = `已提交 ${submitted} 个平台发布`;
+      if (draftSubmitted === submitted) {
+        successMessage = `已提交 ${submitted} 个平台保存草稿`;
+      } else if (scheduledSubmitted === submitted) {
+        successMessage = `已创建 ${submitted} 个平台定时发布任务`;
       }
       this.$message.success(successMessage);
       this.platformVisible = false;
@@ -1428,6 +1459,8 @@ export default {
 
       const path = require("path");
       let submitted = 0;
+      let draftSubmitted = 0;
+      let scheduledSubmitted = 0;
       const scheduledWriteTasks = [];
 
       for (const fileRow of this.dirBatchFiles) {
@@ -1472,6 +1505,7 @@ export default {
             ? this.closeWindow
             : true;
           const creativeStatement = this.getPlatformStatement(p.id);
+          const effectiveMode = resolveEffectivePublishMode(isDraftMode, p);
 
           // Format bq for this platform
           const hashtagPlatforms = new Set(["视频号", "抖音", "快手"]);
@@ -1484,7 +1518,7 @@ export default {
             bq = tagList.map((t) => t.replace(/^#/, "")).join(" ");
           }
 
-          if (this.scheduledPublish && !isDraftMode) {
+          if (this.scheduledPublish && !effectiveMode.publishToDraft) {
             scheduledWriteTasks.push(
               dataRequest({
                 type: "add",
@@ -1509,6 +1543,8 @@ export default {
                   scheduledTask: true,
                   scheduledPublishAt: scheduledAtMs,
                   scheduledPublishAtText: scheduledAtText,
+                  publishMode: effectiveMode.publishMode,
+                  publishToDraft: effectiveMode.publishToDraft,
                   publishAttemptCount: 1,
                   republishCount: 0,
                   publishSuccessCount: 0,
@@ -1519,38 +1555,39 @@ export default {
                 },
               })
             );
+            submitted++;
+            scheduledSubmitted++;
             continue;
           }
 
+          const publishPayload = applyXhsConservativePublishOptions({
+            ...p,
+            taskId,
+            bookName,
+            textType: "local",
+            data: {
+              textOtherName,
+              bt1,
+              bt2,
+              bq,
+              bdText: "",
+              creativeStatement,
+            },
+            textOtherName,
+            selectedFile,
+            publishMode: effectiveMode.publishMode,
+            publishToDraft: effectiveMode.publishToDraft,
+            url: this.ptConfig[p.pt].upload,
+            show: shouldShow,
+            closeWindowAfterPublish: shouldCloseWindowAfterPublish,
+            useragent: this.ptConfig[p.pt].useragent,
+            partition,
+            filePath,
+            date: currentDate,
+          });
           ipcRenderer.send(
             "puppeteerFile",
-            JSON.parse(
-              JSON.stringify({
-                ...p,
-                taskId,
-                bookName,
-                textType: "local",
-                data: {
-                  textOtherName,
-                  bt1,
-                  bt2,
-                  bq,
-                  bdText: "",
-                  creativeStatement,
-                },
-                textOtherName,
-                selectedFile,
-                publishMode: isDraftMode ? "draft" : "publish",
-                publishToDraft: isDraftMode,
-                url: this.ptConfig[p.pt].upload,
-                show: shouldShow,
-                closeWindowAfterPublish: shouldCloseWindowAfterPublish,
-                useragent: this.ptConfig[p.pt].useragent,
-                partition,
-                filePath,
-                date: currentDate,
-              })
-            )
+            JSON.parse(JSON.stringify(publishPayload))
           );
 
           dataRequest({
@@ -1573,13 +1610,16 @@ export default {
               url: this.ptConfig[p.pt].listIndex,
               uploadUrl: this.ptConfig[p.pt].upload,
               date: currentDate,
-              publishMode: isDraftMode ? "draft" : "publish",
+              publishMode: effectiveMode.publishMode,
+              publishToDraft: effectiveMode.publishToDraft,
               publishAttemptCount: 1,
               republishCount: 0,
               publishSuccessCount: 0,
               publishFailCount: 0,
-              publishStatus: isDraftMode ? "drafting" : "publishing",
-              lastPublishMessage: isDraftMode
+              publishStatus: effectiveMode.publishToDraft
+                ? "drafting"
+                : "publishing",
+              lastPublishMessage: effectiveMode.publishToDraft
                 ? "等待保存草稿结果"
                 : "等待发布结果",
               lastPublishAt: Date.now(),
@@ -1587,9 +1627,12 @@ export default {
           });
 
           submitted++;
-          if (p.pt === "视频号") {
-            await new Promise((resolve) => setTimeout(resolve, 4000));
+          if (isXhsPlatform(p.pt)) {
+            await sleep(getXhsPlatformStaggerDelayMs());
+          } else if (p.pt === "视频号") {
+            await sleep(4000);
           }
+          if (effectiveMode.publishToDraft) draftSubmitted++;
         }
       }
 
@@ -1598,13 +1641,15 @@ export default {
         ipcRenderer.send("scheduledPublish:refresh");
       }
 
-      const totalFiles = this.dirBatchFiles.length;
-      const totalPlatforms = platforms.length;
-      let successMessage = `已提交 ${totalFiles} 个视频 × ${totalPlatforms} 个平台发布`;
-      if (isDraftMode) {
-        successMessage = `已提交 ${totalFiles} 个视频 × ${totalPlatforms} 个平台保存草稿`;
-      } else if (this.scheduledPublish) {
-        successMessage = `已创建 ${totalFiles} 个视频 × ${totalPlatforms} 个平台定时发布任务`;
+      if (submitted === 0) {
+        this.$message.warning("没有提交新的发布任务");
+        return;
+      }
+      let successMessage = `已提交 ${submitted} 个目录批量发布任务`;
+      if (draftSubmitted === submitted) {
+        successMessage = `已提交 ${submitted} 个目录批量保存草稿任务`;
+      } else if (scheduledSubmitted === submitted) {
+        successMessage = `已创建 ${submitted} 个目录批量定时发布任务`;
       }
       this.$message.success(successMessage);
       this.platformVisible = false;

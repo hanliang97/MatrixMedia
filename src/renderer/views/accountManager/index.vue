@@ -35,6 +35,31 @@
       </p>
     </el-card>
 
+    <el-card class="publish-card" shadow="never">
+      <div slot="header" class="tip-title">发布设置</div>
+      <p class="publish-desc">
+        开启后，该账号在视频发布里无论点击「发布」还是目录批量发布，都会优先保存到草稿。
+      </p>
+      <el-form label-width="120px" class="publish-form">
+        <el-form-item label="默认发布到草稿">
+          <el-switch
+            v-model="defaultPublishToDraft"
+            active-text="开启"
+            inactive-text="关闭"
+          />
+        </el-form-item>
+        <el-form-item>
+          <el-button
+            type="primary"
+            :loading="savingPublishSettings"
+            @click="savePublishSettings"
+          >
+            保存发布设置
+          </el-button>
+        </el-form-item>
+      </el-form>
+    </el-card>
+
     <el-card class="proxy-card" shadow="never">
       <div slot="header" class="tip-title">发布代理</div>
       <p class="proxy-desc">
@@ -84,6 +109,7 @@ import {
   normalizeAccountProxy,
   getAccountProxyDisplay,
 } from "../../../shared/accountProxy.js";
+import { normalizeAccountPublishSettings } from "../../../shared/accountPublishSettings.js";
 
 export default {
   data() {
@@ -96,6 +122,8 @@ export default {
       proxyEnabled: false,
       proxyUrl: "",
       savingProxy: false,
+      defaultPublishToDraft: false,
+      savingPublishSettings: false,
     };
   },
 
@@ -135,11 +163,50 @@ export default {
       this.urldata = route.meta;
       this.title = route.meta.title;
       this.loadProxyFromMeta();
+      this.loadPublishSettingsFromMeta();
     },
     loadProxyFromMeta() {
       const proxy = (this.urldata && this.urldata.proxy) || {};
       this.proxyEnabled = Boolean(proxy.enabled);
       this.proxyUrl = String(proxy.url || "");
+    },
+    loadPublishSettingsFromMeta() {
+      const settings = normalizeAccountPublishSettings(this.urldata || {});
+      this.defaultPublishToDraft = settings.defaultPublishToDraft;
+    },
+    async savePublishSettings() {
+      if (!this.urldata.id || !this.urldata.date) {
+        this.$message.error("账号记录缺少 id/date，无法保存发布设置");
+        return;
+      }
+      this.savingPublishSettings = true;
+      try {
+        const settings = normalizeAccountPublishSettings({
+          defaultPublishToDraft: this.defaultPublishToDraft,
+        });
+        const res = await dataRequest({
+          type: "update",
+          fileName: "account",
+          item: {
+            id: this.urldata.id,
+            date: this.urldata.date,
+            defaultPublishToDraft: settings.defaultPublishToDraft,
+          },
+        });
+        if (!res || res.success === false) {
+          this.$message.error((res && res.message) || "保存发布设置失败");
+          return;
+        }
+        this.defaultPublishToDraft = settings.defaultPublishToDraft;
+        this.$message.success("发布设置已保存");
+        await usePermissionStore().GenerateRoutes();
+      } catch (e) {
+        this.$message.error(
+          "保存发布设置失败：" + (e && e.message ? e.message : e)
+        );
+      } finally {
+        this.savingPublishSettings = false;
+      }
     },
     async saveProxyConfig() {
       const normalized = normalizeAccountProxy({
@@ -268,6 +335,7 @@ export default {
   margin-right: 4px;
 }
 .account-manager-page .tip-card,
+.account-manager-page .publish-card,
 .account-manager-page .proxy-card {
   max-width: 760px;
   line-height: 1.8;
@@ -291,11 +359,13 @@ export default {
   padding-left: 20px;
   margin: 8px 0;
 }
+.account-manager-page .publish-desc,
 .account-manager-page .proxy-desc {
   margin: 0 0 12px;
   color: #606266;
   font-size: 13px;
 }
+.account-manager-page .publish-form,
 .account-manager-page .proxy-form {
   margin-top: 4px;
 }

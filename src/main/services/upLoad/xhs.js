@@ -9,6 +9,10 @@ import {
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
 } from "./uploadTimeouts.js";
+import {
+  getRandomDelayMs,
+  getXhsSecondClickDelayMs,
+} from "../../../shared/xhsPublishPolicy.js";
 
 // 小红书下拉里直接展示的支持选项；未匹配则跳过。
 const XHS_SUPPORTED_STATEMENT_LABELS = new Set([
@@ -247,6 +251,14 @@ function normalizeTagList(rawTagText = "") {
     .filter(Boolean);
 }
 
+function xhsTypeDelay() {
+  return getRandomDelayMs(80, 180);
+}
+
+async function waitXhs(page, min = 1500, max = 4000) {
+  await page.waitForTimeout(getRandomDelayMs(min, max));
+}
+
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
@@ -284,7 +296,7 @@ export default async function (page, data, window, event) {
     await titleInput.click({ clickCount: 3 });
     await page.keyboard.press("Backspace");
     if (titleText) {
-      await page.type(titleSelector, titleText, { delay: 50 });
+      await page.type(titleSelector, titleText, { delay: xhsTypeDelay() });
     }
   } catch (err) {
     console.error("❌ 小红书标题填写失败:", err);
@@ -292,7 +304,7 @@ export default async function (page, data, window, event) {
     throw new Error(`小红书标题填写失败：${err?.message || err}`);
   }
 
-  await page.waitForTimeout(300);
+  await waitXhs(page);
 
   // 正文/标签：用 keyboard.type + 字符串形式的 page.evaluate（避免 webpack 转译炸 "n is not defined"）
   try {
@@ -308,19 +320,19 @@ export default async function (page, data, window, event) {
 
     // 聚焦编辑器（先 puppeteer click 定位 caret，再字符串 evaluate 调 .focus() 双保险）
     await editor.click({ clickCount: 2 });
-    await page.waitForTimeout(200);
+    await waitXhs(page, 1500, 2500);
     // 注意：page.evaluate 传字符串而不是函数，webpack/babel 不会去转译它，避免 "n is not defined"
     await page.evaluate(
       "(function(){var el=document.querySelector(" +
         JSON.stringify(editorSelector) +
         ");if(el)el.focus();})()"
     );
-    await page.waitForTimeout(100);
+    await waitXhs(page, 1500, 2500);
 
     // 输入正文描述
     if (descText) {
-      await page.keyboard.type(descText, { delay: 30 });
-      await page.waitForTimeout(300);
+      await page.keyboard.type(descText, { delay: xhsTypeDelay() });
+      await waitXhs(page);
       // 校验是否真的写进去了；没有则 fallback 用 execCommand insertText
       const ok = await page.evaluate(
         "(function(){var el=document.querySelector(" +
@@ -336,7 +348,7 @@ export default async function (page, data, window, event) {
             JSON.stringify(descText) +
             ");})()"
         );
-        await page.waitForTimeout(200);
+        await waitXhs(page, 1500, 2500);
       }
     }
 
@@ -344,16 +356,16 @@ export default async function (page, data, window, event) {
     if (tags.length) {
       if (descText) {
         await page.keyboard.press("Enter");
-        await page.waitForTimeout(400);
+        await waitXhs(page);
       }
       for (let i = 0; i < tags.length; i++) {
         const tag = tags[i];
-        await page.keyboard.type("#" + tag, { delay: 30 });
-        await page.waitForTimeout(600); // 等小红书话题候选弹窗
+        await page.keyboard.type("#" + tag, { delay: xhsTypeDelay() });
+        await waitXhs(page); // 等小红书话题候选弹窗
         await page.keyboard.press("Enter"); // 选候选第一条 → 变成话题胶囊
-        await page.waitForTimeout(300);
+        await waitXhs(page, 1500, 3000);
         if (i < tags.length - 1) {
-          await page.keyboard.type(" ", { delay: 30 });
+          await page.keyboard.type(" ", { delay: xhsTypeDelay() });
         }
       }
     }
@@ -362,7 +374,7 @@ export default async function (page, data, window, event) {
     throw new Error(`小红书正文/标签填写失败：${err?.message || err}`);
   }
 
-  await page.waitForTimeout(300);
+  await waitXhs(page);
 
   // === PK封面开关：不需要 PK 封面，若页面默认开启则关闭 ===
   try {
@@ -460,14 +472,20 @@ export default async function (page, data, window, event) {
 
     const targetText = isDraftMode ? "暂存离开" : "发布";
     let clickedOk = false;
-    for (let attempt = 1; attempt <= 5; attempt++) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
       await page.mouse.click(cx, cy, { delay: 80 });
       console.log(
         `[xhs] 第 ${attempt} 次点击「${targetText}」at (${Math.round(
           cx
         )},${Math.round(cy)})`
       );
-      await page.waitForTimeout(1500);
+      if (attempt < 2) {
+        const secondClickDelay = getXhsSecondClickDelayMs();
+        console.log(`[xhs] 等待 ${secondClickDelay}ms 后判断是否第二次点击`);
+        await page.waitForTimeout(secondClickDelay);
+      } else {
+        await waitXhs(page, 2500, 4500);
+      }
       // 验证成功：宿主消失/换页/属性变化
       const stillThere = await page.evaluate(
         "(function(){return !!document.querySelector('xhs-publish-btn');})()"
@@ -477,14 +495,6 @@ export default async function (page, data, window, event) {
         clickedOk = true;
         break;
       }
-      // 顺手关掉可能弹出的确认模态
-      await page.evaluate(
-        "(function(){" +
-          "var dialog=document.querySelector('.originalContainer .footer .d-button, .d-modal .d-button-primary, .d-popconfirm .d-button-primary');" +
-          "if(dialog)dialog.click();" +
-          "})()"
-      );
-      await page.waitForTimeout(500);
     }
 
     if (!clickedOk) {
@@ -496,7 +506,7 @@ export default async function (page, data, window, event) {
           "var o={};for(var i=0;i<h.attributes.length;i++){o[h.attributes[i].name]=h.attributes[i].value;}return o;" +
           "})()"
       );
-      console.warn("[xhs] 5 次点击后宿主仍在，属性:", JSON.stringify(attrDump));
+      console.warn("[xhs] 2 次点击后宿主仍在，属性:", JSON.stringify(attrDump));
       throw new Error(`未能成功点击「${targetText}」按钮`);
     }
 
@@ -515,9 +525,11 @@ export default async function (page, data, window, event) {
     event.reply("puppeteerFile-done", {
       ...data,
       status: false,
-      message: "上传失败",
+      message: err?.message || "上传失败",
     });
-    maybeClosePublishWindow(data, window);
+    if (data.closeWindowAfterPublish !== false) {
+      maybeClosePublishWindow(data, window);
+    }
     console.error("❌ 小红书发布失败:", err);
   }
 }
