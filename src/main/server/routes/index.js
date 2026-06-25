@@ -7,6 +7,13 @@ router.get("/", function (req, res) {
   res.send("<h1>MatrixMedia API</h1>");
 });
 
+router.get("/test", function (req, res) {
+  res.json({
+    success: true,
+    message: "ok",
+  });
+});
+
 router.get("/platforms", async function (req, res) {
   try {
     const { getVideoPublishPlatformList } = await import(
