@@ -3,7 +3,7 @@
     <div class="page-header account-header">
       <div class="account-header-main">
         <h1 class="page-title">媒体平台管理</h1>
-        <p class="page-desc">管理分组下的平台登录、发布默认项与代理配置</p>
+        <p class="page-desc">管理账号的平台登录、发布默认项与代理配置</p>
       </div>
       <div class="account-header-actions">
         <el-tag type="info" size="medium" class="group-tag">
@@ -22,20 +22,6 @@
         <span>账号登录</span>
         <el-tag size="mini" type="success">独立窗口</el-tag>
       </div>
-      <p class="section-tip">
-        本平台使用独立 BrowserWindow
-        登录，绕开站点指纹识别导致的反复跳登录问题。
-      </p>
-      <ol class="step-list">
-        <li>点击「打开登录窗口」进入 {{ title }} 创作者中心；</li>
-        <li>在弹出窗口完成扫码或账号登录；</li>
-        <li>
-          登录态会保存到 partition
-          <code>{{ partition }}</code
-          >，视频发布会复用同一份 cookie；
-        </li>
-        <li>首次进入本页会自动尝试打开登录窗口，也可手动再次打开。</li>
-      </ol>
       <p class="section-muted">
         登录页：<code>{{ ptConfig[title] && ptConfig[title].index }}</code>
       </p>
@@ -48,7 +34,10 @@
           >默认草稿</el-tag
         >
       </div>
-      <p class="section-tip">开启后，该分组在视频发布时会优先保存到草稿。</p>
+      <p class="section-tip">开启后，该账号在视频发布时会优先保存到草稿。</p>
+      <p class="section-danger-tip">
+        小红书谨慎使用，如果被小红书警告ai托管，建议开启发布到草稿箱后手动app发布
+      </p>
       <el-form label-width="120px" class="form-block">
         <el-form-item label="默认发布到草稿">
           <el-switch
@@ -75,24 +64,41 @@
         <span v-if="proxyDisplay" class="card-sub">{{ proxyDisplay }}</span>
       </div>
       <p class="section-tip">
-        为该分组配置独立代理后，登录窗口与视频发布共用同一出口 IP。支持
+        为该账号配置独立代理后，登录窗口与视频发布都使用第一个启用代理。支持
         <code>http://host:port</code>、<code>http://user:pass@host:port</code>、
         <code>socks5://host:port</code> 等格式。
       </p>
-      <el-form label-width="88px" class="form-block">
-        <el-form-item label="启用代理">
-          <el-switch
-            v-model="proxyEnabled"
-            active-text="启用"
-            inactive-text="关闭"
-          />
-        </el-form-item>
-        <el-form-item v-if="proxyEnabled" label="代理 URL">
-          <el-input
-            v-model="proxyUrl"
-            placeholder="例如 http://user:pass@127.0.0.1:7890 或 socks5://127.0.0.1:1080"
-            clearable
-          />
+      <el-form label-width="88px" class="form-block proxy-form">
+        <el-form-item label="代理列表">
+          <div v-if="proxyList.length" class="proxy-list">
+            <div
+              v-for="(item, index) in proxyList"
+              :key="index"
+              class="proxy-row"
+            >
+              <el-switch
+                v-model="item.enabled"
+                active-text="启用"
+                inactive-text="关闭"
+              />
+              <el-input
+                v-model="item.url"
+                class="proxy-input"
+                placeholder="例如 http://user:pass@127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                clearable
+              />
+              <el-button
+                type="text"
+                class="proxy-remove"
+                @click="removeProxy(index)"
+              >
+                删除
+              </el-button>
+            </div>
+          </div>
+          <el-button type="primary" plain size="small" @click="addProxy">
+            添加代理配置
+          </el-button>
         </el-form-item>
         <el-form-item>
           <el-button
@@ -131,8 +137,7 @@ export default {
       title: "",
       urldata: {},
       opening: false,
-      proxyEnabled: false,
-      proxyUrl: "",
+      proxyList: [],
       savingProxy: false,
       defaultPublishToDraft: false,
       savingPublishSettings: false,
@@ -141,16 +146,8 @@ export default {
 
   computed: {
     proxyDisplay() {
-      if (!this.proxyEnabled || !String(this.proxyUrl || "").trim()) {
-        return "";
-      }
-      return (
-        "当前：" +
-        getAccountProxyDisplay({
-          enabled: this.proxyEnabled,
-          url: this.proxyUrl,
-        })
-      );
+      const display = getAccountProxyDisplay({ proxies: this.proxyList });
+      return display ? "当前：" + display : "";
     },
   },
 
@@ -182,8 +179,15 @@ export default {
     },
     loadProxyFromMeta() {
       const proxy = (this.urldata && this.urldata.proxy) || {};
-      this.proxyEnabled = Boolean(proxy.enabled);
-      this.proxyUrl = String(proxy.url || "");
+      const source = Array.isArray(proxy.proxies)
+        ? proxy.proxies
+        : proxy && (proxy.enabled || proxy.url)
+        ? [proxy]
+        : [];
+      this.proxyList = source.map((item) => ({
+        enabled: Boolean(item && item.enabled),
+        url: String((item && item.url) || ""),
+      }));
     },
     loadPublishSettingsFromMeta() {
       const settings = normalizeAccountPublishSettings(this.urldata || {});
@@ -244,8 +248,7 @@ export default {
     },
     async saveProxyConfig() {
       const normalized = normalizeAccountProxy({
-        enabled: this.proxyEnabled,
-        url: this.proxyUrl,
+        proxies: this.proxyList,
       });
       if (!normalized.ok) {
         this.$message.warning(normalized.error || "代理配置无效");
@@ -270,8 +273,12 @@ export default {
           this.$message.error((res && res.message) || "保存代理失败");
           return;
         }
-        this.proxyEnabled = normalized.value.enabled;
-        this.proxyUrl = normalized.value.url;
+        this.proxyList = normalized.value.proxies.map((item) => ({ ...item }));
+        this.urldata = {
+          ...this.urldata,
+          proxy: normalized.value,
+        };
+        this.$route.meta.proxy = normalized.value;
         this.$message.success("代理配置已保存");
         await usePermissionStore().GenerateRoutes();
       } catch (e) {
@@ -281,6 +288,12 @@ export default {
       } finally {
         this.savingProxy = false;
       }
+    },
+    addProxy() {
+      this.proxyList.push({ enabled: true, url: "" });
+    },
+    removeProxy(index) {
+      this.proxyList.splice(index, 1);
     },
     async openLoginWindow() {
       if (!this.ptConfig[this.title]) {
@@ -388,22 +401,44 @@ export default {
   line-height: 1.6;
 }
 
+.section-danger-tip {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #f56c6c;
+  line-height: 1.6;
+}
+
 .section-muted {
-  margin: 12px 0 0;
+  margin: 0;
   color: #909399;
   font-size: 12px;
 }
 
-.step-list {
-  margin: 0;
-  padding-left: 20px;
-  color: #606266;
-  line-height: 1.8;
-  font-size: 14px;
-}
-
 .form-block {
   margin-top: 4px;
+}
+
+.proxy-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.proxy-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.proxy-input {
+  flex: 1;
+  min-width: 260px;
+}
+
+.proxy-remove {
+  color: #f56c6c;
 }
 
 code {

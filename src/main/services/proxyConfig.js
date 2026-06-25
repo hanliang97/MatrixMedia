@@ -5,9 +5,14 @@ import { changeData } from "../server/utils.js";
 import {
   parseProxyUrl,
   isAccountProxyEnabled,
+  pickActiveAccountProxy,
 } from "../../shared/accountProxy.js";
 
-export { parseProxyUrl, isAccountProxyEnabled } from "../../shared/accountProxy.js";
+export {
+  parseProxyUrl,
+  isAccountProxyEnabled,
+  pickActiveAccountProxy,
+} from "../../shared/accountProxy.js";
 
 /** @type {Map<string, { username: string, password: string }>} */
 const partitionProxyAuth = new Map();
@@ -95,6 +100,7 @@ export async function applyAccountProxyToSession({
     const account = findAccountRecord(phone, pt);
     proxy = account && account.proxy;
   }
+  proxy = pickActiveAccountProxy(proxy);
 
   if (!isAccountProxyEnabled(proxy)) {
     partitionProxyAuth.delete(partitionKey);

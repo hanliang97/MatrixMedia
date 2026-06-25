@@ -1,6 +1,12 @@
 "use strict";
 
-const SUPPORTED_SCHEMES = new Set(["http", "https", "socks4", "socks5", "socks"]);
+const SUPPORTED_SCHEMES = new Set([
+  "http",
+  "https",
+  "socks4",
+  "socks5",
+  "socks",
+]);
 
 /**
  * @param {string} rawUrl
@@ -65,23 +71,17 @@ export function parseProxyUrl(rawUrl) {
   };
 }
 
-/**
- * @param {{ enabled?: boolean, url?: string } | null | undefined} proxy
- * @returns {{ ok: true, value: { enabled: boolean, url: string } } | { ok: false, error: string }}
- */
-export function normalizeAccountProxy(proxy) {
-  const enabled = Boolean(proxy && proxy.enabled);
-  const url = String((proxy && proxy.url) || "").trim();
+function normalizeProxyItem(item) {
+  const enabled = Boolean(item && item.enabled);
+  const url = String((item && item.url) || "").trim();
   if (!enabled) {
-    return { ok: true, value: { enabled: false, url: "" } };
+    return { ok: true, value: { enabled: false, url } };
   }
   if (!url) {
     return { ok: false, error: "启用代理时必须填写代理 URL" };
   }
   const parsed = parseProxyUrl(url);
-  if (!parsed.ok) {
-    return parsed;
-  }
+  if (!parsed.ok) return parsed;
   return {
     ok: true,
     value: {
@@ -92,24 +92,67 @@ export function normalizeAccountProxy(proxy) {
 }
 
 /**
- * @param {{ enabled?: boolean, url?: string } | null | undefined} proxy
+ * @param {{ enabled?: boolean, url?: string, proxies?: Array<{ enabled?: boolean, url?: string }> } | null | undefined} proxy
+ * @returns {{ ok: true, value: { proxies: Array<{ enabled: boolean, url: string }> } } | { ok: false, error: string }}
+ */
+export function normalizeAccountProxy(proxy) {
+  const source = Array.isArray(proxy && proxy.proxies)
+    ? proxy.proxies
+    : proxy && (proxy.enabled || proxy.url)
+    ? [proxy]
+    : [];
+  const proxies = [];
+
+  for (const item of source) {
+    const normalized = normalizeProxyItem(item);
+    if (!normalized.ok) return normalized;
+    const value = normalized.value;
+    if (value.enabled || value.url) proxies.push(value);
+  }
+
+  return { ok: true, value: { proxies } };
+}
+
+/**
+ * @param {{ enabled?: boolean, url?: string, proxies?: Array<{ enabled?: boolean, url?: string }> } | null | undefined} proxy
  * @returns {boolean}
  */
 export function isAccountProxyEnabled(proxy) {
-  return Boolean(
-    proxy &&
-      proxy.enabled &&
-      String(proxy.url || "").trim()
+  return getEnabledAccountProxies(proxy).length > 0;
+}
+
+/**
+ * @param {{ enabled?: boolean, url?: string, proxies?: Array<{ enabled?: boolean, url?: string }> } | null | undefined} proxy
+ * @returns {Array<{ enabled: boolean, url: string }>}
+ */
+export function getEnabledAccountProxies(proxy) {
+  const normalized = normalizeAccountProxy(proxy);
+  if (!normalized.ok) return [];
+  return normalized.value.proxies.filter(
+    (item) => item.enabled && String(item.url || "").trim()
   );
 }
 
 /**
- * @param {{ enabled?: boolean, url?: string } | null | undefined} proxy
+ * @param {{ enabled?: boolean, url?: string, proxies?: Array<{ enabled?: boolean, url?: string }> } | null | undefined} proxy
  * @returns {string}
  */
 export function getAccountProxyDisplay(proxy) {
-  if (!isAccountProxyEnabled(proxy)) return "";
-  const parsed = parseProxyUrl(proxy.url);
+  const enabledProxies = getEnabledAccountProxies(proxy);
+  if (enabledProxies.length === 0) return "";
+  const parsed = parseProxyUrl(enabledProxies[0].url);
   if (!parsed.ok) return "代理配置无效";
-  return parsed.value.display;
+  return enabledProxies.length > 1
+    ? `${parsed.value.display} 等 ${enabledProxies.length} 个`
+    : parsed.value.display;
+}
+
+/**
+ * @param {{ enabled?: boolean, url?: string, proxies?: Array<{ enabled?: boolean, url?: string }> } | null | undefined} proxy
+ * @returns {{ enabled: true, url: string } | null}
+ */
+export function pickActiveAccountProxy(proxy) {
+  const enabledProxies = getEnabledAccountProxies(proxy);
+  if (enabledProxies.length === 0) return null;
+  return enabledProxies[0];
 }
