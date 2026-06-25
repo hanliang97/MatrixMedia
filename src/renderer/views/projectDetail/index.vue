@@ -1,9 +1,10 @@
 <template>
-  <div class="project-detail">
+  <div class="page-shell project-detail">
     <div class="page-header">
       <h1 class="page-title">项目详情</h1>
       <p class="page-desc">
-        矩媒 MatrixMedia v{{ appVersion }} — 多平台视频矩阵发布与批量分发工具（Electron + CLI + HTTP + MCP）
+        矩媒 MatrixMedia v{{ appVersion }} —
+        多平台视频矩阵发布与批量分发工具（Electron + CLI + HTTP + MCP）
       </p>
     </div>
 
@@ -12,9 +13,14 @@
         <span>项目概览</span>
       </div>
       <ul class="overview-list">
-        <li>支持 GUI 图形界面、CLI 命令行、内置 HTTP API、MCP Server 四种接入方式</li>
+        <li>
+          支持 GUI 图形界面、CLI 命令行、内置 HTTP API、MCP Server 四种接入方式
+        </li>
         <li>CLI 与 GUI 共用同一 session partition，登录态可复用</li>
-        <li>HTTP API 需 GUI 主进程已启动（默认端口 <code>{{ httpPort }}</code>）</li>
+        <li>
+          HTTP API 需 GUI 主进程已启动（默认端口 <code>{{ httpPort }}</code
+          >）
+        </li>
         <li>MCP Server 通过 stdio 调用 CLI 子进程，不直接请求 HTTP</li>
       </ul>
     </el-card>
@@ -24,19 +30,28 @@
         <span>HTTP API</span>
         <span class="card-sub">基础地址：http://127.0.0.1:{{ httpPort }}</span>
       </div>
-      <p class="section-tip">GUI 启动后自动监听本机端口，与 CLI 共用登录态与发布记录。<code>POST /publish</code> 支持下方<strong>全部 {{ videoPlatforms.length }} 个视频平台</strong>；可传单平台 <code>platform</code> 或多平台 <code>platforms</code> 数组（二者不可同时传）。</p>
+      <p class="section-tip">
+        GUI 启动后自动监听本机端口，与 CLI 共用登录态与发布记录。<code
+          >POST /publish</code
+        >
+        支持下方<strong>全部 {{ videoPlatforms.length }} 个视频平台</strong
+        >；可传单平台 <code>platform</code> 或多平台
+        <code>platforms</code> 数组（二者不可同时传）。
+      </p>
       <el-table :data="httpRoutes" border size="small" class="doc-table">
         <el-table-column prop="method" label="方法" width="80" />
         <el-table-column prop="path" label="路径" width="140" />
         <el-table-column prop="desc" label="说明" />
       </el-table>
-      <div class="code-label platform-table-label">支持的视频平台（platform / platforms 均可使用 code 或中文名）</div>
+      <div class="code-label platform-table-label">
+        支持的视频平台（platform / platforms 均可使用 code 或中文名）
+      </div>
       <el-table :data="videoPlatforms" border size="small" class="doc-table">
         <el-table-column prop="code" label="推荐 code" width="100" />
         <el-table-column prop="name" label="平台" width="100" />
         <el-table-column prop="aliases" label="别名" width="180">
           <template slot-scope="scope">
-            {{ scope.row.aliases.join(' / ') }}
+            {{ scope.row.aliases.join(" / ") }}
           </template>
         </el-table-column>
         <el-table-column prop="status" label="自动化" />
@@ -55,7 +70,9 @@
         <pre class="code-pre">{{ curlMultiPublishExample }}</pre>
       </div>
       <div class="code-block">
-        <div class="code-label">多平台发布（platforms 对象数组，可覆盖各平台 phone）</div>
+        <div class="code-label">
+          多平台发布（platforms 对象数组，可覆盖各平台 phone）
+        </div>
         <pre class="code-pre">{{ curlMultiPublishObjectExample }}</pre>
       </div>
     </el-card>
@@ -64,13 +81,18 @@
       <div slot="header" class="card-header">
         <span>MCP 调用方式</span>
       </div>
-      <p class="section-tip">构建 MCP Server 后，在 Claude Desktop / Cursor / Cline 等工具中配置 stdio transport。</p>
+      <p class="section-tip">
+        构建 MCP Server 后，在 Claude Desktop / Cursor / Cline 等工具中配置
+        stdio transport。
+      </p>
       <div class="code-block">
         <div class="code-label">构建</div>
         <pre class="code-pre">cd mcp && npm install && npm run build</pre>
       </div>
       <div class="code-block">
-        <div class="code-label">配置示例（.cursor/mcp.json 或 claude_desktop_config.json）</div>
+        <div class="code-label">
+          配置示例（.cursor/mcp.json 或 claude_desktop_config.json）
+        </div>
         <pre class="code-pre">{{ mcpConfigExample }}</pre>
       </div>
       <el-table :data="mcpTools" border size="small" class="doc-table">
@@ -78,18 +100,25 @@
         <el-table-column prop="desc" label="说明" />
         <el-table-column prop="cli" label="底层 CLI" width="200" />
       </el-table>
-      <p class="section-note">登录说明：所有平台需在 GUI 中完成登录后再通过 MCP 发布；MCP 运行在无头 stdio 环境，无法弹出扫码窗口。</p>
+      <p class="section-note">
+        登录说明：所有平台需在 GUI 中完成登录后再通过 MCP 发布；MCP 运行在无头
+        stdio 环境，无法弹出扫码窗口。
+      </p>
     </el-card>
 
     <el-card class="section-card" shadow="never">
       <div slot="header" class="card-header">
         <span>CLI 调用方式</span>
       </div>
-      <p class="section-tip">argv 含子串 <code>cli</code> 即进入无 GUI 流程。</p>
+      <p class="section-tip">
+        argv 含子串 <code>cli</code> 即进入无 GUI 流程。
+      </p>
       <div class="code-block">
         <div class="code-label">入口</div>
-        <pre class="code-pre">matrixmedia cli &lt;子命令&gt; [选项]
-electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre>
+        <pre class="code-pre">
+matrixmedia cli &lt;子命令&gt; [选项]
+electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre
+        >
       </div>
       <el-table :data="cliCommands" border size="small" class="doc-table">
         <el-table-column prop="cmd" label="子命令" width="140" />
@@ -108,57 +137,119 @@ electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre>
 </template>
 
 <script>
-import packageInfo from '../../../../package.json'
-import { VIDEO_PUBLISH_PLATFORM_DOCS } from '../../../shared/publishPlatforms.js'
+import packageInfo from "../../../../package.json";
+import { VIDEO_PUBLISH_PLATFORM_DOCS } from "../../../shared/publishPlatforms.js";
 
 export default {
-  name: 'ProjectDetail',
+  name: "ProjectDetail",
   data() {
     const videoPlatforms = VIDEO_PUBLISH_PLATFORM_DOCS.map((item) => ({
       code: item.code,
       name: item.name,
       aliases: item.aliases,
-      status: item.automated ? '已自动化' : item.note || '待完善'
-    }))
+      status: item.automated ? "已自动化" : item.note || "待完善",
+    }));
     return {
       appVersion: packageInfo.version,
       httpPort: 30088,
       videoPlatforms,
       httpRoutes: [
-        { method: 'GET', path: '/', desc: '返回 MatrixMedia API 欢迎页' },
-        { method: 'GET', path: '/platforms', desc: '返回 HTTP 支持的全部视频平台列表（JSON）' },
-        { method: 'POST', path: '/changeData', desc: '读写本地 JSON 数据（账号树、发布历史 pushData 等）；body: { fileName, type, item }，type 含 add/update/delete/get/config' },
-        { method: 'POST', path: '/publish', desc: '发布视频到任意已支持平台；单平台传 platform，多平台传 platforms 数组' }
+        { method: "GET", path: "/", desc: "返回 MatrixMedia API 欢迎页" },
+        {
+          method: "GET",
+          path: "/platforms",
+          desc: "返回 HTTP 支持的全部视频平台列表（JSON）",
+        },
+        {
+          method: "POST",
+          path: "/changeData",
+          desc: "读写本地 JSON 数据（账号树、发布历史 pushData 等）；body: { fileName, type, item }，type 含 add/update/delete/get/config",
+        },
+        {
+          method: "POST",
+          path: "/publish",
+          desc: "发布视频到任意已支持平台；单平台传 platform，多平台传 platforms 数组",
+        },
       ],
       httpPublishParams: [
-        { field: 'platform', required: '单平台', desc: '任一下表平台 code 或中文名，如 xhs / 小红书（与 platforms 二选一）' },
-        { field: 'platforms', required: '多平台', desc: '平台数组，可包含全部 8 个平台；如 ["dy","xhs","ks"] 或对象数组 [{ "platform": "dy", "phone": "138..." }, ...]' },
-        { field: 'file', required: '是', desc: '本地视频绝对路径，或 http(s) 远程 URL' },
-        { field: 'title', required: '是', desc: '视频标题' },
-        { field: 'phone', required: '二选一', desc: '账号手机号；多平台时作为默认值，对象数组内可单独覆盖' },
-        { field: 'partition', required: '二选一', desc: '完整 session，如 persist:13800138000抖音' },
-        { field: 'bt2', required: '否', desc: '视频号短标（含视频号时建议填写）' },
-        { field: 'tags', required: '否', desc: '标签，空格分隔' },
-        { field: 'publishAt', required: '否', desc: '定时发布 YYYY-MM-DD HH:mm:ss（多平台时需全部一致）' }
+        {
+          field: "platform",
+          required: "单平台",
+          desc: "任一下表平台 code 或中文名，如 xhs / 小红书（与 platforms 二选一）",
+        },
+        {
+          field: "platforms",
+          required: "多平台",
+          desc: '平台数组，可包含全部 8 个平台；如 ["dy","xhs","ks"] 或对象数组 [{ "platform": "dy", "phone": "138..." }, ...]',
+        },
+        {
+          field: "file",
+          required: "是",
+          desc: "本地视频绝对路径，或 http(s) 远程 URL",
+        },
+        { field: "title", required: "是", desc: "视频标题" },
+        {
+          field: "phone",
+          required: "二选一",
+          desc: "账号手机号；多平台时作为默认值，对象数组内可单独覆盖",
+        },
+        {
+          field: "partition",
+          required: "二选一",
+          desc: "完整 session，如 persist:13800138000抖音",
+        },
+        {
+          field: "bt2",
+          required: "否",
+          desc: "视频号短标（含视频号时建议填写）",
+        },
+        { field: "tags", required: "否", desc: "标签，空格分隔" },
+        {
+          field: "publishAt",
+          required: "否",
+          desc: "定时发布 YYYY-MM-DD HH:mm:ss（多平台时需全部一致）",
+        },
       ],
       mcpTools: [
-        { name: 'list_accounts', desc: '列出本机已登录账号，支持按平台过滤', cli: 'cli accounts --json' },
-        { name: 'list_history', desc: '查询本机发布记录，支持按平台/状态/天数过滤', cli: 'cli history --json' },
-        { name: 'publish_video', desc: '发布视频到指定平台（最长约 35 分钟，支持定时发布）', cli: 'cli publish ...' },
-        { name: 'publish_article', desc: '发布掘金文章（需已登录掘金账号）', cli: 'cli publish-article ...' }
+        {
+          name: "list_accounts",
+          desc: "列出本机已登录账号，支持按平台过滤",
+          cli: "cli accounts --json",
+        },
+        {
+          name: "list_history",
+          desc: "查询本机发布记录，支持按平台/状态/天数过滤",
+          cli: "cli history --json",
+        },
+        {
+          name: "publish_video",
+          desc: "发布视频到指定平台（最长约 35 分钟，支持定时发布）",
+          cli: "cli publish ...",
+        },
+        {
+          name: "publish_article",
+          desc: "发布掘金文章（需已登录掘金账号）",
+          cli: "cli publish-article ...",
+        },
       ],
       cliCommands: [
-        { cmd: 'login', desc: '扫码登录，当前支持抖音、视频号' },
-        { cmd: 'publish', desc: '发布视频，7 个平台已自动化（抖音/快手/百家号/哔哩哔哩/头条/视频号/小红书）' },
-        { cmd: 'publish-article', desc: '发布掘金文章，支持 --content 或 --file' },
-        { cmd: 'accounts', desc: '查看本机账号与登录态，--json 输出稳定 JSON' },
-        { cmd: 'history', desc: '查看发布历史，--json 输出稳定 JSON' }
+        { cmd: "login", desc: "扫码登录，当前支持抖音、视频号" },
+        {
+          cmd: "publish",
+          desc: "发布视频，7 个平台已自动化（抖音/快手/百家号/哔哩哔哩/头条/视频号/小红书）",
+        },
+        {
+          cmd: "publish-article",
+          desc: "发布掘金文章，支持 --content 或 --file",
+        },
+        { cmd: "accounts", desc: "查看本机账号与登录态，--json 输出稳定 JSON" },
+        { cmd: "history", desc: "查看发布历史，--json 输出稳定 JSON" },
       ],
       exitCodes: [
-        { code: '0', desc: '成功' },
-        { code: '1', desc: '未捕获异常' },
-        { code: '2', desc: '参数错误' },
-        { code: '3', desc: '业务失败（未登录、上传失败等）' }
+        { code: "0", desc: "成功" },
+        { code: "1", desc: "未捕获异常" },
+        { code: "2", desc: "参数错误" },
+        { code: "3", desc: "业务失败（未登录、上传失败等）" },
       ],
       curlPublishExample: `curl -X POST http://127.0.0.1:30088/publish \\
   -H "Content-Type: application/json" \\
@@ -213,66 +304,14 @@ electron . cli publish-article -p juejin --phone 13800138000 -t "文章标题" -
 
 # 查看账号 / 历史（JSON）
 electron . cli accounts --json
-electron . cli history --json --days 7`
-    }
-  }
-}
+electron . cli history --json --days 7`,
+    };
+  },
+};
 </script>
 
 <style rel="stylesheet/scss" lang="scss" scoped>
-.project-detail {
-  padding: 20px 24px;
-  height: calc(100vh - 100px);
-  overflow-y: auto;
-  box-sizing: border-box;
-  background-color: #f5f7fa;
-}
-
-.page-header {
-  margin-bottom: 20px;
-}
-
-.page-title {
-  margin: 0 0 8px;
-  font-size: 22px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.page-desc {
-  margin: 0;
-  font-size: 14px;
-  color: #606266;
-  line-height: 1.6;
-}
-
-.section-card {
-  margin-bottom: 16px;
-
-  ::v-deep .el-card__header {
-    padding: 14px 20px;
-    background-color: #fafafa;
-  }
-
-  ::v-deep .el-card__body {
-    padding: 16px 20px;
-  }
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  font-size: 16px;
-  font-weight: 600;
-  color: #303133;
-}
-
-.card-sub {
-  font-size: 13px;
-  font-weight: 400;
-  color: #909399;
-}
+@import "@/styles/variables.scss";
 
 .overview-list {
   margin: 0;

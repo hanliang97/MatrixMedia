@@ -4,13 +4,15 @@ import { ipcRenderer } from "electron";
 import router from "@/router";
 import VueRouter from "vue-router";
 
-
-// 引入路由表
 import { constantRouterMap } from "@/router";
 import {
   setAccountLoginFlag,
   clearAccountLoginFlag,
 } from "@/utils/accountLoginFlag";
+import {
+  buildGroupOrderMap,
+  sortGroupRoutes,
+} from "../../shared/accountGroupOrder.js";
 
 const getCookieTaskHandlers = new Map();
 let getCookieListenerBound = false;
@@ -29,23 +31,26 @@ function ensureGetCookieDoneListener() {
 }
 
 function addFetchRoute(routes) {
-  return new Promise(resolve => {
+  return new Promise((resolve) => {
     fetch("http://localhost:30088/changeData", {
       method: "POST",
-      headers: { Accept: "application/json", "Content-Type": "application/json" },
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
       body: JSON.stringify({
         type: "get",
         fileName: "account",
         pageSize: 9999,
       }),
     })
-      .then(r => r.json())
-      .catch(err => {
+      .then((r) => r.json())
+      .catch((err) => {
         console.error("[permission] 拉取账号路由失败:", err);
         return {};
       })
-      .then(r => {
-        let endData = {};
+      .then((r) => {
+        const endData = {};
         const payload = r && typeof r === "object" ? r : {};
         const raw =
           payload.data != null &&
@@ -53,17 +58,22 @@ function addFetchRoute(routes) {
           !Array.isArray(payload.data)
             ? payload.data
             : {};
+        const groupOrderMap = buildGroupOrderMap(raw);
 
-        for (let item in raw) {
-          let v = raw[item];
-          v.forEach(i => {
+        for (const item in raw) {
+          const v = raw[item];
+          v.forEach((i) => {
             if (!endData[i.phone]) {
               endData[i.phone] = {
                 path: "/accountManager/" + i.phone,
                 name: `accountManager-${i.phone}`,
                 component: Layout,
                 redirect: "accountManager",
-                meta: { title: i.phone },
+                meta: {
+                  title: i.phone,
+                  phone: i.phone,
+                  groupOrder: i.groupOrder,
+                },
                 children: [
                   {
                     path: i.pt,
@@ -81,8 +91,8 @@ function addFetchRoute(routes) {
                 meta: { title: i.pt, ...i, date: item },
               });
             }
-            const taskId = Date.now() + Math.random(); // 更唯一些
-            const partition = "persist:" + i.phone.split('-')[0] + i.pt;
+            const taskId = Date.now() + Math.random();
+            const partition = "persist:" + i.phone.split("-")[0] + i.pt;
 
             ensureGetCookieDoneListener();
             ipcRenderer.send("getCookie", {
@@ -90,10 +100,11 @@ function addFetchRoute(routes) {
               partition,
               url: i.url,
               pt: i.pt,
-              name: `${i.phone.split('-')[0]}${i.pt}登录`,
+              name: `${i.phone.split("-")[0]}${i.pt}登录`,
             });
-            getCookieTaskHandlers.set(taskId, data => {
-              const flagName = data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
+            getCookieTaskHandlers.set(taskId, (data) => {
+              const flagName =
+                data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
               if (data.success) {
                 if (data.result) {
                   setAccountLoginFlag(flagName, data.loginExpiresAtMs);
@@ -112,19 +123,20 @@ function addFetchRoute(routes) {
             });
           });
         }
-        for (let i in endData) {
-          let r = endData[i];
-          routes.push(r);
-        }
+
+        const sortedRoutes = sortGroupRoutes(
+          Object.values(endData),
+          groupOrderMap
+        );
+        sortedRoutes.forEach((route) => {
+          routes.push(route);
+        });
         localStorage.setItem("accountTree", JSON.stringify(endData));
 
         resolve(routes);
       });
   });
 }
-
-
-
 
 export const usePermissionStore = defineStore({
   id: "permission",
@@ -133,27 +145,32 @@ export const usePermissionStore = defineStore({
   }),
   actions: {
     GenerateRoutes() {
-      return new Promise(async resolve => {
+      return new Promise(async (resolve) => {
         let accessedRouters = [];
         accessedRouters = await addFetchRoute(accessedRouters);
-        
-        // Vue Router 3.x 没有 removeRoute 方法，需要重置路由器
-        // 创建一个新的路由器实例来获取新的 matcher
+
         const newRouter = new VueRouter({
-          routes: constantRouterMap
+          routes: constantRouterMap,
         });
-        
-        // 替换当前路由器的 matcher
+
         router.matcher = newRouter.matcher;
-        
-        // 添加新的动态路由
-        accessedRouters.forEach(item => {
+
+        accessedRouters.forEach((item) => {
           router.addRoute(item);
         });
-        
+
         this.routers = constantRouterMap.concat(accessedRouters);
+
+        const { fullPath } = router.currentRoute;
+        if (fullPath && fullPath !== "/") {
+          const resolved = router.resolve(fullPath);
+          if (resolved.route.matched.length) {
+            router.replace(fullPath).catch(() => {});
+          }
+        }
+
         resolve(this.routers);
       });
-    }
+    },
   },
 });

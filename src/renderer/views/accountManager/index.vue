@@ -1,46 +1,55 @@
 <template>
-  <div class="account-manager-page">
-    <div class="header">
-      <el-tag type="danger" size="medium" class="phone-tag">{{
-        partition.split("-")[0]
-      }}</el-tag>
-      <el-button type="primary" :loading="opening" @click="openLoginWindow"
-        >打开登录窗口</el-button
-      >
-      <el-button @click="deleteData">删除账号</el-button>
+  <div class="page-shell account-manager-page">
+    <div class="page-header account-header">
+      <div class="account-header-main">
+        <h1 class="page-title">媒体平台管理</h1>
+        <p class="page-desc">管理分组下的平台登录、发布默认项与代理配置</p>
+      </div>
+      <div class="account-header-actions">
+        <el-tag type="info" size="medium" class="group-tag">
+          分组：{{ partition.split("-")[0] }}
+        </el-tag>
+        <el-tag size="medium">平台：{{ title }}</el-tag>
+        <el-button type="primary" :loading="opening" @click="openLoginWindow">
+          打开登录窗口
+        </el-button>
+        <el-button type="danger" plain @click="deleteData">删除账号</el-button>
+      </div>
     </div>
 
-    <el-card class="tip-card" shadow="never">
-      <div slot="header" class="tip-title">{{ title }} 账号登录</div>
-      <p>
-        本平台已切换到 <b>独立 BrowserWindow</b> 进行登录，绕开
-        <code>&lt;webview&gt;</code>
-        被小红书 /
-        抖音等站点指纹识别（<code>websectiga</code>、<code>sec_poison_id</code>）
-        导致的"反复跳登录"问题。
+    <el-card class="section-card" shadow="never">
+      <div slot="header" class="card-header">
+        <span>账号登录</span>
+        <el-tag size="mini" type="success">独立窗口</el-tag>
+      </div>
+      <p class="section-tip">
+        本平台使用独立 BrowserWindow
+        登录，绕开站点指纹识别导致的反复跳登录问题。
       </p>
-      <p>使用方法：</p>
-      <ol>
-        <li>点击右上「打开登录窗口」 → 弹出 {{ title }} 创作者中心首页；</li>
-        <li>在弹出窗口里完成扫码 / 账号登录；</li>
+      <ol class="step-list">
+        <li>点击「打开登录窗口」进入 {{ title }} 创作者中心；</li>
+        <li>在弹出窗口完成扫码或账号登录；</li>
         <li>
-          登录后可以直接关闭弹窗，登录态会落到 partition
+          登录态会保存到 partition
           <code>{{ partition }}</code
-          >；
+          >，视频发布会复用同一份 cookie；
         </li>
-        <li>后续视频管理那边发布会复用同一份 cookie / localStorage。</li>
+        <li>首次进入本页会自动尝试打开登录窗口，也可手动再次打开。</li>
       </ol>
-      <p class="muted">
-        登录页 URL：<code>{{ ptConfig[title] && ptConfig[title].index }}</code>
+      <p class="section-muted">
+        登录页：<code>{{ ptConfig[title] && ptConfig[title].index }}</code>
       </p>
     </el-card>
 
-    <el-card class="publish-card" shadow="never">
-      <div slot="header" class="tip-title">发布设置</div>
-      <p class="publish-desc">
-        开启后，该账号在视频发布里无论点击「发布」还是目录批量发布，都会优先保存到草稿。
-      </p>
-      <el-form label-width="120px" class="publish-form">
+    <el-card class="section-card" shadow="never">
+      <div slot="header" class="card-header">
+        <span>发布设置</span>
+        <el-tag v-if="defaultPublishToDraft" size="mini" type="warning"
+          >默认草稿</el-tag
+        >
+      </div>
+      <p class="section-tip">开启后，该分组在视频发布时会优先保存到草稿。</p>
+      <el-form label-width="120px" class="form-block">
         <el-form-item label="默认发布到草稿">
           <el-switch
             v-model="defaultPublishToDraft"
@@ -60,14 +69,17 @@
       </el-form>
     </el-card>
 
-    <el-card class="proxy-card" shadow="never">
-      <div slot="header" class="tip-title">发布代理</div>
-      <p class="proxy-desc">
-        为该账号配置独立代理后，登录窗口与视频发布都会走同一出口 IP。 支持
+    <el-card class="section-card" shadow="never">
+      <div slot="header" class="card-header">
+        <span>发布代理</span>
+        <span v-if="proxyDisplay" class="card-sub">{{ proxyDisplay }}</span>
+      </div>
+      <p class="section-tip">
+        为该分组配置独立代理后，登录窗口与视频发布共用同一出口 IP。支持
         <code>http://host:port</code>、<code>http://user:pass@host:port</code>、
         <code>socks5://host:port</code> 等格式。
       </p>
-      <el-form label-width="88px" class="proxy-form">
+      <el-form label-width="88px" class="form-block">
         <el-form-item label="启用代理">
           <el-switch
             v-model="proxyEnabled"
@@ -90,9 +102,6 @@
           >
             保存代理配置
           </el-button>
-          <span v-if="proxyDisplay" class="proxy-current"
-            >当前：{{ proxyDisplay }}</span
-          >
         </el-form-item>
       </el-form>
     </el-card>
@@ -135,10 +144,13 @@ export default {
       if (!this.proxyEnabled || !String(this.proxyUrl || "").trim()) {
         return "";
       }
-      return getAccountProxyDisplay({
-        enabled: this.proxyEnabled,
-        url: this.proxyUrl,
-      });
+      return (
+        "当前：" +
+        getAccountProxyDisplay({
+          enabled: this.proxyEnabled,
+          url: this.proxyUrl,
+        })
+      );
     },
   },
 
@@ -342,58 +354,62 @@ export default {
 };
 </script>
 
-<style scoped>
-.account-manager-page {
-  padding: 24px;
-  box-sizing: border-box;
+<style scoped lang="scss">
+.account-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-.account-manager-page .header {
+
+.account-header-main {
+  flex: 1;
+  min-width: 220px;
+}
+
+.account-header-actions {
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  flex-wrap: wrap;
+  gap: 10px;
 }
-.account-manager-page .header .phone-tag {
-  margin-right: 4px;
+
+.group-tag {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
-.account-manager-page .tip-card,
-.account-manager-page .publish-card,
-.account-manager-page .proxy-card {
-  max-width: 760px;
+
+.section-tip {
+  margin: 0 0 12px;
+  font-size: 13px;
+  color: #606266;
+  line-height: 1.6;
+}
+
+.section-muted {
+  margin: 12px 0 0;
+  color: #909399;
+  font-size: 12px;
+}
+
+.step-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #606266;
   line-height: 1.8;
-  margin-bottom: 16px;
+  font-size: 14px;
 }
-.account-manager-page .tip-title {
-  font-weight: 600;
-  font-size: 15px;
+
+.form-block {
+  margin-top: 4px;
 }
-.account-manager-page code {
+
+code {
   background: #f4f4f5;
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 12px;
-}
-.account-manager-page .muted {
-  color: #909399;
-  font-size: 12px;
-}
-.account-manager-page ol {
-  padding-left: 20px;
-  margin: 8px 0;
-}
-.account-manager-page .publish-desc,
-.account-manager-page .proxy-desc {
-  margin: 0 0 12px;
-  color: #606266;
-  font-size: 13px;
-}
-.account-manager-page .publish-form,
-.account-manager-page .proxy-form {
-  margin-top: 4px;
-}
-.account-manager-page .proxy-current {
-  margin-left: 12px;
-  color: #67c23a;
-  font-size: 13px;
 }
 </style>

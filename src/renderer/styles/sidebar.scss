@@ -1,23 +1,39 @@
 #app {
+  .container-set {
+    display: flex;
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
 
   // 主体区域
   .main-container {
-    flex:1;
-    height: calc(100vh - 98px);
-    transition: margin-left .28s;
+    flex: 1;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    transition: margin-left 0.28s;
   }
 
   // 侧边栏
   .sidebar-container {
     .horizontal-collapse-transition {
-      transition: 0s width ease-in-out, 0s padding-left ease-in-out, 0s padding-right ease-in-out;
+      transition: 0s width ease-in-out, 0s padding-left ease-in-out,
+        0s padding-right ease-in-out;
     }
-    
-    transition: width .28s;
+
+    transition: width 0.28s;
     width: 256px !important;
-    font-size: 0px;
+    flex-shrink: 0;
+    font-size: 0;
     z-index: 1001;
-    height: calc(100vh - 95px);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    background-color: $menuBg;
+    border-right: 1px solid $borderColor;
+
     a {
       display: inline-block;
       width: 100%;
@@ -30,21 +46,18 @@
     .el-menu {
       border: none;
       width: 100% !important;
+      background-color: transparent;
     }
   }
 
   .hideSidebar {
     .sidebar-container {
-
       width: 60px !important;
     }
 
     .navbar-header-fixed {
       width: calc(100% - 60px);
-      ;
     }
-
-   
 
     .submenu-title-noDropdown {
       padding-left: 10px !important;
@@ -56,10 +69,10 @@
     }
 
     .el-submenu {
-      &>.el-submenu__title {
+      & > .el-submenu__title {
         padding-left: 10px !important;
 
-        &>span {
+        & > span {
           height: 0;
           width: 0;
           overflow: hidden;
@@ -74,7 +87,7 @@
     }
   }
 
-  .sidebar-container .nest-menu .el-submenu>.el-submenu__title,
+  .sidebar-container .nest-menu .el-submenu > .el-submenu__title,
   .sidebar-container .el-submenu .el-menu-item {
     min-width: 180px !important;
   }
@@ -91,7 +104,7 @@
 
     .sidebar-container {
       top: 50px;
-      transition: transform .28s;
+      transition: transform 0.28s;
       width: 180px !important;
     }
 
@@ -104,7 +117,6 @@
   }
 
   .withoutAnimation {
-
     .main-container,
     .sidebar-container {
       transition: none;

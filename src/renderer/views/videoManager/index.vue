@@ -1,20 +1,33 @@
 <template>
-  <div class="container-box">
-    <div class="toolbar">
-      <div class="toolbar-left">
-        <el-button type="primary" @click="selectVideoFile"
-          >选择视频发布</el-button
-        >
-        <el-button type="primary" @click="openDirectoryPublish"
-          >目录发布</el-button
-        >
-        <el-button type="success" @click="openArticlePublish"
-          >发布文章</el-button
-        >
-      </div>
-      <div class="toolbar-right">
-      <el-button type="warning" @click="openFeedback">问题反馈</el-button>
-      <el-button type="warning" @click="openQQGroup">加入作者QQ群</el-button>
+  <div class="page-shell video-manager-page">
+    <div class="page-header">
+      <h1 class="page-title">视频管理</h1>
+      <p class="page-desc">选择视频或目录发布，查看本地发布记录与审核状态</p>
+    </div>
+
+    <div class="toolbar section-card el-card is-never-shadow">
+      <div class="toolbar-inner">
+        <div class="toolbar-left">
+          <span class="toolbar-label">发布操作</span>
+          <el-button type="primary" @click="selectVideoFile"
+            >选择视频发布</el-button
+          >
+          <el-button type="primary" plain @click="openDirectoryPublish"
+            >目录发布</el-button
+          >
+          <el-button type="success" @click="openArticlePublish"
+            >发布文章</el-button
+          >
+        </div>
+        <div class="toolbar-right">
+          <span class="toolbar-label">帮助</span>
+          <el-button type="warning" plain @click="openFeedback"
+            >问题反馈</el-button
+          >
+          <el-button type="warning" plain @click="openQQGroup"
+            >加入作者QQ群</el-button
+          >
+        </div>
       </div>
     </div>
 
@@ -23,33 +36,20 @@
 
     <div class="info-box">
       <template v-for="(item, index) in dataList">
-        <el-card v-if="item && item.length" :key="index" class="mb16">
-          <div class="card-head">
+        <el-card
+          v-if="item && item.length"
+          :key="index"
+          class="section-card record-card"
+          shadow="never"
+        >
+          <div slot="header" class="card-header">
             <span class="date-label">{{ index }}</span>
-            <span class="hint">本地发布记录</span>
+            <span class="card-sub">本地发布记录</span>
           </div>
           <el-table :data="item" border style="width: 100%">
-            <el-table-column prop="textOtherName" label="名称" width="120" />
-            <el-table-column prop="bt" label="标题" width="160" />
-            <el-table-column prop="selectedFile" label="文件" width="140" />
-            <el-table-column label="平台审核状态" width="200">
-              <template slot-scope="scope">
-                <div
-                  v-for="(sub, si) in scope.row.showAlltype"
-                  :key="si"
-                  class="status-row"
-                >
-                  <span class="pt-name" @click="copy(sub.videoLink)">{{
-                    sub.pt
-                  }}</span>
-                  <span :class="{ fail: !sub.videoLink }" @click="opPt(sub)">{{
-                    sub.videoLink ? "通过" : "未通过"
-                  }}</span>
-                </div>
-              </template>
-            </el-table-column>
-            <el-table-column prop="phone" label="发布账号" />
-            <el-table-column label="发布进度" width="320">
+            <el-table-column prop="bt" label="标题" min-width="180" />
+            <el-table-column prop="phone" label="发布分组" min-width="120" />
+            <el-table-column label="发布进度" min-width="320">
               <template slot-scope="scope">
                 <div
                   v-for="(sub, si) in scope.row.showAlltype"
@@ -76,24 +76,8 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="来源" width="72">
+            <el-table-column label="操作" width="180">
               <template slot-scope="scope">
-                {{ scope.row.textType === "article" ? "文章" : "本地" }}
-              </template>
-            </el-table-column>
-            <el-table-column label="操作" width="260">
-              <template slot-scope="scope">
-                <el-button
-                  v-if="canGetStatus(scope.row)"
-                  type="primary"
-                  size="mini"
-                  class="mb8"
-                  :loading="isStatusLoading(scope.row)"
-                  :disabled="isStatusLoading(scope.row)"
-                  @click="handleGetStatus(scope.row)"
-                >
-                  获取状态
-                </el-button>
                 <el-popconfirm
                   confirm-button-text="删除"
                   cancel-button-text="取消"
@@ -576,10 +560,7 @@ export default {
       this.loadRecords();
     },
     openFeedback() {
-      window.open(
-        "https://wj.qq.com/s2/26701780/6de3/",
-        "_blank"
-      );
+      window.open("https://wj.qq.com/s2/26701780/6de3/", "_blank");
     },
     openQQGroup() {
       window.open(
@@ -658,7 +639,9 @@ export default {
           this.$message.info("已切换到已打开的登录窗口");
         }
       } catch (e) {
-        this.$message.error("打开登录窗口失败：" + (e && e.message ? e.message : e));
+        this.$message.error(
+          "打开登录窗口失败：" + (e && e.message ? e.message : e)
+        );
       }
     },
 
@@ -680,14 +663,19 @@ export default {
           if (!item.videoLink) {
             const taskId = Date.now() + Math.random();
             // JSON 兜底序列化，避免 Vue 响应式代理 / 不可克隆对象触发 IPC 错误
-            ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify({
-              show: false,
-              taskId,
-              ...item,
-              title: item.title || item.bt || item.textOtherName || "",
-              pt: item.pt + "状态",
-              statusCalss: (this.statusCalss || "").trim(),
-            })));
+            ipcRenderer.send(
+              "puppeteerFile",
+              JSON.parse(
+                JSON.stringify({
+                  show: false,
+                  taskId,
+                  ...item,
+                  title: item.title || item.bt || item.textOtherName || "",
+                  pt: item.pt + "状态",
+                  statusCalss: (this.statusCalss || "").trim(),
+                })
+              )
+            );
             this.taskHandlers.set(taskId, (data) => {
               acLen++;
               const statusUrl =
@@ -759,51 +747,55 @@ export default {
 </script>
 
 <style lang="scss" scoped>
-.container-box {
-  height: calc(100vh - 100px);
-  overflow-y: auto;
-  padding: 20px;
-}
+@import "@/styles/variables.scss";
 
 .toolbar {
   margin-bottom: 16px;
+  padding: 16px 20px;
+  background: $cardBg;
+  border: 1px solid $borderColor;
+  border-radius: 4px;
+}
+
+.toolbar-inner {
   display: flex;
   justify-content: space-between;
   align-items: center;
-}
-
-.toolbar-left {
-  display: flex;
-  align-items: center;
+  flex-wrap: wrap;
   gap: 12px;
 }
 
-.info-box {
-  min-height: 200px;
+.toolbar-left,
+.toolbar-right {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
-.mb16 {
-  margin-bottom: 16px;
+.toolbar-label {
+  font-size: 13px;
+  color: #909399;
+  margin-right: 4px;
+}
+
+.info-box {
+  min-height: 120px;
+}
+
+.record-card {
+  ::v-deep .el-card__body {
+    padding-top: 0;
+  }
 }
 
 .mb8 {
   margin-bottom: 8px;
 }
 
-.card-head {
-  display: flex;
-  align-items: center;
-  padding-bottom: 10px;
-}
-
 .date-label {
-  color: #c00;
-  margin-right: 12px;
-}
-
-.hint {
-  font-size: 13px;
-  color: #666;
+  color: #303133;
+  font-weight: 600;
 }
 
 .status-row {

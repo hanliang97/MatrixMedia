@@ -2,19 +2,21 @@
   <div
     v-if="!item.hidden && item.children && item.children.length"
     class="menu-wrapper"
-    :class="collapse ? `` : `active-menu-wrapper`"
+    :class="collapse ? '' : 'active-menu-wrapper'"
   >
     <el-submenu :index="String(item.name || item.path)">
       <template slot="title">
-        <svg-icon
-          v-if="item.meta && item.meta.icon"
-          :icon-class="item.meta.icon"
-        ></svg-icon>
         <span
-          v-if="item.meta && item.meta.title"
-          slot="title"
-          >{{ item.meta.title }}</span
+          v-if="!collapse"
+          class="group-drag-handle"
+          title="拖动排序"
+          @mousedown.stop
+          @click.stop
+          >⋮⋮</span
         >
+        <span v-if="item.meta && item.meta.title" class="group-title">{{
+          item.meta.title
+        }}</span>
       </template>
 
       <template v-for="child in item.children">
@@ -26,7 +28,7 @@
           :item="child"
           :base-path="resolvePath(child.path)"
           :collapse="collapse"
-        ></sidebar-item>
+        />
 
         <router-link
           v-else-if="!child.hidden"
@@ -34,7 +36,7 @@
           :to="resolvePath(child.path)"
         >
           <el-menu-item
-            style="display: flex; align-items: center"
+            class="platform-menu-item"
             :index="resolvePath(child.path)"
           >
             <img
@@ -46,12 +48,10 @@
             <svg-icon
               v-else-if="child.meta && child.meta.icon"
               :icon-class="child.meta.icon"
-            ></svg-icon>
-            <span
-              v-if="child.meta && child.meta.title"
-              slot="title"
-              >{{ child.meta.title }}</span
-            >
+            />
+            <span v-if="child.meta && child.meta.title">{{
+              child.meta.title
+            }}</span>
           </el-menu-item>
         </router-link>
       </template>
@@ -61,96 +61,148 @@
 
 <script>
 const PT_ICON_STEM = {
-  抖音: 'dy',
-  视频号: 'sph',
-  哔哩哔哩: 'blbl',
-  百家号: 'bjh',
-  头条: 'tt',
-  快手: 'ks',
-  小红书: 'xhs',
-  番茄视频: 'fqsp'
-}
+  抖音: "dy",
+  视频号: "sph",
+  哔哩哔哩: "blbl",
+  百家号: "bjh",
+  头条: "tt",
+  快手: "ks",
+  小红书: "xhs",
+  番茄视频: "fqsp",
+};
 
 export default {
-  name: 'SidebarItem',
+  name: "SidebarItem",
   props: {
     item: {
       type: Object,
-      required: true
+      required: true,
     },
     isNest: {
       type: Boolean,
-      default: false
+      default: false,
     },
     basePath: {
       type: String,
-      default: ''
+      default: "",
     },
     collapse: {
       type: Boolean,
-      required: true
-    }
+      required: true,
+    },
   },
   created() {
     try {
-      this._ptIcons = require.context('./ptcion', false, /\.(png|jpe?g)$/i)
+      this._ptIcons = require.context("./ptcion", false, /\.(png|jpe?g)$/i);
     } catch (e) {
-      const stub = () => ''
-      stub.keys = () => []
-      this._ptIcons = stub
+      const stub = () => "";
+      stub.keys = () => [];
+      this._ptIcons = stub;
     }
   },
   methods: {
     resolvePath(...paths) {
-      return this.basePath + '/' + paths[0]
+      return this.basePath + "/" + paths[0];
     },
     ptIconSrc(pt) {
-      if (!pt || !this._ptIcons || typeof this._ptIcons.keys !== 'function')
-        return ''
-      const stems = PT_ICON_STEM[pt] ? [pt, PT_ICON_STEM[pt]] : [pt]
-      const seen = new Set()
+      if (!pt || !this._ptIcons || typeof this._ptIcons.keys !== "function")
+        return "";
+      const stems = PT_ICON_STEM[pt] ? [pt, PT_ICON_STEM[pt]] : [pt];
+      const seen = new Set();
       for (const stem of stems) {
-        if (seen.has(stem)) continue
-        seen.add(stem)
+        if (seen.has(stem)) continue;
+        seen.add(stem);
         for (const name of [
           `./${stem}.png`,
           `./${stem}.jpeg`,
-          `./${stem}.jpg`
+          `./${stem}.jpg`,
         ]) {
           if (this._ptIcons.keys().includes(name)) {
-            return this._ptIcons(name)
+            return this._ptIcons(name);
           }
         }
       }
-      return ''
-    }
-  }
-}
+      return "";
+    },
+  },
+};
 </script>
+
 <style lang="scss" scoped>
+@import "@/styles/variables.scss";
+
 .menu-wrapper {
   ::v-deep .el-submenu__title {
-    height: 35px;
-    line-height: 35px;
-    background-color: #545c64;
-    color: #fff;
+    height: 40px;
+    line-height: 40px;
+    background-color: transparent;
+    color: $menuText;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    padding-right: 12px !important;
+
+    &:hover {
+      background-color: $menuHover;
+    }
   }
+
   ::v-deep .el-menu-item,
   .el-submenu__title {
-    height: 30px;
-    line-height: 30px;
+    min-height: 36px;
+    line-height: 36px;
   }
 
   ::v-deep .el-menu-item {
-    padding: 0 10px 0 5px;
+    padding: 0 16px 0 28px !important;
+    color: $menuText;
+
+    &:hover {
+      background-color: $menuHover;
+    }
+
+    &.is-active {
+      background-color: $menuActiveBg;
+      color: $primaryColor;
+    }
   }
+}
+
+.group-drag-handle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  margin-right: 6px;
+  color: $menuMuted;
+  cursor: grab;
+  font-size: 12px;
+  letter-spacing: -2px;
+  user-select: none;
+}
+
+.group-drag-handle:active {
+  cursor: grabbing;
+}
+
+.group-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.platform-menu-item {
+  display: flex;
+  align-items: center;
 }
 
 .pt-icon {
   width: 18px;
   height: 18px;
-  margin-right: 6px;
+  margin-right: 8px;
   vertical-align: middle;
   object-fit: contain;
+  flex-shrink: 0;
 }
 </style>

@@ -1,10 +1,13 @@
 <template>
-  <div class="app-wrapper NoUseSysTitle" >
-    <div :class="classObj">
+  <div class="app-wrapper NoUseSysTitle">
+    <div :class="classObj" class="layout-body">
       <navbar></navbar>
       <div class="container-set flex">
         <!-- {{ route }} -->
-        <sidebar class="sidebar-container" v-if="!$route.meta.noSlide" ></sidebar>
+        <sidebar
+          class="sidebar-container"
+          v-if="!$route.meta.noSlide"
+        ></sidebar>
         <div class="main-container">
           <app-main></app-main>
         </div>
@@ -73,15 +76,14 @@ import {
   resolveFeedbackReminderState,
 } from "./feedbackReminder";
 
-
 const { sidebarStatus } = useAppStore();
 const IsUseSysTitle = ref(false);
-const sidebarSwitch = computed(() => sidebarStatus.opened)
+const sidebarSwitch = computed(() => sidebarStatus.opened);
 const feedbackUrl = "https://wj.qq.com/s2/26701939/4679/";
 const feedbackDialogVisible = ref(false);
 const feedbackConfirmVisible = ref(false);
 
-ipcRenderer.invoke("IsUseSysTitle").then(res => {
+ipcRenderer.invoke("IsUseSysTitle").then((res) => {
   IsUseSysTitle.value = res;
 });
 
@@ -139,12 +141,14 @@ async function initFeedbackReminder() {
 }
 
 function openFeedbackWindow() {
-  ipcRenderer.invoke("open-external-window", {
-    url: feedbackUrl,
-    title: "MatrixMedia 使用反馈",
-    width: 960,
-    height: 720,
-  }).catch(() => {});
+  ipcRenderer
+    .invoke("open-external-window", {
+      url: feedbackUrl,
+      title: "MatrixMedia 使用反馈",
+      width: 960,
+      height: 720,
+    })
+    .catch(() => {});
 }
 
 function showFeedbackConfirm() {
@@ -159,7 +163,7 @@ function confirmFeedbackSubmitted() {
 const classObj = computed(() => {
   return {
     hideSidebar: !sidebarSwitch.value,
-    openSidebar: sidebarSwitch.value
+    openSidebar: sidebarSwitch.value,
   };
 });
 </script>
@@ -170,13 +174,25 @@ const classObj = computed(() => {
 .app-wrapper {
   @include clearfix;
   position: relative;
+  flex: 1;
+  min-height: 0;
   height: 100%;
   width: 100%;
-
-
+  display: flex;
+  flex-direction: column;
 }
-.container-set{
-  height: calc(100vh - 98px);
+
+.layout-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+}
+
+.container-set {
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
 }
 
@@ -185,7 +201,7 @@ const classObj = computed(() => {
 }
 
 .NoUseSysTitle {
-  top: 30px
+  top: 30px;
 }
 
 .feedback-confirm-text {
