@@ -1,4 +1,8 @@
-# 矩媒 MatrixMedia
+<p align="center">
+  <img src="./lib/icons/icon.png" alt="MatrixMedia · 矩媒" width="128" />
+</p>
+
+<h1 align="center">矩媒 MatrixMedia</h1>
 
 > **自媒体 · 矩阵 · 批量** — 多平台视频矩阵发布与批量分发工具（Electron + CLI）
 
