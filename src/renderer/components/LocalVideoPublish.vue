@@ -970,6 +970,8 @@ export default {
             phone: child.meta.phone.split("-")[0],
             date: child.meta.date,
             url: child.meta.url,
+            // 透传账号"默认发布到草稿"设置，让 resolveEffectivePublishMode 能识别
+            defaultPublishToDraft: Boolean(child.meta.defaultPublishToDraft),
             proxyDisplay: getAccountProxyDisplay(child.meta.proxy),
             proxyEnabled: isAccountProxyEnabled(child.meta.proxy),
             loggedIn: (() => {

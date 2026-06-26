@@ -12,6 +12,7 @@ import {
   resolvePublishFile,
   guessFileNameFromUrl,
 } from "./resolvePublishFile";
+import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 
 function fileStemFromSource(source) {
   const raw = String(source || "").trim();
@@ -108,6 +109,13 @@ async function runSingleFilePublishInner(
   { sourceFile, resolvedFile, stem, bt1, bt2, bookName },
   options = {}
 ) {
+  // 结合「请求显式 draft」与账号「默认发布到草稿」设置，算出最终发布模式
+  const effectivePublishMode = resolveAccountPublishMode({
+    phone: derivePhoneForRecord(v),
+    pt: v.platform,
+    requestDraftMode: Boolean(v.draft),
+  });
+
   const taskPayload = {
     taskId: Date.now() + Math.random(),
     bookName,
@@ -123,8 +131,8 @@ async function runSingleFilePublishInner(
     url: cfg.upload,
     show: v.show,
     mmCliSuppressWindow: false,
-    publishMode: "publish",
-    publishToDraft: false,
+    publishMode: effectivePublishMode.publishMode,
+    publishToDraft: effectivePublishMode.publishToDraft,
     closeWindowAfterPublish: v.show ? v.closeWindowAfterPublish : true,
     useragent: cfg.useragent,
     partition: v.partition,
@@ -162,8 +170,12 @@ async function runSingleFilePublishInner(
     republishCount: 0,
     publishSuccessCount: 0,
     publishFailCount: 0,
-    publishStatus: "publishing",
-    lastPublishMessage: "等待发布结果",
+    publishMode: effectivePublishMode.publishMode,
+    publishToDraft: effectivePublishMode.publishToDraft,
+    publishStatus: effectivePublishMode.publishToDraft ? "drafting" : "publishing",
+    lastPublishMessage: effectivePublishMode.publishToDraft
+      ? "等待保存草稿结果"
+      : "等待发布结果",
     lastPublishAt: Date.now(),
   };
 

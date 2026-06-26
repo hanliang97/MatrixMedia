@@ -23,6 +23,7 @@ import { runSingleFilePublish } from "../services/publishVideo";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
+import { resolveAccountPublishMode } from "../services/accountPublishSettingsResolver.js";
 
 export {
   isCliMode,
@@ -253,6 +254,13 @@ async function runBatchDirPublish(v, cfg) {
 
     const cs = normalizeCreativeStatement(row.creativeStatement || "");
 
+    // 批量目录发布同样尊重账号「默认发布到草稿」设置 + 显式 --draft
+    const effectivePublishMode = resolveAccountPublishMode({
+      phone: derivePhoneForRecord(v),
+      pt: v.platform,
+      requestDraftMode: Boolean(v.draft),
+    });
+
     const taskId = Date.now() + Math.random();
     const taskPayload = {
       taskId,
@@ -269,8 +277,8 @@ async function runBatchDirPublish(v, cfg) {
       url: cfg.upload,
       show: false,
       mmCliSuppressWindow: false,
-      publishMode: "publish",
-      publishToDraft: false,
+      publishMode: effectivePublishMode.publishMode,
+      publishToDraft: effectivePublishMode.publishToDraft,
       closeWindowAfterPublish: true,
       useragent: cfg.useragent,
       partition: v.partition,
@@ -300,8 +308,12 @@ async function runBatchDirPublish(v, cfg) {
       republishCount: 0,
       publishSuccessCount: 0,
       publishFailCount: 0,
-      publishStatus: "publishing",
-      lastPublishMessage: "等待发布结果",
+      publishMode: effectivePublishMode.publishMode,
+      publishToDraft: effectivePublishMode.publishToDraft,
+      publishStatus: effectivePublishMode.publishToDraft ? "drafting" : "publishing",
+      lastPublishMessage: effectivePublishMode.publishToDraft
+        ? "等待保存草稿结果"
+        : "等待发布结果",
       lastPublishAt: Date.now(),
     };
 

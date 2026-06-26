@@ -37,6 +37,7 @@ export function parsePublishArgs(subArgv) {
     dir: null,
     config: null,
     creativeStatement: null,
+    draft: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -69,6 +70,8 @@ export function parsePublishArgs(subArgv) {
       out.config = args[++i];
     } else if (a === "--creative-statement" || a === "--cs") {
       out.creativeStatement = args[++i];
+    } else if (a === "--draft") {
+      out.draft = true;
     }
   }
 
@@ -223,6 +226,7 @@ export function publishBodyToArgv(body) {
 
   if (body.show === true) argv.push("--show");
   if (body.closeWindowAfterPublish === false) argv.push("--no-close-window");
+  if (body.draft === true) argv.push("--draft");
 
   return argv;
 }
@@ -255,6 +259,7 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "cs",
   "show",
   "closeWindowAfterPublish",
+  "draft",
 ];
 
 function extractSharedPublishBody(body) {
@@ -443,6 +448,8 @@ export function publishHelpText() {
                             到点后由应用主进程调度执行；不支持每日/每周/每月循环。
       --show            （已忽略）CLI 不显示自动化窗口
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
+      --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
+                            里开启了「默认发布到草稿」，即使不加该参数也会自动走草稿。
   -h, --help            显示帮助
 
 退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）
