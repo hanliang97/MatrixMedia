@@ -17,6 +17,7 @@ pubmFile
 .mm-*.txt
 /text/file
 .token
+release-notes.md
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
