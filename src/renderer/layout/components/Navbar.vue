@@ -21,6 +21,7 @@
       :visible.sync="showDialog"
       title="添加媒体账号"
       width="560px"
+      append-to-body
       :close-on-click-modal="false"
       :close-on-press-escape="false"
       custom-class="add-account-dialog"
