@@ -384,9 +384,6 @@ curl -X POST http://127.0.0.1:30088/publish \
 
 github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
 
-## 用户反馈
-
-用 MatrixMedia 了？**[填 5 题告诉我](https://wj.qq.com/s2/26553035/aefd/)**（2 分钟，帮助决定下一步功能优先级）
 
 ## 工具使用文档
 
