@@ -112,13 +112,15 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 ## 目前可以一键发布视频的平台有
 
-1. 抖音
-2. 快手
-3. 百家号
-4. 哔哩哔哩
-5. 头条号
-6. 视频号
-7. 小红书
+| 平台 | 图标 |
+| --- | --- |
+| 抖音 | <img src="./src/renderer/layout/components/Sidebar/ptcion/dy.png" alt="抖音" width="32" /> |
+| 快手 | <img src="./src/renderer/layout/components/Sidebar/ptcion/ks.png" alt="快手" width="32" /> |
+| 百家号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/bjh.png" alt="百家号" width="32" /> |
+| 哔哩哔哩 | <img src="./src/renderer/layout/components/Sidebar/ptcion/blbl.jpeg" alt="哔哩哔哩" width="32" /> |
+| 头条号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/tt.png" alt="头条号" width="32" /> |
+| 视频号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/sph.png" alt="视频号" width="32" /> |
+| 小红书 | <img src="./src/renderer/layout/components/Sidebar/ptcion/xhs.png" alt="小红书" width="32" /> |
 
 ### 番茄视频（配置已接入，自动化待完善）
 
