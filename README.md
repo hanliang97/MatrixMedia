@@ -174,7 +174,24 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 > **非 CLI 登录平台的登录怎么办？** 当前 CLI 登录已实现抖音与视频号；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
-开发态调用示例：
+常用示例：
+
+```bash
+# 抖音登录
+matrixmedia cli login -p dy --phone 13800138000
+
+# 发布视频
+matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
+
+# 发布掘金文章
+matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md
+
+# 查看账号 / 历史（JSON）
+matrixmedia cli accounts --json
+matrixmedia cli history --json --days 7
+```
+
+开发环境调用示例：
 
 ```bash
 ELECTRON_RUN_AS_NODE= electron . cli login --help

@@ -294,17 +294,17 @@ export default {
   }
 }`,
       cliExamples: `# 抖音登录
-electron . cli login -p dy --phone 13800138000
+matrixmedia cli login -p dy --phone 13800138000
 
 # 发布视频
-electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
+matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
 
 # 发布掘金文章
-electron . cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md
+matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md
 
 # 查看账号 / 历史（JSON）
-electron . cli accounts --json
-electron . cli history --json --days 7`,
+matrixmedia cli accounts --json
+matrixmedia cli history --json --days 7`,
     };
   },
 };
