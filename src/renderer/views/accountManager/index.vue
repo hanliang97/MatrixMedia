@@ -36,7 +36,8 @@
       </div>
       <p class="section-tip">开启后，该账号在视频发布时会优先保存到草稿。</p>
       <p class="section-danger-tip">
-        小红书谨慎使用，如果被小红书警告ai托管，建议开启发布到草稿箱后手动app发布
+        小红书谨慎使用，如果被小红书警告ai托管，建议开启默认发布到草稿。草稿不能在
+        App 发布，保存草稿后需在矩媒里手动发布。
       </p>
       <el-form label-width="120px" class="form-block">
         <el-form-item label="默认发布到草稿">
