@@ -519,7 +519,12 @@ export default async function (page, data, window, event) {
         status: true,
         message: isDraftMode ? "保存草稿成功" : "上传成功",
       });
-      maybeClosePublishWindow(data, window);
+      // 草稿保存成功后用户会去 App 手动发布，web 窗口已无用，强制关闭；
+      // 直接发布仍保留保守模式（closeWindowAfterPublish=false）让用户核对。
+      maybeClosePublishWindow(
+        isDraftMode ? { ...data, closeWindowAfterPublish: true } : data,
+        window
+      );
     }, 5000);
   } catch (err) {
     event.reply("puppeteerFile-done", {
