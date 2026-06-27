@@ -434,3 +434,7 @@ yarn dev
 ##### build 命令在不同系统环境中，需要的的不一样，需要自己根据自身环境进行配置
 
 yarn build
+
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=hanliang97/MatrixMedia&type=Date)](https://star-history.com/#hanliang97/MatrixMedia&Date)
