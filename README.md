@@ -6,6 +6,16 @@
 
 > **自媒体 · 矩阵 · 批量** — 多平台视频矩阵发布与批量分发工具（Electron + CLI）
 
+<p align="center">
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/dy.png" alt="抖音" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/ks.png" alt="快手" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/bjh.png" alt="百家号" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/blbl.jpeg" alt="哔哩哔哩" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/tt.png" alt="头条号" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/sph.png" alt="视频号" width="36" />&nbsp;&nbsp;
+  <img src="./src/renderer/layout/components/Sidebar/ptcion/xhs.png" alt="小红书" width="36" />
+</p>
+
 ## 关键词（便于搜索）
 
 自媒体、自媒体矩阵、矩阵发布、矩阵运营、内容矩阵、视频矩阵、多平台矩阵、跨平台发布、批量发布、批量上传、批量分发、一键发布、多账号发布、多平台发布、本地视频发布、短视频矩阵、内容分发、账号矩阵、自动化发布、CLI 批量、命令行发布、无头发布、智能体编排、OpenClaw、MCP 发布、抖音矩阵、快手矩阵、小红书矩阵、百家号矩阵、哔哩哔哩矩阵、头条矩阵、视频号矩阵、番茄视频、番茄视频矩阵、MatrixMedia、矩媒、pubtw
@@ -112,15 +122,13 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 ## 目前可以一键发布视频的平台有
 
-| 平台 | 图标 |
-| --- | --- |
-| 抖音 | <img src="./src/renderer/layout/components/Sidebar/ptcion/dy.png" alt="抖音" width="32" /> |
-| 快手 | <img src="./src/renderer/layout/components/Sidebar/ptcion/ks.png" alt="快手" width="32" /> |
-| 百家号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/bjh.png" alt="百家号" width="32" /> |
-| 哔哩哔哩 | <img src="./src/renderer/layout/components/Sidebar/ptcion/blbl.jpeg" alt="哔哩哔哩" width="32" /> |
-| 头条号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/tt.png" alt="头条号" width="32" /> |
-| 视频号 | <img src="./src/renderer/layout/components/Sidebar/ptcion/sph.png" alt="视频号" width="32" /> |
-| 小红书 | <img src="./src/renderer/layout/components/Sidebar/ptcion/xhs.png" alt="小红书" width="32" /> |
+1. 抖音
+2. 快手
+3. 百家号
+4. 哔哩哔哩
+5. 头条号
+6. 视频号
+7. 小红书
 
 ### 番茄视频（配置已接入，自动化待完善）
 
