@@ -130,6 +130,25 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 6. 视频号
 7. 小红书
 
+### 小红书：真实浏览器发布模式
+
+小红书平台对 Electron 内置窗口的自动化检测日趋严格，可能出现「AI 托管」警告。为此新增**真实浏览器发布模式**，使用本机已安装的 Google Chrome / Chromium 代替内置窗口进行发布，从根源上规避检测。
+
+**启用方法**：
+
+1. 进入账号管理 → 小红书账号 → 「发布设置」卡片
+2. 打开「使用真实浏览器」开关
+3. 首次开启会**自动检测**本机 Chrome 路径；也可手动点击「选择 Chrome 浏览器」选取应用（macOS 直接选 `.app`，Windows 选 `.exe`）
+4. 点击「测试连接」确认 Chrome 可用
+5. 保存设置
+
+**工作原理**：
+
+- 使用项目已有的 `puppeteer-core`（轻量库，不捆绑 Chromium）直接驱动本机 Chrome
+- 发布时自动从内置窗口同步登录态（Cookie）到真实 Chrome
+- Chrome 路径为全局配置（所有小红书账号共用），保存在 `userData/chrome-config.json`
+- 若检测不到 Chrome 或启动失败，自动回退到内置窗口模式
+
 ### 番茄视频（配置已接入，自动化待完善）
 
 [番茄视频创作平台](https://pugc.yueduwuxian.com/fqvideo/login) 已写入 URL 配置，GUI 可添加账号并通过独立 BrowserWindow 登录；自动上传、填表、点发布及审核状态查询尚未实现。

@@ -972,6 +972,8 @@ export default {
             url: child.meta.url,
             // 透传账号"默认发布到草稿"设置，让 resolveEffectivePublishMode 能识别
             defaultPublishToDraft: Boolean(child.meta.defaultPublishToDraft),
+            // 透传"使用真实浏览器"设置，让 puppeteerFile 走本地 Chrome 自动化
+            useRealBrowser: Boolean(child.meta.useRealBrowser),
             proxyDisplay: getAccountProxyDisplay(child.meta.proxy),
             proxyEnabled: isAccountProxyEnabled(child.meta.proxy),
             loggedIn: (() => {
@@ -1164,6 +1166,7 @@ export default {
                 scheduledTask: true,
                 scheduledPublishAt: scheduledAtMs,
                 scheduledPublishAtText: scheduledAtText,
+                useRealBrowser: Boolean(p.useRealBrowser),
                 publishAttemptCount: 1,
                 republishCount: 0,
                 publishSuccessCount: 0,
@@ -1257,6 +1260,7 @@ export default {
               partition,
               url: this.ptConfig[p.pt].listIndex,
               date: currentDate,
+              useRealBrowser: Boolean(p.useRealBrowser),
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
               publishAttemptCount: 1,
@@ -1545,6 +1549,7 @@ export default {
                   scheduledTask: true,
                   scheduledPublishAt: scheduledAtMs,
                   scheduledPublishAtText: scheduledAtText,
+                  useRealBrowser: Boolean(p.useRealBrowser),
                   publishMode: effectiveMode.publishMode,
                   publishToDraft: effectiveMode.publishToDraft,
                   publishAttemptCount: 1,
@@ -1612,6 +1617,7 @@ export default {
               url: this.ptConfig[p.pt].listIndex,
               uploadUrl: this.ptConfig[p.pt].upload,
               date: currentDate,
+              useRealBrowser: Boolean(p.useRealBrowser),
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
               publishAttemptCount: 1,

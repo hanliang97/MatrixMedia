@@ -13,6 +13,9 @@ import {
   getPublishAttemptLimit,
   isXhsPlatform,
 } from "../../shared/xhsPublishPolicy.js";
+import { resolveChromePath } from "./chromeConfig.js";
+import { exportXhsCookies, injectCookiesIntoPage } from "./upLoad/xhsCookieBridge.js";
+import xhsChromeHandler from "./upLoad/xhsChrome.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -282,8 +285,105 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     },
   });
 
+  // 小红书 + 真实 Chrome 浏览器发布（替代 Electron BrowserWindow）
+  let _xhsRealChromeFallback = false;
+
+  const runXhsRealChrome = async () => {
+    if (finished) return;
+    let realBrowser = null;
+
+    try {
+      // 1. 获取 Chrome 路径（优先用户配置 → 自动检测）
+      const chromePath = resolveChromePath();
+      if (!chromePath) {
+        console.error("[xhs-chrome] 未找到 Chrome 浏览器，请在账号设置中配置 Chrome 路径。回退到 Electron 窗口模式");
+        _xhsRealChromeFallback = true;
+        return createWindowAndAttempt();
+      }
+      console.log("[xhs-chrome] 使用 Chrome:", chromePath);
+
+      // 2. 代理配置（与 Electron 路径一致）
+      await applyAccountProxyForTask({
+        partition: data.partition,
+        phone: data.phone,
+        pt: data.pt,
+      });
+
+      // 3. 从 Electron session 导出小🍠 cookie
+      const cookies = await exportXhsCookies(data.partition);
+      console.log(`[xhs-chrome] 导出 ${cookies.length} 个 cookie`);
+
+      // 4. 启动真实 Chrome（headless: false，用户可见）
+      realBrowser = await puppeteer.launch({
+        executablePath: chromePath,
+        headless: false,
+        args: [
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-blink-features=AutomationControlled",
+        ],
+        defaultViewport: { width: 1300, height: 800 },
+      });
+
+      // 5. 创建 page，注入 cookie
+      const page = (await realBrowser.pages())[0] || (await realBrowser.newPage());
+
+      // 设置 UA（统一使用 ptConfig 中的配置）
+      if (data.useragent) {
+        try {
+          await page.setUserAgent(data.useragent);
+          console.log("[xhs-chrome] UA 已设置");
+        } catch (e) {
+          console.warn("[xhs-chrome] setUserAgent 失败:", e?.message || e);
+        }
+      }
+
+      // 注入 cookie 并导航
+      await injectCookiesIntoPage(page, cookies);
+
+      // 6. 导航到小红书发布页
+      console.log("[xhs-chrome] 导航到发布页:", data.url);
+      await page.goto(data.url, {
+        waitUntil: "domcontentloaded",
+        timeout: 60000,
+      });
+
+      // 7. 调用 xhsChromeHandler 执行发布
+      // 注意：xhs.js 中的成功回调通过 setTimeout(5000) 延迟发送，
+      // xhsHandler 的 promise 会在 setTimeout 设定后立即 resolve。
+      // 不能在此处调用 finishOnce()，否则 finished=true 会导致延迟的
+      // event.reply 被 createAttemptTransport 拦截（if (finished) return false），
+      // 前端永远收不到成功通知。finishOnce 由 createAttemptTransport.reply 在
+      // 收到 status:true 的回复时自动触发。
+      await xhsChromeHandler(page, data, realBrowser, createAttemptTransport());
+    } catch (err) {
+      console.error("[xhs-chrome] 真实浏览器发布失败:", err?.message || err);
+      safeReply("puppeteerFile-done", {
+        ...data,
+        status: false,
+        message: `真实浏览器发布失败: ${err?.message || err}`,
+      });
+      finishOnce();
+    } finally {
+      // xhsChromeHandler 的 finally 已负责关闭浏览器，这里做兜底防御
+      if (realBrowser) {
+        try {
+          await realBrowser.close();
+        } catch (_) {
+          // 浏览器已被 xhsChromeHandler 关闭，忽略
+        }
+      }
+    }
+  };
+
   const createWindowAndAttempt = async () => {
     if (finished) return;
+
+    // 小红书 + 真实浏览器模式开关（fallback 时跳过，避免循环）
+    if (isXhsTask && data.useRealBrowser && !_xhsRealChromeFallback) {
+      return runXhsRealChrome();
+    }
+
     currentAttempt++;
     if (currentAttempt > maxRetries) {
       console.log("已达到最大重试次数，操作失败", data);
@@ -330,6 +430,170 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       activeWin = win;
       openPublishWindows.add(win);
       page = await pie.getPage(browser, win);
+
+      // 注入反自动化检测脚本（在页面 JS 执行前生效）
+      // 解决小红书等平台判定 Electron 为 "AI 自动化" 的问题
+      await page.evaluateOnNewDocument(() => {
+        // 1. 补全 window.chrome 对象（Electron 中缺失，正常 Chrome 有）
+        if (!window.chrome) {
+          window.chrome = {};
+        }
+        window.chrome.runtime = window.chrome.runtime || {};
+        window.chrome.runtime.id =
+          window.chrome.runtime.id ||
+          "e" +
+            Math.random().toString(36).slice(2, 11) +
+            Math.random().toString(36).slice(2, 11);
+        window.chrome.loadTimes =
+          window.chrome.loadTimes ||
+          function () {
+            return {};
+          };
+        window.chrome.csi =
+          window.chrome.csi ||
+          function () {
+            return {};
+          };
+        window.chrome.app =
+          window.chrome.app ||
+          function () {
+            return {};
+          };
+
+        // 2. 补全 navigator.plugins（Electron 通常为空数组，正常 Chrome 有 PDF Viewer 等）
+        if (
+          !navigator.plugins ||
+          navigator.plugins.length === 0
+        ) {
+          const createFakePlugin = (name, filename, desc) => {
+            const plugin = {
+              name,
+              filename,
+              description: desc,
+              length: 1,
+              0: { type: "application/x-google-chrome-pdf", suffixes: "pdf" },
+              item() {
+                return null;
+              },
+              namedItem() {
+                return null;
+              },
+            };
+            return plugin;
+          };
+          const fakePlugins = [
+            createFakePlugin(
+              "Chrome PDF Plugin",
+              "internal-pdf-viewer",
+              "Portable Document Format"
+            ),
+            createFakePlugin(
+              "Chrome PDF Viewer",
+              "mhjfbmdgcfjbbpaeojofohoefgiehjai",
+              ""
+            ),
+            createFakePlugin(
+              "Native Client",
+              "internal-nacl-plugin",
+              ""
+            ),
+          ];
+          Object.defineProperty(navigator, "plugins", {
+            get() {
+              const arr = Object.create(
+                fakePlugins.length === 0 ? Array.prototype : {
+                  ...Object.getPrototypeOf(fakePlugins[0]),
+                  length: fakePlugins.length,
+                  item(i) {
+                    return fakePlugins[i] || null;
+                  },
+                  namedItem(name) {
+                    return fakePlugins.find((p) => p.name === name) || null;
+                  },
+                  refresh() {},
+                }
+              );
+              fakePlugins.forEach((p, i) => (arr[i] = p));
+              return arr;
+            },
+          });
+          Object.defineProperty(navigator, "mimeTypes", {
+            get() {
+              const types = [
+                {
+                  type: "application/pdf",
+                  suffixes: "pdf",
+                  description: "Portable Document Format",
+                  enabledPlugin: fakePlugins[0],
+                },
+                {
+                  type: "text/pdf",
+                  suffixes: "pdf",
+                  description: "Portable Document Format",
+                  enabledPlugin: fakePlugins[0],
+                },
+              ];
+              const arr = Object.create({
+                ...Object.getPrototypeOf(types[0]),
+                length: types.length,
+                item(i) {
+                  return types[i] || null;
+                },
+                namedItem(name) {
+                  return types.find((t) => t.type === name) || null;
+                },
+              });
+              types.forEach((t, i) => (arr[i] = t));
+              return arr;
+            },
+          });
+        }
+
+        // 3. 覆盖 navigator.hardwareConcurrency（Electron 可能暴露真实核心数，正常 Chrome 会模糊）
+        const cp = Object.getOwnPropertyDescriptor(
+          Navigator.prototype,
+          "hardwareConcurrency"
+        );
+        if (cp && cp.configurable) {
+          Object.defineProperty(navigator, "hardwareConcurrency", {
+            get() {
+              return 8;
+            },
+          });
+        }
+
+        // 4. 补全 navigator.languages 为正常中文用户设置
+        const origLanguages = navigator.languages;
+        if (!origLanguages || origLanguages.length === 0) {
+          Object.defineProperty(navigator, "languages", {
+            get() {
+              return ["zh-CN", "zh", "en"];
+            },
+          });
+        }
+
+        // 5. 覆盖 permissions.query（Electron 返回状态与 Chrome 不一致）
+        const origQuery =
+          window.navigator.permissions &&
+          window.navigator.permissions.query;
+        if (origQuery) {
+          const origQueryFn = origQuery.bind(window.navigator.permissions);
+          window.navigator.permissions.query = function (parameters) {
+            if (parameters && parameters.name === "notifications") {
+              return Promise.resolve({
+                state: Notification.permission,
+                onchange: null,
+              });
+            }
+            return origQueryFn(parameters);
+          };
+        }
+
+        // 6. 抹掉 webdriver 属性（双保险，stealth 插件也应处理了）
+        Object.defineProperty(navigator, "webdriver", {
+          get: () => false,
+        });
+      });
 
       // Block any window.open() calls from the publish page (e.g. Juejin OAuth popups)
       win.webContents.setWindowOpenHandler(() => ({ action: "deny" }));

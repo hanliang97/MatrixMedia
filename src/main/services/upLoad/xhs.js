@@ -14,6 +14,16 @@ import {
   getXhsSecondClickDelayMs,
 } from "../../../shared/xhsPublishPolicy.js";
 
+/**
+ * 生成 [min, max] 范围内的随机整数，用于像素偏移、步数等非时间场景。
+ * 与 getRandomDelayMs 实现一致，但语义更清晰。
+ */
+function getRandomInt(min, max) {
+  const safeMin = Number(min) || 0;
+  const safeMax = Math.max(safeMin, Number(max) || safeMin);
+  return Math.round(safeMin + (safeMax - safeMin) * Math.random());
+}
+
 // 小红书下拉里直接展示的支持选项；未匹配则跳过。
 const XHS_SUPPORTED_STATEMENT_LABELS = new Set([
   "笔记含AI合成内容",
@@ -464,15 +474,24 @@ export default async function (page, data, window, event) {
       "[xhs] 宿主 box=",
       JSON.stringify({ x: box.x, y: box.y, w: box.width, h: box.height })
     );
-    // 基于 .publish-page-publish-btn 左上角的固定偏移量：
-    //   暂存离开：left 300px, top 40px
-    //   发布：    left 450px, top 40px
-    const cx = box.x + (isDraftMode ? 300 : 450);
-    const cy = box.y + 40;
+    // 基于 .publish-page-publish-btn 左上角的偏移量，加入随机抖动避免被风控识别为固定坐标点击
+    //   暂存离开：left ~300px, top ~40px
+    //   发布：    left ~450px, top ~40px
+    const jitterX = getRandomInt(-12, 12);
+    const jitterY = getRandomInt(-8, 8);
+    const baseX = isDraftMode ? 300 : 450;
+    const baseY = 40;
+    const cx = box.x + baseX + jitterX;
+    const cy = box.y + baseY + jitterY;
 
     const targetText = isDraftMode ? "暂存离开" : "发布";
     let clickedOk = false;
     for (let attempt = 1; attempt <= 2; attempt++) {
+      // 模拟鼠标移动轨迹：先移到附近位置，再点击，避免从 (0,0) 直接跳变
+      const preX = cx + getRandomInt(-20, 20);
+      const preY = cy + getRandomInt(-15, 15);
+      await page.mouse.move(preX, preY, { steps: getRandomInt(3, 8) });
+      await page.waitForTimeout(getRandomInt(30, 80));
       await page.mouse.click(cx, cy, { delay: 80 });
       console.log(
         `[xhs] 第 ${attempt} 次点击「${targetText}」at (${Math.round(

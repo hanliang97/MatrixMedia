@@ -76,8 +76,19 @@
                 </div>
               </template>
             </el-table-column>
-            <el-table-column label="操作" width="180">
+            <el-table-column label="操作" width="260">
               <template slot-scope="scope">
+                <el-button
+                  v-if="canGetStatus(scope.row)"
+                  type="primary"
+                  size="mini"
+                  class="mb8"
+                  :loading="isStatusLoading(scope.row)"
+                  :disabled="isStatusLoading(scope.row)"
+                  @click="handleGetStatus(scope.row)"
+                >
+                  获取状态
+                </el-button>
                 <el-popconfirm
                   confirm-button-text="删除"
                   cancel-button-text="取消"
@@ -327,12 +338,65 @@ export default {
         return;
       }
       let filePath = details.map((v) => v && v.filePath).find(Boolean);
-      if (!filePath) {
-        this.$message.info("历史记录缺少视频路径，请先重新选择视频文件。");
+      const remoteFileUrl = details
+        .map((v) => v && v.remoteFileUrl)
+        .find(Boolean);
+      const localFileExists =
+        filePath && (await ipcRenderer.invoke("fs:existsSync", filePath));
+      if (!filePath || (!localFileExists && !remoteFileUrl)) {
+        if (!localFileExists && filePath) {
+          this.$message.info("本地视频文件已不存在，请重新选择视频文件。");
+        } else {
+          this.$message.info("历史记录缺少视频路径，请先重新选择视频文件。");
+        }
         filePath = await ipcRenderer.invoke("dialog:openVideoFile");
         if (!filePath) {
           this.$message.warning("未选择视频文件，已取消重发。");
           return;
+        }
+      } else if (!localFileExists && remoteFileUrl) {
+        // 本地文件已删除但有远程 URL，先下载到本地再重发
+        try {
+          await this.$confirm(
+            "本地视频文件已清理，是否从远程地址重新下载？",
+            "重新发布",
+            {
+              confirmButtonText: "重新下载",
+              cancelButtonText: "手动选择文件",
+              distinguishCancelAndClose: true,
+              type: "warning",
+            }
+          );
+          const loading = this.$loading({
+            lock: true,
+            text: "正在下载远程视频…",
+            background: "rgba(0, 0, 0, 0.7)",
+          });
+          try {
+            filePath = await ipcRenderer.invoke(
+              "publish:downloadRemoteFile",
+              remoteFileUrl
+            );
+            this.$message.success("远程视频下载完成");
+          } catch (dlErr) {
+            this.$message.error(
+              "远程视频下载失败: " + (dlErr.message || dlErr)
+            );
+            return;
+          } finally {
+            loading.close();
+          }
+        } catch (action) {
+          if (action === "close") {
+            this.$message.info("已取消重发。");
+            return;
+          }
+          // 用户选择手动选择文件
+          filePath = await ipcRenderer.invoke("dialog:openVideoFile");
+          if (!filePath) {
+            this.$message.warning("未选择视频文件，已取消重发。");
+            return;
+          }
         }
       } else {
         let shouldChooseNewVideo = false;

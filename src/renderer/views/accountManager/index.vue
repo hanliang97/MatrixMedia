@@ -30,33 +30,98 @@
     <el-card class="section-card" shadow="never">
       <div slot="header" class="card-header">
         <span>发布设置</span>
-        <el-tag v-if="defaultPublishToDraft" size="mini" type="warning"
+        <el-tag v-if="isXhsPlatform && useRealBrowser" size="mini" type="success"
+          >真实浏览器</el-tag
+        >
+        <el-tag v-else-if="defaultPublishToDraft" size="mini" type="warning"
           >默认草稿</el-tag
         >
       </div>
-      <p class="section-tip">开启后，该账号在视频发布时会优先保存到草稿。</p>
-      <p class="section-danger-tip">
-        小红书谨慎使用，如果被小红书警告ai托管，建议开启默认发布到草稿。草稿不能在
-        App 发布，保存草稿后需在矩媒里手动发布。
-      </p>
-      <el-form label-width="120px" class="form-block">
-        <el-form-item label="默认发布到草稿">
-          <el-switch
-            v-model="defaultPublishToDraft"
-            active-text="开启"
-            inactive-text="关闭"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            :loading="savingPublishSettings"
-            @click="savePublishSettings"
-          >
-            保存发布设置
-          </el-button>
-        </el-form-item>
-      </el-form>
+      <!-- 小红书平台：使用真实浏览器开关 -->
+      <template v-if="isXhsPlatform">
+        <p class="section-tip">
+          开启后将使用本机安装的 Chrome 浏览器代替内置窗口进行发布，从根源上避免小红书 AI 自动化检测。
+        </p>
+        <el-form label-width="120px" class="form-block">
+          <el-form-item label="使用真实浏览器">
+            <el-switch
+              v-model="useRealBrowser"
+              active-text="开启"
+              inactive-text="关闭"
+              @change="onUseRealBrowserChange"
+            />
+          </el-form-item>
+
+          <!-- Chrome 浏览器配置（开启真实浏览器后显示） -->
+          <template v-if="useRealBrowser">
+            <el-form-item label="选择浏览器">
+              <div class="chrome-path-row">
+                <div v-if="chromeDisplayName" class="chrome-selected-app">
+                  <span class="chrome-app-name">{{ chromeDisplayName }}</span>
+                  <el-button size="mini" type="text" @click="browseChromePath">更换</el-button>
+                </div>
+                <el-button v-else size="small" icon="el-icon-folder-opened" @click="browseChromePath">
+                  选择 Chrome 浏览器
+                </el-button>
+                <el-button size="small" type="info" plain @click="autoDetectChrome">自动检测</el-button>
+                <el-button
+                  v-if="chromePath"
+                  size="small"
+                  type="success"
+                  plain
+                  :loading="testingChrome"
+                  @click="testChromeConnection"
+                >
+                  测试连接
+                </el-button>
+              </div>
+              <div v-if="chromeTestResult" class="chrome-test-row">
+                <span class="chrome-test-result" :class="chromeTestResult.ok ? 'test-ok' : 'test-fail'">
+                  {{ chromeTestResult.ok ? '✅ 连接成功 ' + (chromeTestResult.version || '') : '❌ ' + chromeTestResult.error }}
+                </span>
+              </div>
+              <p v-if="chromePath" class="chrome-path-detail">{{ chromePath }}</p>
+            </el-form-item>
+            <el-form-item>
+              <p class="section-tip" style="margin: 0; font-size: 12px; color: #909399;">
+                点击「自动检测」自动查找本机浏览器，或手动「选择」应用程序。配置后建议「测试连接」确认可用。
+              </p>
+            </el-form-item>
+          </template>
+
+          <el-form-item>
+            <el-button
+              type="primary"
+              :loading="savingPublishSettings"
+              @click="savePublishSettings"
+            >
+              保存发布设置
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </template>
+      <!-- 其他平台：默认发布到草稿 -->
+      <template v-else>
+        <p class="section-tip">开启后，该账号在视频发布时会优先保存到草稿。</p>
+        <el-form label-width="120px" class="form-block">
+          <el-form-item label="默认发布到草稿">
+            <el-switch
+              v-model="defaultPublishToDraft"
+              active-text="开启"
+              inactive-text="关闭"
+            />
+          </el-form-item>
+          <el-form-item>
+            <el-button
+              type="primary"
+              :loading="savingPublishSettings"
+              @click="savePublishSettings"
+            >
+              保存发布设置
+            </el-button>
+          </el-form-item>
+        </el-form>
+      </template>
     </el-card>
 
     <el-card class="section-card" shadow="never">
@@ -116,6 +181,7 @@
 </template>
 
 <script>
+import { ipcRenderer } from "electron";
 import ptConfig from "@/utils/configUrl";
 import dataRequest from "@/utils/dataRequest";
 import openLoginWindow from "@/utils/openLoginWindow";
@@ -129,6 +195,7 @@ import {
   normalizeAccountPublishSettings,
   updateAccountTreePublishSettings,
 } from "../../../shared/accountPublishSettings.js";
+import { isXhsPlatform } from "../../../shared/xhsPublishPolicy.js";
 
 export default {
   data() {
@@ -141,11 +208,20 @@ export default {
       proxyList: [],
       savingProxy: false,
       defaultPublishToDraft: false,
+      useRealBrowser: false,
       savingPublishSettings: false,
+      // Chrome 路径配置
+      chromePath: "",
+      chromeDisplayName: "",
+      testingChrome: false,
+      chromeTestResult: null,
     };
   },
 
   computed: {
+    isXhsPlatform() {
+      return isXhsPlatform(this.title);
+    },
     proxyDisplay() {
       const display = getAccountProxyDisplay({ proxies: this.proxyList });
       return display ? "当前：" + display : "";
@@ -193,16 +269,33 @@ export default {
     loadPublishSettingsFromMeta() {
       const settings = normalizeAccountPublishSettings(this.urldata || {});
       this.defaultPublishToDraft = settings.defaultPublishToDraft;
+      this.useRealBrowser = settings.useRealBrowser;
+      this.chromeTestResult = null;
+      // 异步加载全局 Chrome 路径配置
+      ipcRenderer.invoke("chrome:getPath").then((res) => {
+        this.chromePath = (res && res.path) || "";
+        this.chromeDisplayName = (res && res.displayName) || "";
+      }).catch(() => {});
     },
     async savePublishSettings() {
       if (!this.urldata.id || !this.urldata.date) {
         this.$message.error("账号记录缺少 id/date，无法保存发布设置");
         return;
       }
+      // 开启真实浏览器时，必须先配置并测试 Chrome 路径
+      if (this.useRealBrowser && !this.chromePath) {
+        this.$message.warning("请先配置 Chrome 浏览器路径");
+        return;
+      }
       this.savingPublishSettings = true;
       try {
+        // 保存全局 Chrome 路径（所有账号共用）
+        if (this.chromePath) {
+          await ipcRenderer.invoke("chrome:setPath", this.chromePath);
+        }
         const settings = normalizeAccountPublishSettings({
           defaultPublishToDraft: this.defaultPublishToDraft,
+          useRealBrowser: this.useRealBrowser,
         });
         const res = await dataRequest({
           type: "update",
@@ -211,6 +304,7 @@ export default {
             id: this.urldata.id,
             date: this.urldata.date,
             defaultPublishToDraft: settings.defaultPublishToDraft,
+            useRealBrowser: settings.useRealBrowser,
           },
         });
         if (!res || res.success === false) {
@@ -218,12 +312,15 @@ export default {
           return;
         }
         this.defaultPublishToDraft = settings.defaultPublishToDraft;
+        this.useRealBrowser = settings.useRealBrowser;
         this.urldata = {
           ...this.urldata,
           defaultPublishToDraft: settings.defaultPublishToDraft,
+          useRealBrowser: settings.useRealBrowser,
         };
         this.$route.meta.defaultPublishToDraft = settings.defaultPublishToDraft;
-        this.syncAccountTreePublishSettings(settings.defaultPublishToDraft);
+        this.$route.meta.useRealBrowser = settings.useRealBrowser;
+        this.syncAccountTreePublishSettings(settings.defaultPublishToDraft, settings.useRealBrowser);
         this.$message.success("发布设置已保存");
       } catch (e) {
         this.$message.error(
@@ -233,7 +330,7 @@ export default {
         this.savingPublishSettings = false;
       }
     },
-    syncAccountTreePublishSettings(defaultPublishToDraft) {
+    syncAccountTreePublishSettings(defaultPublishToDraft, useRealBrowser) {
       try {
         const raw = localStorage.getItem("accountTree");
         const tree = raw ? JSON.parse(raw) : {};
@@ -241,10 +338,73 @@ export default {
           phone: this.urldata.phone,
           pt: this.title,
           defaultPublishToDraft,
+          useRealBrowser,
         });
         localStorage.setItem("accountTree", JSON.stringify(nextTree));
       } catch (e) {
         console.warn("同步账号树发布设置失败:", e && e.message);
+      }
+    },
+
+    // ── Chrome 浏览器配置 ──────────────────────────────────────
+    /** 开启真实浏览器开关时，自动检测 Chrome 路径（仅当尚未配置时） */
+    async onUseRealBrowserChange(enabled) {
+      if (enabled && !this.chromePath) {
+        await this.autoDetectChrome();
+      }
+    },
+    _setChromeResult(res) {
+      if (!res) return;
+      this.chromePath = res.path || "";
+      this.chromeDisplayName = res.displayName || "";
+      this.chromeTestResult = null;
+    },
+    async browseChromePath() {
+      try {
+        const result = await ipcRenderer.invoke("chrome:browse");
+        if (result && result.path) {
+          if (result.error) {
+            this.$message.warning(result.error);
+          }
+          this._setChromeResult(result);
+        }
+      } catch (e) {
+        this.$message.error("选择失败: " + (e.message || e));
+      }
+    },
+    async autoDetectChrome() {
+      try {
+        const result = await ipcRenderer.invoke("chrome:autoDetect");
+        if (result && result.path) {
+          this._setChromeResult(result);
+          this.$message.success("已检测到: " + (result.displayName || result.path));
+        } else {
+          this.$message.warning("未能自动检测到 Chrome，请手动选择应用程序");
+        }
+      } catch (e) {
+        this.$message.error("自动检测失败: " + (e.message || e));
+      }
+    },
+    async testChromeConnection() {
+      if (!this.chromePath) {
+        this.$message.warning("请先选择 Chrome 浏览器");
+        return;
+      }
+      this.testingChrome = true;
+      this.chromeTestResult = null;
+      try {
+        const result = await ipcRenderer.invoke("chrome:test", this.chromePath);
+        this.chromeTestResult = result;
+        if (result.ok) {
+          this.$message.success("Chrome 连接成功: " + (result.version || ""));
+        } else {
+          this.$message.error("连接失败: " + result.error);
+        }
+      } catch (e) {
+        this.chromeTestResult = { ok: false, error: e.message || String(e) };
+        this.$message.error("测试失败: " + (e.message || e));
+      } finally {
+        this.testingChrome = false;
       }
     },
     async saveProxyConfig() {
@@ -447,5 +607,44 @@ code {
   padding: 1px 6px;
   border-radius: 3px;
   font-size: 12px;
+}
+
+.chrome-path-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.chrome-selected-app {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  background: #f0f9eb;
+  border: 1px solid #e1f3d8;
+  border-radius: 4px;
+}
+.chrome-app-name {
+  font-weight: 500;
+  color: #67c23a;
+  font-size: 14px;
+}
+.chrome-path-detail {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: #c0c4cc;
+  word-break: break-all;
+}
+.chrome-test-row {
+  margin-top: 8px;
+}
+.chrome-test-result {
+  font-size: 13px;
+}
+.chrome-test-result.test-ok {
+  color: #67c23a;
+}
+.chrome-test-result.test-fail {
+  color: #f56c6c;
 }
 </style>

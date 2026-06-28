@@ -414,6 +414,74 @@ export default {
       return result.filePaths[0]; // 返回选中的目录路径
     });
 
+    ipcMain.handle("fs:existsSync", async (_event, filePath) => {
+      try {
+        return fs.existsSync(filePath);
+      } catch (_) {
+        return false;
+      }
+    });
+
+    ipcMain.handle("publish:downloadRemoteFile", async (_event, remoteUrl) => {
+      const { resolvePublishFile } = await import("./resolvePublishFile.js");
+      const resolved = await resolvePublishFile(remoteUrl);
+      // 不调用 cleanup，文件留给重新发布使用
+      return resolved.localPath;
+    });
+
+    // ── Chrome 浏览器路径配置 ──────────────────────────────────
+    ipcMain.handle("chrome:getPath", async () => {
+      const { getConfiguredChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      const chromePath = getConfiguredChromePath();
+      return { path: chromePath, displayName: getChromeDisplayName(chromePath) };
+    });
+
+    ipcMain.handle("chrome:setPath", async (_event, chromePath) => {
+      const { setConfiguredChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      setConfiguredChromePath(chromePath);
+      return { path: chromePath, displayName: getChromeDisplayName(chromePath) };
+    });
+
+    ipcMain.handle("chrome:autoDetect", async () => {
+      const { autoDetectChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      const detected = autoDetectChromePath() || "";
+      return { path: detected, displayName: getChromeDisplayName(detected) };
+    });
+
+    ipcMain.handle("chrome:test", async (_event, chromePath) => {
+      const { testChromePath } = await import("./chromeConfig.js");
+      return await testChromePath(chromePath);
+    });
+
+    ipcMain.handle("chrome:browse", async (event) => {
+      const isMac = process.platform === "darwin";
+      const result = await dialog.showOpenDialog(
+        BrowserWindow.fromWebContents(event.sender),
+        {
+          title: isMac ? "选择 Chrome 浏览器" : "选择 Chrome 浏览器可执行文件",
+          // macOS 选 .app 目录；Windows/Linux 选可执行文件
+          properties: isMac ? ["openFile", "treatPackageAsDirectory"] : ["openFile"],
+          filters: isMac
+            ? [{ name: "应用程序", extensions: ["app"] }]
+            : process.platform === "win32"
+            ? [{ name: "可执行文件", extensions: ["exe"] }]
+            : [],
+          defaultPath: isMac ? "/Applications" : undefined,
+        }
+      );
+      if (result.canceled || !result.filePaths.length) return null;
+      let selected = result.filePaths[0];
+      // macOS: 用户选了 .app 包，自动解析出内部可执行文件路径
+      if (isMac && selected.endsWith(".app")) {
+        const { resolveAppBundleExecutable, getChromeDisplayName } = await import("./chromeConfig.js");
+        const resolved = resolveAppBundleExecutable(selected);
+        if (resolved) return { path: resolved, displayName: getChromeDisplayName(resolved) };
+        return { path: selected, displayName: path.basename(selected, ".app"), error: "无法解析该应用的可执行文件" };
+      }
+      const { getChromeDisplayName } = await import("./chromeConfig.js");
+      return { path: selected, displayName: getChromeDisplayName(selected) };
+    });
+
     ipcMain.handle("dialog:openVideoFile", async (event) => {
       const result = await dialog.showOpenDialog(
         BrowserWindow.fromWebContents(event.sender),

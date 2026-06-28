@@ -3,6 +3,7 @@
 export function normalizeAccountPublishSettings(settings = {}) {
   return {
     defaultPublishToDraft: Boolean(settings.defaultPublishToDraft),
+    useRealBrowser: Boolean(settings.useRealBrowser),
   };
 }
 
@@ -11,6 +12,8 @@ export function isDefaultPublishToDraftEnabled(account = {}) {
 }
 
 export function resolveEffectivePublishMode(requestDraftMode, account = {}) {
+  // 使用真实浏览器时，仍然尊重用户主动选择的草稿模式和账号级别的默认草稿设置。
+  // 真实浏览器同样支持点击"暂存离开"按钮进行草稿发布，不应静默覆盖用户意图。
   const publishToDraft =
     Boolean(requestDraftMode) || isDefaultPublishToDraftEnabled(account);
   return {
@@ -39,6 +42,9 @@ export function updateAccountTreePublishSettings(accountTree = {}, patch = {}) {
       const samePt = String((child && child.pt) || "") === targetPt;
       if (samePhone && samePt) {
         child.defaultPublishToDraft = Boolean(patch.defaultPublishToDraft);
+        if (typeof patch.useRealBrowser === "boolean") {
+          child.useRealBrowser = patch.useRealBrowser;
+        }
       }
     });
   });

@@ -139,6 +139,7 @@ async function runSingleFilePublishInner(
     phone: derivePhoneForRecord(v),
     filePath: resolvedFile,
     pt: v.platform,
+    useRealBrowser: Boolean(v.useRealBrowser),
   };
 
   const taskId = taskPayload.taskId;
@@ -160,6 +161,7 @@ async function runSingleFilePublishInner(
       v.publishAt && isRemotePublishFile(sourceFile)
         ? sourceFile
         : resolvedFile,
+    remoteFileUrl: isRemotePublishFile(sourceFile) ? sourceFile : "",
     useragent: cfg.useragent,
     phone: derivePhoneForRecord(v),
     partition: v.partition,
