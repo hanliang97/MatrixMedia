@@ -143,6 +143,15 @@ function onAppReady() {
   startScheduledPublishScheduler();
   initWindow((win) => {
     mainWin = win;
+
+    // 拦截窗口关闭：未确认退出时隐藏窗口而非销毁，避免 "Object has been destroyed"
+    win.on("close", (event) => {
+      if (!allowQuit) {
+        event.preventDefault();
+        win.hide();
+      }
+    });
+
     const iconPath = path.join(__static, "logo.png");
     console.log(iconPath);
     let icon = nativeImage.createFromPath(iconPath);

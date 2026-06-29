@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu, app as electronApp } from "electron";
+import { BrowserWindow, Menu } from "electron";
 import fs from "fs";
 import path from "path";
 import { platform } from "os";
@@ -7,7 +7,7 @@ import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
 import setIpc from "./ipcMain";
 import { winURL, loadingURL } from "../config/StaticPath";
 import baseMenu from "../config/menu";
-import { destroyAccountLoginWindows } from "./accountLoginWindowManager";
+
 
 let loadWindow = null;
 let mainWindow = null;
@@ -114,9 +114,7 @@ function createMainWindow(fn) {
     mainWindow.webContents.send("w-max", false);
   });
   mainWindow.on("closed", () => {
-    destroyAccountLoginWindows();
     mainWindow = null;
-    electronApp.quit();
   });
 }
 
