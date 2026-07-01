@@ -38,12 +38,15 @@ export function updateAccountTreePublishSettings(accountTree = {}, patch = {}) {
       ? group.children
       : [];
     children.forEach((child) => {
-      const samePhone = normalizePhone(child && child.phone) === targetPhone;
-      const samePt = String((child && child.pt) || "") === targetPt;
+      // accountTree children 结构为 { meta: { phone, pt, ... }, ... }
+      const meta = (child && child.meta) || child || {};
+      const samePhone = normalizePhone(meta.phone) === targetPhone;
+      const samePt = String(meta.pt || "") === targetPt;
       if (samePhone && samePt) {
-        child.defaultPublishToDraft = Boolean(patch.defaultPublishToDraft);
+        if (!child.meta) child.meta = {};
+        child.meta.defaultPublishToDraft = Boolean(patch.defaultPublishToDraft);
         if (typeof patch.useRealBrowser === "boolean") {
-          child.useRealBrowser = patch.useRealBrowser;
+          child.meta.useRealBrowser = patch.useRealBrowser;
         }
       }
     });
