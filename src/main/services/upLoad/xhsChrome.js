@@ -8,7 +8,8 @@ import xhsHandler from "./xhs.js";
  * 与 xhs.js（Electron BrowserWindow）的区别：
  * - 接收 puppeteer Browser 对象而非 Electron BrowserWindow
  * - 通过 fakeWindow 适配 maybeClosePublishWindow 的关闭操作
- * - handler 返回后强制关闭真实浏览器窗口
+ * - 发布完成/失败后只断开 puppeteer 连接，不关闭浏览器窗口，
+ *   让用户可以在浏览器中查看结果或手动操作
  *
  * @param {import("puppeteer-core").Page} page - puppeteer page（真实Chrome中的页面）
  * @param {object} data - 发布数据，与 xhs.js 格式一致
@@ -20,22 +21,22 @@ export default async function xhsChromeHandler(page, data, browser, event) {
 
   // 构造与 Electron BrowserWindow 兼容的 fakeWindow，
   // 让 xhs.js 内部的 maybeClosePublishWindow / closeWindow 调用能正常工作。
-  let closed = false;
+  // 真实浏览器模式：close() 只断开 puppeteer 连接，不关闭 Chrome 窗口。
+  let disconnected = false;
   const fakeWindow = {
     isDestroyed() {
-      return closed;
+      return disconnected;
     },
     close() {
-      if (closed) return;
-      closed = true;
-      console.log("[xhs-chrome] fakeWindow.close → 关闭浏览器");
+      if (disconnected) return;
+      disconnected = true;
+      console.log("[xhs-chrome] fakeWindow.close → 断开连接，保留浏览器窗口");
       try {
-        // 标记为程序关窗，避免重试逻辑误判
         fakeWindow._mmClosedByProgram = true;
       } catch (_) {}
-      browser.close().catch((err) => {
-        console.warn("[xhs-chrome] browser.close 失败:", err?.message || err);
-      });
+      // disconnect 只断开 puppeteer ↔ Chrome 的 DevTools 连接，
+      // Chrome 进程和窗口继续保留，用户可以手动操作或关闭
+      browser.disconnect();
     },
     _mmClosedByProgram: false,
     _mmAllowCloseWithoutConfirm: false,
@@ -46,12 +47,14 @@ export default async function xhsChromeHandler(page, data, browser, event) {
   } catch (err) {
     console.error("[xhs-chrome] 发布流程异常:", err?.message || err);
   } finally {
-    // 确保浏览器被关闭（即使 xhs handler 内部未触发 close）
-    if (!closed) {
+    // 只断开连接，不关闭浏览器 —— 让用户可以手动完成操作或查看结果
+    if (!disconnected) {
+      disconnected = true;
       try {
-        await browser.close();
+        console.log("[xhs-chrome] 发布结束，断开 puppeteer 连接，浏览器保留打开");
+        browser.disconnect();
       } catch (_) {
-        // 忽略关闭错误
+        // 忽略断开错误
       }
     }
   }

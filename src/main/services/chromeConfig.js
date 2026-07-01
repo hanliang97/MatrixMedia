@@ -2,6 +2,7 @@
 
 import { app } from "electron";
 import fs from "fs";
+import os from "os";
 import path from "path";
 import { findChromeExecutablePath } from "./upLoad/findChrome.js";
 
@@ -144,6 +145,12 @@ export async function testChromePath(chromePath) {
   }
 
   let browser = null;
+  // 使用临时 userDataDir，避免与用户已打开的 Chrome 实例冲突
+  // （Chrome 单实例模型会锁定默认 profile，导致新进程无法输出 WS endpoint）
+  const tmpDir = path.join(
+    os.tmpdir(),
+    `mm-chrome-test-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+  );
   try {
     // 动态 import，避免循环依赖
     const puppeteerCore = (await import("puppeteer-core")).default;
@@ -153,8 +160,15 @@ export async function testChromePath(chromePath) {
     browser = await puppeteer.launch({
       executablePath: chromePath,
       headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-      timeout: 15000,
+      userDataDir: tmpDir,
+      args: [
+        "--no-sandbox",
+        "--disable-setuid-sandbox",
+        "--no-first-run",
+        "--no-default-browser-check",
+        "--disable-extensions",
+      ],
+      timeout: 30000,
     });
     const version = await browser.version();
     await browser.close();
@@ -166,5 +180,7 @@ export async function testChromePath(chromePath) {
     if (browser) {
       try { await browser.close(); } catch (_) {}
     }
+    // 清理临时目录
+    try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch (_) {}
   }
 }
