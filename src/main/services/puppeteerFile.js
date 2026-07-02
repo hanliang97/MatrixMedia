@@ -119,6 +119,11 @@ export function cancelPuppeteerTasks(reason) {
 
 let openPublishWindows = new Set();
 
+// 跟踪小红书真实 Chrome 浏览器实例，
+// 避免重新发布时因 userDataDir 被上一次的 Chrome 锁定而打开 about:blank。
+let _lastXhsRealChromeBrowser = null;
+let _lastXhsRealChromePid = null;
+
 export function hasActivePublishTasks() {
   return (
     puppeteerTaskRuntime.isBusy() ||
@@ -319,6 +324,32 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         pt: data.pt,
       });
 
+      // 2.5 关闭上一次遗留的 Chrome 实例，释放 userDataDir 的 profile 锁。
+      //     否则 puppeteerCore.launch 会因 profile 被占而打开 about:blank。
+      if (_lastXhsRealChromePid) {
+        console.log("[xhs-chrome] 检测到上次遗留的 Chrome 进程 PID=" + _lastXhsRealChromePid + "，先关闭...");
+        try {
+          process.kill(_lastXhsRealChromePid);
+        } catch (e) {
+          console.warn("[xhs-chrome] 关闭上次 Chrome 进程失败（可能已退出）:", e?.message || e);
+        }
+        _lastXhsRealChromePid = null;
+        _lastXhsRealChromeBrowser = null;
+        // 等待 Chrome 进程完全退出并释放 profile 锁
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      // 兜底：即使没有保存 PID（用户手动关了 Chrome 但锁文件未清理），
+      // 也尝试删除 SingletonLock 文件，防止 Chrome 启动后无法使用该 profile。
+      try {
+        const lockFile = path.join(chromeDataDir, "SingletonLock");
+        if (fs.existsSync(lockFile)) {
+          fs.unlinkSync(lockFile);
+          console.log("[xhs-chrome] 已清理残留的 SingletonLock 文件");
+        }
+      } catch (e) {
+        console.warn("[xhs-chrome] 清理 SingletonLock 失败:", e?.message || e);
+      }
+
       // 3. 启动真实 Chrome
       //    关键：ignoreDefaultArgs: ['--enable-automation'] 去掉自动化标志，
       //    否则页面顶部会出现「Chrome 正受到自动测试软件的控制」横幅，
@@ -420,9 +451,18 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       });
       finishOnce();
     } finally {
-      // 只断开 puppeteer 连接，不关闭 Chrome 窗口
-      // 让用户可以在浏览器中手动完成操作或查看结果
+      // 保存 browser 引用和 Chrome 子进程 PID，下次 runXhsRealChrome 时
+      // 先杀死旧进程释放 userDataDir 的 profile 锁，避免新实例打开 about:blank。
+      // 这里只断开 puppeteer ↔ Chrome 的 DevTools 连接，不杀死 Chrome 进程，
+      // 让用户可以在浏览器中手动完成操作或查看结果。
       if (realBrowser) {
+        _lastXhsRealChromeBrowser = realBrowser;
+        try {
+          const proc = realBrowser.process();
+          _lastXhsRealChromePid = proc && proc.pid ? proc.pid : null;
+        } catch (_) {
+          _lastXhsRealChromePid = null;
+        }
         try { realBrowser.disconnect(); } catch (_) {}
       }
     }
