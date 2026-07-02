@@ -461,6 +461,32 @@ export default {
         this.$message.error("未找到平台配置：" + this.title);
         return;
       }
+
+      // 小红书 + 开启真实浏览器：通过 puppeteer-core 启动本机 Chrome，
+      // 与发布流程共享同一个 userDataDir，登录态自动复用到发布
+      if (this.isXhsPlatform && this.useRealBrowser) {
+        this.opening = true;
+        try {
+          const result = await ipcRenderer.invoke("open-xhs-real-chrome-login", {
+            url: this.ptConfig[this.title].index,
+          });
+          if (!result || result.ok === false) {
+            this.$message.error((result && result.message) || "打开真实浏览器失败");
+          } else if (result.reused) {
+            this.$message.info("已切换到已打开的 Chrome 窗口");
+          } else {
+            this.$message.success("已在真实浏览器中打开小红书");
+          }
+        } catch (e) {
+          this.$message.error(
+            "打开真实浏览器失败：" + (e && e.message ? e.message : e)
+          );
+        } finally {
+          this.opening = false;
+        }
+        return;
+      }
+
       this.opening = true;
       try {
         const result = await openLoginWindow({

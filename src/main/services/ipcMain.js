@@ -482,6 +482,94 @@ export default {
       return { path: selected, displayName: getChromeDisplayName(selected) };
     });
 
+    // 小红书 + 真实浏览器模式：用 puppeteer-core 启动本机 Chrome 打开登录页
+    // 与发布流程共享同一个 chrome-xhs-profile userDataDir，登录态自动复用
+    let _xhsRealChromeLoginBrowser = null;
+    ipcMain.handle("open-xhs-real-chrome-login", async (_event, args) => {
+      const url = args && args.url;
+      if (!url) return { ok: false, message: "url 必填" };
+
+      // 如果已有打开的 Chrome 实例，尝试 focus
+      if (_xhsRealChromeLoginBrowser) {
+        try {
+          const pages = await _xhsRealChromeLoginBrowser.pages();
+          if (pages && pages.length > 0) {
+            await pages[0].bringToFront();
+            return { ok: true, reused: true };
+          }
+        } catch (_) {
+          // 连接已断开，清理引用
+          _xhsRealChromeLoginBrowser = null;
+        }
+      }
+
+      try {
+        const { resolveChromePath } = await import("./chromeConfig.js");
+        const chromePath = resolveChromePath();
+        if (!chromePath) {
+          return { ok: false, message: "未找到 Chrome 浏览器，请先在发布设置中配置 Chrome 路径" };
+        }
+
+        const path = await import("path");
+        const chromeDataDir = path.default.join(
+          electronApp.getPath("userData"),
+          "chrome-xhs-profile"
+        );
+
+        const puppeteerCore = (await import("puppeteer-core")).default;
+        const { addExtra } = await import("puppeteer-extra");
+        const puppeteer = addExtra(puppeteerCore);
+
+        const browser = await puppeteer.launch({
+          executablePath: chromePath,
+          headless: false,
+          userDataDir: chromeDataDir,
+          ignoreDefaultArgs: ["--enable-automation"],
+          args: [
+            "--no-sandbox",
+            "--disable-setuid-sandbox",
+            "--disable-blink-features=AutomationControlled",
+            "--no-first-run",
+            "--no-default-browser-check",
+          ],
+          defaultViewport: null,
+        });
+
+        _xhsRealChromeLoginBrowser = browser;
+
+        // 浏览器关闭时清理引用
+        browser.on("disconnected", () => {
+          if (_xhsRealChromeLoginBrowser === browser) {
+            _xhsRealChromeLoginBrowser = null;
+          }
+        });
+
+        const page = (await browser.pages())[0] || (await browser.newPage());
+
+        // 注入反自动化检测
+        await page.evaluateOnNewDocument(() => {
+          Object.defineProperty(navigator, "webdriver", { get: () => false });
+          if (!window.chrome) window.chrome = {};
+          window.chrome.runtime = window.chrome.runtime || {};
+        });
+
+        await page.goto(url, {
+          waitUntil: "domcontentloaded",
+          timeout: 60000,
+        });
+
+        // 只断开 puppeteer 连接，Chrome 窗口保留给用户操作
+        browser.disconnect();
+        _xhsRealChromeLoginBrowser = null;
+
+        return { ok: true };
+      } catch (err) {
+        _xhsRealChromeLoginBrowser = null;
+        console.error("[xhs-chrome-login] 启动失败:", err?.message || err);
+        return { ok: false, message: "启动真实浏览器失败: " + (err?.message || err) };
+      }
+    });
+
     ipcMain.handle("dialog:openVideoFile", async (event) => {
       const result = await dialog.showOpenDialog(
         BrowserWindow.fromWebContents(event.sender),
