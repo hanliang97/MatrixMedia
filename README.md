@@ -16,6 +16,17 @@
   <img src="./src/renderer/layout/components/Sidebar/ptcion/xhs.png" alt="小红书" width="36" />
 </p>
 
+## 软件下载地址
+
+国内 gitee 下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
+
+github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
+
+
+## 工具使用文档
+
+国内文档地址
+https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
 ## 关键词（便于搜索）
 
 自媒体、自媒体矩阵、矩阵发布、矩阵运营、内容矩阵、视频矩阵、多平台矩阵、跨平台发布、批量发布、批量上传、批量分发、一键发布、多账号发布、多平台发布、本地视频发布、短视频矩阵、内容分发、账号矩阵、自动化发布、CLI 批量、命令行发布、无头发布、智能体编排、OpenClaw、MCP 发布、抖音矩阵、快手矩阵、小红书矩阵、百家号矩阵、哔哩哔哩矩阵、头条矩阵、视频号矩阵、番茄视频、番茄视频矩阵、MatrixMedia、矩媒、pubtw
@@ -428,17 +439,7 @@ curl -X POST http://127.0.0.1:30088/publish \
 3. 涉及账号、Cookie、本地素材等敏感数据时，请妥善保管并自行评估安全风险。
 4. 部分平台（如哔哩哔哩）可能需要人工参与（例如手动上传封面），请以平台当前页面规则为准。
 
-## 开源免费
 
-国内 gitee 下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
-
-github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
-
-
-## 工具使用文档
-
-国内文档地址
-https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
 
 ## 开发环境 node 20
 
