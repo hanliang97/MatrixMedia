@@ -4,6 +4,7 @@ import {
   PLATFORM_ALIASES,
   VIDEO_PUBLISH_CANONICAL,
   resolvePublishPlatform,
+  isVideoPublishPlatform,
 } from "../../shared/publishPlatforms.js";
 import {
   resolveCreativeStatementForPlatform,
@@ -380,6 +381,7 @@ export function parseMultiPublishRequest(body) {
 
   const shared = extractSharedPublishBody(body);
   const parsed = [];
+  const skipped = [];
 
   for (let i = 0; i < targets.length; i++) {
     const merged = { ...shared, ...targets[i] };
@@ -387,6 +389,14 @@ export function parseMultiPublishRequest(body) {
     if (!item.ok) {
       const label =
         targets[i].platform != null ? String(targets[i].platform) : `#${i + 1}`;
+      // 对于未知平台，跳过并记录，不阻断其他平台的发布
+      const rawPt = targets[i].platform != null ? String(targets[i].platform).trim() : "";
+      const canonical = resolvePublishPlatform(rawPt);
+      if (rawPt && !isVideoPublishPlatform(canonical)) {
+        skipped.push({ platform: rawPt, reason: item.error });
+        continue;
+      }
+      // 非「未知平台」的错误（如缺少 phone / title 等）仍然报错
       return { ok: false, error: `平台 ${label}: ${item.error}` };
     }
     if (item.value.dir) {
@@ -396,6 +406,14 @@ export function parseMultiPublishRequest(body) {
       };
     }
     parsed.push(applyHttpCreativeStatements(body, item.value, targets[i]));
+  }
+
+  if (parsed.length === 0) {
+    const names = skipped.map((s) => s.platform).join(", ");
+    return {
+      ok: false,
+      error: `所有平台均不支持: ${names}`,
+    };
   }
 
   const publishAtSet = new Set(
@@ -413,7 +431,11 @@ export function parseMultiPublishRequest(body) {
     return { ok: false, error: "多平台发布需使用相同 file" };
   }
 
-  return { ok: true, multi: parsed.length > 1, value: parsed };
+  const result = { ok: true, multi: parsed.length > 1, value: parsed };
+  if (skipped.length > 0) {
+    result.skipped = skipped;
+  }
+  return result;
 }
 
 export function publishHelpText() {

@@ -79,7 +79,12 @@ router.post("/publish", async function (req, res) {
     const httpStatus =
       result.exitCode === 2 && !parsed.multi ? 400 : success ? 200 : 200;
 
-    return res.status(httpStatus).json(result);
+    const response = { ...result };
+    if (parsed.skipped && parsed.skipped.length > 0) {
+      response.skipped = parsed.skipped;
+    }
+
+    return res.status(httpStatus).json(response);
   } catch (error) {
     console.error("[HTTP /publish]", error);
     return res.status(500).json({
