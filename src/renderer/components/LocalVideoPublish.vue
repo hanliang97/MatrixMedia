@@ -32,6 +32,8 @@
             placeholder="输入标签，回车/空格添加；支持批量粘贴 #标签1 #标签2"
             style="width: 100%"
             @paste.native.capture="onBqPaste"
+            @compositionstart.native.capture="onBqCompositionStart"
+            @compositionend.native.capture="onBqCompositionEnd"
             @keydown.native.capture="onBqKeydown"
           ></el-select>
         </el-form-item>
@@ -433,6 +435,7 @@ export default {
       platformVisible: false,
       localFilePath: "",
       bqTags: [],
+      bqComposing: false,
       platformStatements: {},
       checkedPlatformIds: [],
       checkAllPlatforms: false,
@@ -566,7 +569,15 @@ export default {
         /* ignore，回落到默认行为 */
       }
     },
+    onBqCompositionStart() {
+      this.bqComposing = true;
+    },
+    onBqCompositionEnd() {
+      this.bqComposing = false;
+    },
     onBqKeydown(e) {
+      // 中文等 IME 组合输入中，空格用于选词，不能当作添加标签
+      if (this.bqComposing || e.isComposing || e.keyCode === 229) return;
       // 只拦截空格键
       if (e.key !== " " && e.code !== "Space" && e.keyCode !== 32) return;
       const target = e.target;
@@ -588,6 +599,7 @@ export default {
       this.localFilePath = filePath;
       const defaultTitle = fileStem(filePath);
       this.bqTags = [];
+      this.bqComposing = false;
       this.resetPlatformStatementState();
       this.form = { title: defaultTitle, bt1: "", bt2: "" };
       this.thisShow = false;
@@ -936,6 +948,7 @@ export default {
     resetState() {
       this.localFilePath = "";
       this.bqTags = [];
+      this.bqComposing = false;
       this.resetPlatformStatementState();
       this.form = { title: "", bt1: "", bt2: "" };
       this.thisShow = false;

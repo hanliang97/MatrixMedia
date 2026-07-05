@@ -63,6 +63,14 @@ let rendererConfig = {
         }
       },
       {
+        test: /\.svg$/,
+        type: 'asset/resource',
+        include: [resolve('src/renderer/layout/components/Sidebar/ptcion')],
+        generator: {
+          filename: 'imgs/[name]--[hash][ext]'
+        }
+      },
+      {
         test: /\.(png|jpe?g|gif)(\?.*)?$/,
         type: "asset/resource",
         generator: {

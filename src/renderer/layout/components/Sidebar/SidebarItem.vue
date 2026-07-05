@@ -69,6 +69,7 @@ const PT_ICON_STEM = {
   快手: "ks",
   小红书: "xhs",
   番茄视频: "fq",
+  掘金: "juejin",
 };
 
 export default {
