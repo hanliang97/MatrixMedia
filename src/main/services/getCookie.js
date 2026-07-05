@@ -33,6 +33,9 @@ export default function () {
         } else if (cookie.name === "sessionid" && args.pt == "视频号" && cookie.value) {
           result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
           loginExpiresAtMs = expMs;
+        } else if (cookie.name === "sessionid" && args.pt == "番茄视频" && cookie.value) {
+          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
+          loginExpiresAtMs = expMs;
         } else if (cookie.name === "SESSDATA" && args.pt == "哔哩哔哩" && cookie.value) {
           result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
           loginExpiresAtMs = expMs;

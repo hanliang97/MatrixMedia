@@ -10,6 +10,7 @@ const LOGIN_COOKIE_RULE = {
   百家号: c => c.name === "BDUSS" && !!c.value,
   头条: c => c.name === "odin_tt" && c.value && c.value.length > 65,
   视频号: c => c.name === "sessionid" && !!c.value,
+  番茄视频: c => c.name === "sessionid" && !!c.value,
   哔哩哔哩: c => c.name === "SESSDATA" && !!c.value,
   快手: c => c.name === "userId" && !!c.value,
   掘金: c => c.name === "passport_csrf_token" && !!c.value && c.value.length > 10,

@@ -184,6 +184,21 @@ function isExpectedPublishUrl(data, currentUrl) {
       );
     }
   }
+  if (data && data.pt === "番茄视频状态") {
+    try {
+      const current = new URL(currentUrl);
+      return (
+        current.origin === "https://pugc.yueduwuxian.com" &&
+        current.pathname.indexOf("/fqvideo/home/video-list") === 0
+      );
+    } catch (_) {
+      return (
+        String(currentUrl || "").indexOf(
+          "https://pugc.yueduwuxian.com/fqvideo/home/video-list"
+        ) === 0
+      );
+    }
+  }
   return false;
 }
 

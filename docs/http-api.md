@@ -49,7 +49,7 @@
       "name": "番茄视频",
       "aliases": ["fanqie", "fq", "番茄视频"],
       "automated": false,
-      "note": "配置已接入，自动发布流程待完善",
+      "note": "已支持自动发布与审核状态回查",
       "hasConfig": true
     }
   ]
@@ -69,7 +69,7 @@
 | `tt`   | 头条     | toutiao / 头条         | 是     |
 | `ks`   | 快手     | kuaishou / 快手        | 是     |
 | `xhs`  | 小红书   | xiaohongshu / 小红书   | 是     |
-| `fqsp` | 番茄视频 | fanqie / fq / 番茄视频 | 待完善 |
+| `fqsp` | 番茄视频 | fanqie / fq / 番茄视频 | 可用 |
 
 > 掘金文章请使用 CLI `publish-article`，当前无 HTTP 接口。
 

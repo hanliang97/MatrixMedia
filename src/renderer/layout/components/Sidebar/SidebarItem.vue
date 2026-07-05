@@ -68,7 +68,7 @@ const PT_ICON_STEM = {
   头条: "tt",
   快手: "ks",
   小红书: "xhs",
-  番茄视频: "fqsp",
+  番茄视频: "fq",
 };
 
 export default {
@@ -93,7 +93,7 @@ export default {
   },
   created() {
     try {
-      this._ptIcons = require.context("./ptcion", false, /\.(png|jpe?g)$/i);
+      this._ptIcons = require.context("./ptcion", false, /\.(png|jpe?g|svg)$/i);
     } catch (e) {
       const stub = () => "";
       stub.keys = () => [];
@@ -114,6 +114,7 @@ export default {
         seen.add(stem);
         for (const name of [
           `./${stem}.png`,
+          `./${stem}.svg`,
           `./${stem}.jpeg`,
           `./${stem}.jpg`,
         ]) {

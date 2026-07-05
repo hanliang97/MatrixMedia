@@ -243,6 +243,7 @@ Rules used per platform (cookie in the persist partition for that site):
 - 百家号 → `BDUSS`
 - 头条 → `odin_tt` (value length > 65)
 - 视频号 → `sessionid`
+- 番茄视频 → `sessionid`
 - 哔哩哔哩 → `SESSDATA`
 - 快手 → `userId`
 

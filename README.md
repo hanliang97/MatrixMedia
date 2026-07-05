@@ -37,7 +37,7 @@ https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
 
 - **支持平台**：Windows、macOS、CLI。
 - **CLI 登录**：目前支持**抖音**与**视频号**（终端二维码；抖音另支持 puppeteer 无头）。
-- **CLI 发布**：**7 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书；**番茄视频**已接入配置与 GUI 登录，自动发布流程开发中。`file` 支持本地路径或 `http(s)` 远程 URL（自动下载，上传后清理临时文件）。
+- **CLI 发布**：**8 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书、番茄视频。`file` 支持本地路径或 `http(s)` 远程 URL（自动下载，上传后清理临时文件）。
 - **CLI 查询**：`cli accounts` 实时检测登录态，`cli history` 查看本机发布记录。
 - **HTTP API**：GUI 启动后可通过 `POST http://127.0.0.1:30088/publish` 由其它程序触发发布（见 [docs/http-api.md](./docs/http-api.md) 或应用内「项目详情」页）。
 
@@ -71,7 +71,7 @@ https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
 
 仓库顶部的 `<!-- openclaw-integrable ... -->` HTML 注释以 OpenClaw 的 schema 示例上述约定；其它平台如需类似的仓库级可发现标记，可沿用同一 `argv-marker=cli` 语义，或加上自家的注释标签（例如 `<!-- hermes-integrable ... -->`），互不冲突。
 
-典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 可用于 **抖音 / 视频号** 扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对已自动化 7 平台一致可用（番茄视频待完善）。终端二维码与无头模式等行为见 [docs/cli.md](./docs/cli.md) 与各子命令 `--help`。
+典型用法：在 AI 平台/智能体侧将本应用配置为 **外部命令**（`command` + `args`）：`cli login` 可用于 **抖音 / 视频号** 扫码登录；其它平台请先在 GUI 登录一次，CLI 会复用同一 session partition；`cli publish` 对已自动化 8 平台一致可用。终端二维码与无头模式等行为见 [docs/cli.md](./docs/cli.md) 与各子命令 `--help`。
 
 ### MCP Server（Claude Desktop / Cursor / Cline 原生接入）
 
@@ -140,8 +140,7 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 5. 头条号
 6. 视频号
 7. 小红书
-
-### 小红书：真实浏览器发布模式
+8. 番茄视频
 
 小红书平台对 Electron 内置窗口的自动化检测日趋严格，可能出现「AI 托管」警告。为此新增**真实浏览器发布模式**，使用本机已安装的 Google Chrome / Chromium 代替内置窗口进行发布，从根源上规避检测。
 
@@ -160,33 +159,34 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 - Chrome 路径为全局配置（所有小红书账号共用），保存在 `userData/chrome-config.json`
 - 若检测不到 Chrome 或启动失败，自动回退到内置窗口模式
 
-### 番茄视频（配置已接入，自动化待完善）
+### 番茄视频
 
-[番茄视频创作平台](https://pugc.yueduwuxian.com/fqvideo/login) 已写入 URL 配置，GUI 可添加账号并通过独立 BrowserWindow 登录；自动上传、填表、点发布及审核状态查询尚未实现。
+[番茄视频创作平台](https://pugc.yueduwuxian.com/fqvideo/login) 已支持 GUI 登录、自动上传发布与作品列表审核状态回查。
 
-| 用途   | URL                                                     |
-| ------ | ------------------------------------------------------- |
-| 登录页 | https://pugc.yueduwuxian.com/fqvideo/login              |
-| 发布页 | https://pugc.yueduwuxian.com/fqvideo/home/publish-video |
+| 用途     | URL                                                     |
+| -------- | ------------------------------------------------------- |
+| 登录页   | https://pugc.yueduwuxian.com/fqvideo/login              |
+| 发布页   | https://pugc.yueduwuxian.com/fqvideo/home/publish-video |
+| 作品列表 | https://pugc.yueduwuxian.com/fqvideo/home/video-list    |
 
-| 能力                    | 状态                                           |
-| ----------------------- | ---------------------------------------------- |
-| GUI 添加账号 / 登录窗口 | 可用                                           |
-| GUI / CLI 自动发布      | 待完善（会提示「番茄视频自动发布流程待完善」） |
-| 登录 Cookie 自动检测    | 待完善                                         |
-| 发布审核状态回查        | 待完善                                         |
+| 能力                    | 状态   |
+| ----------------------- | ------ |
+| GUI 添加账号 / 登录窗口 | 可用   |
+| GUI / CLI 自动发布      | 可用   |
+| 登录 Cookie 自动检测    | 可用（`sessionid`） |
+| 发布审核状态回查        | 可用   |
 
 **CLI / 配置别名**：`fqsp`、`fanqie`、`fq`、`番茄视频`
 
-**主要代码位置**（完善发布流程时改这些文件）：
+**主要代码位置**：
 
-| 文件                               | 说明                           |
-| ---------------------------------- | ------------------------------ |
-| `src/renderer/utils/configUrl.js`  | 渲染层 URL（与主进程保持一致） |
-| `src/main/config/ptConfig.js`      | 主进程 / CLI 用 URL            |
-| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑（当前为占位）     |
-| `src/main/services/zt/fqsp.js`     | 审核状态查询（当前为占位）     |
-| `src/main/services/getCookie.js`   | 登录态 Cookie 规则（待补充）   |
+| 文件                               | 说明               |
+| ---------------------------------- | ------------------ |
+| `src/renderer/utils/configUrl.js`  | 渲染层 URL         |
+| `src/main/config/ptConfig.js`      | 主进程 / CLI 用 URL |
+| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑       |
+| `src/main/services/zt/fqsp.js`     | 审核状态查询       |
+| `src/main/services/getCookie.js`   | 登录态 Cookie 规则 |
 
 侧栏图标（可选）：将 `fqsp.png` 放到 `src/renderer/layout/components/Sidebar/ptcion/`。
 
@@ -197,7 +197,7 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | 子命令                | 支持平台                                                                                             | 作用                                                           |
 | --------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
 | `cli login`           | **抖音**（`-p dy`）、**视频号**（`-p sph`）                                                          | 终端二维码扫码登录                                             |
-| `cli publish`         | **7 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`）；`fqsp` 已注册但发布逻辑待完善 | 发布视频（本地路径或 http(s) URL，与 GUI「本地视频发布」等价） |
+| `cli publish`         | **8 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs \| fqsp`） | 发布视频（本地路径或 http(s) URL，与 GUI「本地视频发布」等价） |
 | `cli publish-article` | **掘金**（`juejin`）                                                                                 | 发布文章（`--content` 或 `--file`）                            |
 | `cli accounts`        | 全平台（含 `fqsp` 番茄视频）                                                                         | 列出所有账号并实时检测 cookie 登录态                           |
 | `cli history`         | 全平台（含 `fqsp` 番茄视频）                                                                         | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤  |
