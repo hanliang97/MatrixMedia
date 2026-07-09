@@ -457,4 +457,10 @@ yarn build
 
 ## Star History
 
-[![Star History Chart](https://api.star-history.com/svg?repos=hanliang97/MatrixMedia&type=Date)](https://star-history.com/#hanliang97/MatrixMedia&Date)
+<a href="https://www.star-history.com/?type=date&repos=hanliang97%2FMatrixMedia">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&theme=dark&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
+ </picture>
+</a>
