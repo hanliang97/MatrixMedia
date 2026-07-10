@@ -698,7 +698,8 @@ export default {
       const bookName =
         (this.form.title && this.form.title.trim()) || this.defaultBookName();
       const bt1 = this.form.bt1.trim();
-      const bt2 = (this.form.bt2 && this.form.bt2.trim()) || bt1;
+      const bt2Raw = (this.form.bt2 && this.form.bt2.trim()) || "";
+      const bt2 = bt2Raw || bt1; // 保留 bt1 回退，供小红书等平台使用
       return {
         bookName,
         textType: "local",
@@ -707,6 +708,7 @@ export default {
             this.republishTextOtherName || fileStem(this.localFilePath),
           bt1,
           bt2,
+          bt2Filled: bt2Raw, // 仅用户实际填写时才有值，sph.js 据此决定是否填写短标题
           bq: formatBqFromTags(this.bqTags),
           bdText: "",
         },
@@ -1113,7 +1115,8 @@ export default {
         return;
       }
       const hasVideohao = platforms.some(this.isVideohaoPlatform);
-      if (hasVideohao) {
+      if (hasVideohao && this.form.bt2 && this.form.bt2.trim()) {
+        // 仅当用户填写了短标题时才校验规则（6～16 字、无特殊标点）
         const bt2Error = this.validateVideohaoBt2(this.form.bt2);
         if (bt2Error) {
           this.$message.warning(bt2Error);
@@ -1167,6 +1170,7 @@ export default {
                 selectedFile,
                 bt: video.data.bt1,
                 bt2: video.data.bt2,
+                bt2Filled: video.data.bt2Filled,
                 bq: video.data.bq,
                 creativeStatement: video.data.creativeStatement,
                 filePath: this.localFilePath,
@@ -1237,6 +1241,7 @@ export default {
               selectedFile,
               bt: video.data.bt1,
               bt2: video.data.bt2,
+              bt2Filled: video.data.bt2Filled,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
@@ -1265,6 +1270,7 @@ export default {
               selectedFile,
               bt: video.data.bt1,
               bt2: video.data.bt2,
+              bt2Filled: video.data.bt2Filled,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
               filePath: this.localFilePath,
@@ -1502,13 +1508,16 @@ export default {
         const selectedFile = fileRow.fileName;
         const textOtherName = stem;
 
-        if (hasVideohao) {
+        // 视频号短标题非必填：bt2(=bt1) 符合规则才填，不符合则跳过不阻断
+        const bt2FilledForVideohao = (() => {
+          if (!hasVideohao) return "";
           const bt2Error = this.validateVideohaoBt2(bt2);
           if (bt2Error) {
-            this.$message.warning(`文件 ${fileRow.fileName}: ${bt2Error}`);
-            return;
+            console.warn(`文件 ${fileRow.fileName}: ${bt2Error}，将跳过视频号短标题`);
+            return "";
           }
-        }
+          return bt2;
+        })();
 
         platforms.sort((a, b) => {
           if (a.pt.includes("视频号")) return -1;
@@ -1550,6 +1559,7 @@ export default {
                   selectedFile,
                   bt: bt1,
                   bt2,
+                  bt2Filled: bt2FilledForVideohao,
                   bq,
                   creativeStatement,
                   filePath,
@@ -1589,6 +1599,7 @@ export default {
               textOtherName,
               bt1,
               bt2,
+              bt2Filled: bt2FilledForVideohao,
               bq,
               bdText: "",
               creativeStatement,
@@ -1621,6 +1632,7 @@ export default {
               selectedFile,
               bt: bt1,
               bt2,
+              bt2Filled: bt2FilledForVideohao,
               bq,
               creativeStatement,
               filePath,

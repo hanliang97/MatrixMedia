@@ -129,6 +129,7 @@ export function buildTaskPayloadFromRecord(record) {
       textOtherName: record.textOtherName || "",
       bt1: record.bt || "",
       bt2: record.bt2 || record.bt || "",
+      bt2Filled: record.bt2Filled || "",
       bq: record.bq || "",
       bdText: "",
       creativeStatement: normalizeCreativeStatement(record.creativeStatement),

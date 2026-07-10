@@ -8,7 +8,8 @@ export function sanitizeVideohaoBt2Input(value) {
 export function validateVideohaoBt2(value) {
   const bt2 = String(value || "").trim();
   if (!bt2) {
-    return "发布视频号时，请填写概括短标题";
+    // 短标题非必填，空值不报错
+    return "";
   }
   const len = Array.from(bt2).length;
   if (len < 6 || len > 16) {

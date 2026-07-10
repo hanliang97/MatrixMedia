@@ -26,6 +26,70 @@ async function waitForBlblAutoCover(page) {
   );
 }
 
+/**
+ * 视频上传成功后默认设置封面：
+ * 点击「封面设置」→ 弹窗中滑块往左滑 10px → 点击「完成」。
+ * 任何步骤失败均跳过，不阻断发布。
+ */
+async function handleBlblCover(page) {
+  try {
+    // 1. 等待并点击封面设置入口（cover-empty.failed 含"封面设置"文案）
+    //    封面加载可能延迟，给足等待时间
+    const coverEntry = await page.waitForSelector(".cover-empty.failed", {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
+    await coverEntry.click({ delay: 200 });
+    console.log("[blbl] 已点击封面设置入口");
+
+    // 2. 等待封面编辑弹窗
+    await page.waitForSelector(".cover-editor.bcc-dialog__wrap", {
+      visible: true,
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
+    await page.waitForTimeout(1000); // 等待弹窗内组件渲染
+
+    // 3. 滑块往左滑 10px
+    const handle = await page.waitForSelector(".vue-slider-dot-handle", {
+      visible: true,
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
+    const box = await handle.boundingBox();
+    if (box) {
+      const cx = box.x + box.width / 2;
+      const cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      await page.mouse.move(cx - 10, cy, { steps: 5 });
+      await page.mouse.up();
+      console.log("[blbl] 滑块已往左滑 10px");
+    }
+
+    await page.waitForTimeout(500);
+
+    // 4. 点击「完成」按钮
+    const submitClicked = await page.evaluate(() => {
+      const container = document.querySelector(".cover-editor") || document;
+      const btns = container.querySelectorAll(".button.submit");
+      for (const btn of btns) {
+        if ((btn.textContent || "").trim().includes("完成")) {
+          btn.click();
+          return true;
+        }
+      }
+      return false;
+    });
+    if (submitClicked) {
+      console.log("[blbl] 封面设置完成");
+    } else {
+      console.warn("[blbl] 未找到封面完成按钮，跳过");
+    }
+
+    await page.waitForTimeout(1000); // 等待弹窗关闭
+  } catch (e) {
+    console.warn("[blbl] 封面设置失败，跳过:", e?.message || e);
+  }
+}
+
 async function selectBlblCreativeStatement(page, data) {
   const value = data.data && data.data.creativeStatement;
   console.log("[blbl] creativeStatement 值 =", value);
@@ -172,11 +236,7 @@ export default async function (page, data, window, event) {
     console.warn("哔哩哔哩视频上传未完成，跳过后续步骤:", e?.message || e);
   }
 
-  try {
-    await waitForBlblAutoCover(page);
-  } catch (e) {
-    console.warn("哔哩哔哩封面自动生成未完成（可忽略，发布失败时再在窗口内处理）:", e?.message || e);
-  }
+  await handleBlblCover(page);
 
   try {
     await page.waitForTimeout(500);

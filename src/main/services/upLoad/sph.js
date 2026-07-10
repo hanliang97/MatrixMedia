@@ -119,14 +119,19 @@ export default async function (page, data, window, event, onFinish) {
     // 传统input/textarea的操作
     await titleInput.click();
     await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });
-    const sel2 =
-      'wujie-app.wujie_iframe >>> input[placeholder="填写短标题有机会获得更多流量"]';
-    const uploadInput2 = await page.waitForSelector(sel2, {
-      timeout: WAIT_SELECTOR_APPEAR_MS,
-    });
-    await uploadInput2.click();
-    let newBt = data.data.bt2.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, " ");
-    await page.keyboard.type(newBt, { delay: 50 });
+    const shortTitle = (data.data.bt2Filled || "").trim();
+    if (shortTitle) {
+      const sel2 =
+        'wujie-app.wujie_iframe >>> input[placeholder="填写短标题有机会获得更多流量"]';
+      const uploadInput2 = await page.waitForSelector(sel2, {
+        timeout: WAIT_SELECTOR_APPEAR_MS,
+      });
+      await uploadInput2.click();
+      let newBt = shortTitle.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, " ");
+      await page.keyboard.type(newBt, { delay: 50 });
+    } else {
+      console.log("视频号短标题未填写，跳过");
+    }
   } catch (err) {
     console.error("❌ 输入失败:", err);
   }
