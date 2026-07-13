@@ -27,6 +27,9 @@
           <el-button type="warning" plain @click="openQQGroup"
             >加入作者QQ群</el-button
           >
+          <el-button type="danger" plain @click="openGitHubStar"
+            >⭐ GitHub Star</el-button
+          >
         </div>
       </div>
     </div>
@@ -631,6 +634,9 @@ export default {
         "https://qm.qq.com/cgi-bin/qm/qr?k=NLsaKNd7gqbOeW_JXNg7bRreFtcLKXmp&jump_from=webapi&authKey=Nd/DrSrJWaH+Nip9gEIGse4LdHWpLkp8bVfcKwinOk4hI8XfNTDvGf/smQgZvWHT",
         "_blank"
       );
+    },
+    openGitHubStar() {
+      window.open("https://github.com/hanliang97/MatrixMedia", "_blank");
     },
     async selectVideoFile() {
       const path = await ipcRenderer.invoke("dialog:openVideoFile");
