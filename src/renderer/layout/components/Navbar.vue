@@ -36,10 +36,11 @@
         <el-form-item label="平台">
           <el-select v-model="pushData.pt" placeholder="请选择平台">
             <el-option
-              v-for="(val, key) in ptConfig"
-              :key="key"
-              :value="key"
-              :label="key"
+              v-for="item in platformOptions"
+              :key="item.key"
+              :value="item.key"
+              :label="item.key"
+              :disabled="item.disabled"
             />
           </el-select>
         </el-form-item>
@@ -84,6 +85,29 @@ export default {
     mediaMenuItemIndex() {
       return this.getAccoutIndex || MEDIA_MENU_NO_ACCOUNT;
     },
+    // 当前分组已占用的平台，避免同一分组重复添加
+    usedPtsForGroup() {
+      const phone = String(this.pushData.phone || "").trim();
+      if (!phone) return new Set();
+      try {
+        const tree = JSON.parse(localStorage.getItem("accountTree") || "{}");
+        const group = tree[phone];
+        if (!group || !Array.isArray(group.children)) return new Set();
+        return new Set(
+          group.children
+            .map((c) => (c.meta && c.meta.pt) || c.path || (c.meta && c.meta.title))
+            .filter(Boolean)
+        );
+      } catch (e) {
+        return new Set();
+      }
+    },
+    platformOptions() {
+      return Object.keys(this.ptConfig).map((key) => ({
+        key,
+        disabled: this.usedPtsForGroup.has(key),
+      }));
+    },
   },
   created() {
     this.refreshAccountMenuIndex();
@@ -94,6 +118,12 @@ export default {
     "$route.path"(path) {
       this.applyIsRouteFromPath(path);
       this.syncActiveIndexToCurrentRoute();
+    },
+    "pushData.phone"() {
+      // 分组变更后，已选平台若对该分组不可用则清空
+      if (this.pushData.pt && this.usedPtsForGroup.has(this.pushData.pt)) {
+        this.pushData.pt = "";
+      }
     },
   },
   methods: {
@@ -147,6 +177,10 @@ export default {
       }
       if (!this.pushData.pt) {
         this.$message.warning("请选择平台");
+        return;
+      }
+      if (this.usedPtsForGroup.has(this.pushData.pt)) {
+        this.$message.warning("该分组已添加过此平台，请勿重复添加");
         return;
       }
       dataRequest({
