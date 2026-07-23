@@ -122,8 +122,11 @@ electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
 
 1. **登录态**：CLI 与 GUI 共用同一 `partition` 会话（`userData` 固定为 `matrix-video`）。抖音和视频号可使用 **`cli login`** 在终端完成扫码登录；其它平台可先在 GUI 登录，或保证该 `partition` 已有有效 Cookie。
 2. **与 GUI 同时运行**：CLI 模式不会申请单实例锁；若与 GUI 同时使用同一账号 partition，可能导致会话冲突，建议错峰使用。
-3. **定时发布**：`--publish-at "YYYY-MM-DD HH:mm:ss"` 只支持一次性明确时间点，不支持每日/每周/每月。定时任务会写入发布历史，状态为“等待定时发布”；如果应用关闭导致错过执行时间，下次启动会标记为“任务过期”，可在视频管理中重新发布。
-4. **Linux 打包**：使用 `yarn build:linux` 生成 AppImage（需在本机构建环境安装相应依赖）。
+3. **进程生命周期**：CLI 仍会启动一个 Electron 主进程，只是不显示 GUI。命令完成、参数失败或业务失败后会主动退出；执行发布期间进程存在属于正常现象。
+4. **启动诊断**：终端会依次输出 Puppeteer 初始化、Electron ready、CLI 参数识别和最终退出码。初始化超过 15 秒会以退出码 `1` 结束并打印明确错误，不会无限静默等待。
+5. **登录失效**：视频号发布页若跳转到 `channels.weixin.qq.com/login.html`，CLI 会立即提示重新登录并以退出码 `3` 结束，不再按普通 URL 不匹配重复重试。
+6. **定时发布**：`--publish-at "YYYY-MM-DD HH:mm:ss"` 只支持一次性明确时间点，不支持每日/每周/每月。定时任务会写入发布历史，状态为“等待定时发布”；如果应用关闭导致错过执行时间，下次启动会标记为“任务过期”，可在视频管理中重新发布。
+7. **Linux 打包**：使用 `yarn build:linux` 生成 AppImage（需在本机构建环境安装相应依赖）。
 
 ## 发布掘金文章
 

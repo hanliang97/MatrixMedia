@@ -31,6 +31,9 @@
         </li>
         <li>CLI 与 GUI 共用同一 session partition，登录态可复用</li>
         <li>
+          CLI 会临时启动不显示 GUI 的 Electron 进程，任务结束后自动退出
+        </li>
+        <li>
           HTTP API 需 GUI 主进程已启动（默认端口 <code>{{ httpPort }}</code
           >）
         </li>
