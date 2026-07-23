@@ -56,7 +56,7 @@ cd mcp && npm install && npm run build
 | ----------------- | --------------------- | ---------------------------------------------- |
 | `list_accounts`   | `cli accounts --json` | 列出本机已登录账号，支持按平台过滤             |
 | `list_history`    | `cli history --json`  | 查询本机发布记录，支持按平台/状态/天数过滤     |
-| `publish_video`   | `cli publish ...`     | 发布视频（最长约 35 分钟，支持定时发布）       |
+| `publish_video`   | `cli publish ...`     | 发布视频（最长约 35 分钟，支持草稿和定时发布） |
 | `publish_article` | `cli publish-article ...` | 发布掘金文章（需已登录掘金账号）           |
 
 ### list_accounts
@@ -87,6 +87,27 @@ cd mcp && npm install && npm run build
 | `address`   | 否   | 地址（百家号等）                   |
 | `publishAt` | 否   | 定时发布，`YYYY-MM-DD HH:mm`       |
 | `show`      | 否   | 是否显示底层浏览器窗口             |
+| `draft`     | 否   | `true` 时保存到草稿箱，不直接发布  |
+| `sphLink`   | 否   | 视频号专属链接配置；当前为 `{ "type": "product", "value": "商品编号" }` |
+
+视频号商品草稿调用参数示例：
+
+```json
+{
+  "platform": "sph",
+  "file": "D:\\videos\\a.mp4",
+  "title": "视频标题",
+  "phone": "13800138000",
+  "bt2": "视频号短标题",
+  "draft": true,
+  "sphLink": {
+    "type": "product",
+    "value": "10000591263144"
+  }
+}
+```
+
+当 `platform` 不是 `sph` 时，`sphLink` 会被忽略。若商品添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
 
 ### publish_article
 

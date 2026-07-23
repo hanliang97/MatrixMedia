@@ -127,6 +127,8 @@
 | `bt2`                | 否     | 视频号短标（含视频号时强烈建议填写）                                                                                                     |
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分后再按平台补 `#` 或去 `#`                                                       |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
+| `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
+| `platformOptions`    | 否     | 平台专属参数容器；视频号商品使用 `platformOptions.sph.link`，不会应用到其他平台                                                          |
 | `creativeStatement`  | 否     | 全局创作声明，等同 GUI「批量设置创作声明」；支持 value、中文 label 或平台页面原文案（如 `内容由AI生成`）                                 |
 | `creativeStatements` | 否     | 按平台覆盖声明，key 用 code 或中文名，如 `{ "dy": "ai_generated", "blbl": "fiction" }`；某平台不支持所选值时回退 `none`                  |
 
@@ -151,6 +153,7 @@
 
 - 参数错误：HTTP `400`
 - 单平台发布失败（如未登录）：HTTP `200`，但 `success: false`、`exitCode: 3`
+- 视频号链接添加失败但草稿保存成功：HTTP `200`，`success: false`、`status: needs_attention`、`exitCode: 4`
 - 多平台：HTTP 只表示任务是否提交成功，最终结果请查询发布记录
 - 服务已配置 CORS，浏览器或本机脚本均可调用
 
@@ -169,6 +172,28 @@ curl -X POST http://127.0.0.1:30088/publish \
     "tags": "减脂 健身"
   }'
 ```
+
+视频号选择商品并保存草稿：
+
+```bash
+curl -X POST http://127.0.0.1:30088/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "sph",
+    "phone": "13800138000",
+    "file": "/Users/me/video.mp4",
+    "title": "视频标题",
+    "bt2": "视频号短标题",
+    "draft": true,
+    "platformOptions": {
+      "sph": {
+        "link": { "type": "product", "value": "10000591263144" }
+      }
+    }
+  }'
+```
+
+`platformOptions.sph` 只会被视频号任务读取。多平台发布时其他平台会忽略它；如果不同视频号账号使用不同商品，可在各个 `platforms[]` 对象内分别覆盖 `platformOptions.sph.link`。
 
 远程视频 URL：
 

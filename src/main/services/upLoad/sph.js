@@ -1,5 +1,7 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
+import { attachSphVideoLink } from "./sphLink.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -90,6 +92,68 @@ async function tryDeclareOriginal(page) {
   }
 }
 
+async function clickSphDraftButton(page) {
+  const draftBtn = await page.waitForSelector(
+    "wujie-app.wujie_iframe >>> .form-btns>div:first-child button",
+    { timeout: WAIT_SELECTOR_APPEAR_MS }
+  );
+  if (!draftBtn) throw new Error("未找到视频号保存草稿按钮");
+  await draftBtn.click({ delay: 200 });
+  await page.waitForTimeout(1000);
+}
+
+async function clickSphPublishButton(page) {
+  const publishBtn = await page.waitForSelector(
+    "wujie-app.wujie_iframe >>> .form-btns>div:last-child button",
+    { timeout: WAIT_SELECTOR_APPEAR_MS }
+  );
+  if (!publishBtn) throw new Error("未找到视频号发布按钮");
+  await publishBtn.click({ delay: 200 });
+  await page.waitForTimeout(1000);
+}
+
+async function waitSphUploadProcessing(page) {
+  await pollPageUntil(
+    page,
+    () => {
+      const app = document.querySelector("wujie-app.wujie_iframe");
+      if (!app || !app.shadowRoot) return false;
+      const tag = app.shadowRoot.querySelector(".tag-inner");
+      return !!(tag && tag.textContent.trim() === "删除");
+    },
+    WAIT_UPLOAD_PROCESSING_MS,
+    2000,
+    "等待视频处理超时（未出现「删除」标签）"
+  );
+  await page.waitForTimeout(2000);
+}
+
+async function fallbackLinkFailureToDraft(page, data, window, event, error) {
+  const detail =
+    (error && error.message) || (typeof error === "string" ? error : String(error));
+  try {
+    // 链接在表单前半段填写；失败时仍需等待视频处理完成后才能可靠保存草稿。
+    await waitSphUploadProcessing(page);
+    await clickSphDraftButton(page);
+    event.reply("puppeteerFile-done", {
+      ...data,
+      status: true,
+      outcome: "draft_saved",
+      publishMode: "draft",
+      publishToDraft: true,
+      needsAttention: true,
+      failureStage: "video_link",
+      message: `视频号链接添加失败，视频已保存为草稿：${detail}`,
+    });
+    maybeClosePublishWindow({ ...data, closeWindowAfterPublish: true }, window);
+    return true;
+  } catch (draftError) {
+    const draftDetail =
+      (draftError && draftError.message) || String(draftError || "未知错误");
+    throw new Error(`视频号链接添加失败：${detail}；保存草稿也失败：${draftDetail}`);
+  }
+}
+
 export default async function (page, data, window, event, onFinish) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
@@ -136,39 +200,33 @@ export default async function (page, data, window, event, onFinish) {
     console.error("❌ 输入失败:", err);
   }
 
-  await tryDeclareOriginal(page);
-
   try {
-    await pollPageUntil(
-      page,
-      () => {
-        const app = document.querySelector("wujie-app.wujie_iframe");
-        if (!app || !app.shadowRoot) return false;
-        const tag = app.shadowRoot.querySelector(".tag-inner");
-        return !!(tag && tag.textContent.trim() === "删除");
-      },
-      WAIT_UPLOAD_PROCESSING_MS,
-      2000,
-      "等待视频处理超时（未出现「删除」标签）"
-    );
-
-    await page.waitForTimeout(2000);
-    // 发布到草稿 第一个按钮
-    const publishDraftBtn = await page.waitForSelector(
-      "wujie-app.wujie_iframe >>> .form-btns>div:first-child button",
-      { timeout: WAIT_SELECTOR_APPEAR_MS }
-    );
-    await publishDraftBtn.click({ delay: 200 });
-    if (!isDraftMode) {
-      // 发布最后一个按钮
-      const publishBtn = await page.waitForSelector(
-        "wujie-app.wujie_iframe >>> .form-btns>div:last-child button",
-        { timeout: WAIT_SELECTOR_APPEAR_MS }
-      );
-      await publishBtn.click({ delay: 200 });
-      await page.waitForTimeout(1000);
-      await publishBtn.click({ delay: 200 });
+    const link = resolveVideoLinkOption("视频号", data.publishOptions);
+    if (link && link.enabled === true) {
+      try {
+        const selectedLink = await attachSphVideoLink(page, link);
+        console.log(
+          `[sph][link] 已添加 ${selectedLink.type} ${selectedLink.value}: ${selectedLink.label || ""}`
+        );
+      } catch (linkError) {
+        console.error("[sph][link] 添加链接失败:", linkError);
+        const handled = await fallbackLinkFailureToDraft(
+          page,
+          data,
+          window,
+          event,
+          linkError
+        );
+        if (handled) return;
+      }
     }
+
+    await tryDeclareOriginal(page);
+    await waitSphUploadProcessing(page);
+
+    // 所有表单项（包括商品）完成后，草稿和发布只能二选一执行。
+    if (isDraftMode) await clickSphDraftButton(page);
+    else await clickSphPublishButton(page);
     console.log(
       isDraftMode ? "✅ 视频号视频已保存草稿" : "✅ 视频号视频上传成功"
     );

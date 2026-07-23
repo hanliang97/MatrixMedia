@@ -88,6 +88,9 @@ electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标�
 | `--publish-at`            | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`；创建后立即进入发布历史         |
 | `--show`                  | 当前 CLI 会忽略，仍后台运行                                                |
 | `--no-close-window`       | CLI 下无效，仅与 GUI 显示窗口场景有关                                      |
+| `--draft`                 | 保存到平台草稿箱，不直接发布                                                |
+| `--sph-link-type`         | 视频号链接类型，当前支持 `none` / `product`；其他平台忽略                  |
+| `--sph-link-value`        | 视频号商品编号，`--sph-link-type product` 时必填                           |
 
 完整说明请执行：
 
@@ -103,6 +106,17 @@ electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标�
 | 1   | 未捕获异常                     |
 | 2   | 参数错误                       |
 | 3   | 任务失败（如未登录、上传失败） |
+| 4   | 视频号链接添加失败，视频已转存草稿，需人工检查 |
+
+视频号选择商品并保存草稿：
+
+```bash
+electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
+  -t "视频标题" --bt2 "视频号短标题" --draft \
+  --sph-link-type product --sph-link-value 10000591263144
+```
+
+视频号链接参数属于视频号专属能力。即使误传给抖音、B站等其他平台，也会被忽略，不会阻断任务。
 
 ### 注意事项
 

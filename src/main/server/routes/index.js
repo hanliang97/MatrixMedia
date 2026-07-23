@@ -80,6 +80,7 @@ router.post("/publish", async function (req, res) {
       result.exitCode === 2 && !parsed.multi ? 400 : success ? 200 : 200;
 
     const response = { ...result };
+    response.success = success;
     if (parsed.skipped && parsed.skipped.length > 0) {
       response.skipped = parsed.skipped;
     }

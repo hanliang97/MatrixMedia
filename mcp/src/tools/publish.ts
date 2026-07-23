@@ -65,6 +65,26 @@ export const publishVideoTool: Tool = {
         type: 'boolean',
         description: 'If true, show the underlying browser window.',
       },
+      draft: {
+        type: 'boolean',
+        description: 'If true, save the video to the platform draft box instead of publishing it.',
+      },
+      sphLink: {
+        type: 'object',
+        description: 'Optional Shipinhao-only link configuration. Ignored for other platforms.',
+        properties: {
+          type: {
+            type: 'string',
+            enum: ['none', 'product'],
+            description: 'Shipinhao link type. product selects a product by ID.',
+          },
+          value: {
+            type: 'string',
+            description: 'Shipinhao product ID. Required when type=product.',
+          },
+        },
+        required: ['type'],
+      },
     },
     required: ['platform', 'file', 'title', 'phone'],
   },
@@ -83,6 +103,8 @@ export async function handlePublishVideo(
   const address = args.address;
   const publishAt = args.publishAt;
   const show = args.show;
+  const draft = args.draft;
+  const sphLink = args.sphLink;
 
   if (typeof phone !== 'string' || phone.length === 0) {
     throw new Error('phone must be non-empty string');
@@ -94,6 +116,20 @@ export async function handlePublishVideo(
 
   // Derive partition from phone + platform automatically
   const partition = derivePartition(phone, String(platform));
+
+  let sphLinkArgs: string[] = [];
+  if (String(platform) === 'sph' && sphLink && typeof sphLink === 'object') {
+    const link = sphLink as Record<string, unknown>;
+    const type = String(link.type || '');
+    const value = link.value == null ? '' : String(link.value).trim();
+    if (type === 'product' && !value) {
+      throw new Error('sphLink.value is required when sphLink.type=product');
+    }
+    sphLinkArgs = [
+      '--sph-link-type', type,
+      ...(value ? ['--sph-link-value', value] : []),
+    ];
+  }
 
   const cliArgs: string[] = [
     'publish',
@@ -109,6 +145,8 @@ export async function handlePublishVideo(
     ...(address ? ['--address', String(address)] : []),
     ...(publishAt ? ['--publish-at', String(publishAt)] : []),
     ...(show ? ['--show'] : []),
+    ...(draft ? ['--draft'] : []),
+    ...sphLinkArgs,
   ];
 
   const result = await runCli(cliArgs, { onProgress });
@@ -128,8 +166,19 @@ export async function handlePublishVideo(
       });
     }
     return JSON.stringify({
-      status: 'success',
+      status: (result.lastJson as any)?.resultStatus ?? 'success',
+      publishMode: (result.lastJson as any)?.publishMode,
       message: (result.lastJson as any)?.message ?? '上传成功',
+    });
+  }
+
+  if (result.exitCode === 4) {
+    return JSON.stringify({
+      status: 'needs_attention',
+      publishMode: 'draft',
+      outcome: (result.lastJson as any)?.outcome ?? 'draft_saved',
+      needsAttention: true,
+      message: (result.lastJson as any)?.message ?? '已转存草稿，请检查视频号链接',
     });
   }
 

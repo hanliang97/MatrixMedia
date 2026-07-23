@@ -624,6 +624,14 @@ export default {
           lastPublishAt: Date.now(),
         },
       });
+      if (donePayload.needsAttention) {
+        this.$notify({
+          title: "发布任务需要处理",
+          message: donePayload.message || "任务已转为草稿，请前往平台检查",
+          type: "warning",
+          duration: 0,
+        });
+      }
       this.loadRecords();
     },
     openFeedback() {

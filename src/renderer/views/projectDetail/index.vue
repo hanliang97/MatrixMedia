@@ -371,6 +371,16 @@ export default {
           required: "否",
           desc: "定时发布 YYYY-MM-DD HH:mm:ss（多平台时需全部一致）",
         },
+        {
+          field: "draft",
+          required: "否",
+          desc: "true 时保存到草稿箱，不直接发布",
+        },
+        {
+          field: "platformOptions",
+          required: "否",
+          desc: "平台专属参数；视频号商品使用 platformOptions.sph.link",
+        },
       ],
       mcpTools: [
         {
@@ -385,7 +395,7 @@ export default {
         },
         {
           name: "publish_video",
-          desc: "发布视频到指定平台（最长约 35 分钟，支持定时发布）",
+          desc: "发布视频到指定平台（支持草稿、定时发布和视频号商品链接）",
           cli: "cli publish ...",
         },
         {
@@ -412,6 +422,7 @@ export default {
         { code: "1", desc: "未捕获异常" },
         { code: "2", desc: "参数错误" },
         { code: "3", desc: "业务失败（未登录、上传失败等）" },
+        { code: "4", desc: "视频号链接失败，已转存草稿，需人工检查" },
       ],
       curlPublishExample: `curl -X POST http://127.0.0.1:30088/publish \\
   -H "Content-Type: application/json" \\
@@ -460,6 +471,9 @@ matrixmedia cli login -p dy --phone 13800138000
 
 # 发布视频
 matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
+
+# 视频号选择商品并保存草稿
+matrixmedia cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 -t "标题" --bt2 "视频号短标题" --draft --sph-link-type product --sph-link-value 10000591263144
 
 # 发布掘金文章
 matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md

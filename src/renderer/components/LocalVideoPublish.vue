@@ -153,7 +153,11 @@
       >
         <span
           class="custom-tree-node"
-          :class="{ 'platform-leaf-node': !!data.url }"
+          :class="{
+            'platform-leaf-node': !!data.url,
+            'platform-link-capable':
+              !!data.url && platformSupportsVideoLink(data.pt),
+          }"
           slot-scope="{ data }"
         >
           <template v-if="!data.url">
@@ -211,6 +215,40 @@
                   :value="opt.value"
                 />
               </el-select>
+            </div>
+            <div
+              v-if="
+                platformSupportsVideoLink(data.pt) &&
+                isPlatformNodeChecked(data.id) &&
+                !dirBatchFiles.length
+              "
+              class="platform-link-row"
+            >
+              <span class="platform-link-label">视频号链接（选填）</span>
+              <div class="platform-link-controls">
+                <el-select
+                  :value="getPlatformVideoLinkType(data.id, data.pt)"
+                  size="mini"
+                  class="platform-link-type"
+                  @input="setPlatformVideoLinkType(data.id, data.pt, $event)"
+                >
+                  <el-option
+                    v-for="opt in getPlatformVideoLinkOptions(data.pt)"
+                    :key="opt.type"
+                    :label="opt.label"
+                    :value="opt.type"
+                  />
+                </el-select>
+                <el-input
+                  v-if="platformVideoLinkNeedsValue(data)"
+                  :value="getPlatformVideoLinkValue(data.id)"
+                  size="mini"
+                  clearable
+                  :maxlength="getPlatformVideoLinkMaxlength(data)"
+                  :placeholder="getPlatformVideoLinkPlaceholder(data)"
+                  @input="setPlatformVideoLinkValue(data.id, data.pt, $event)"
+                />
+              </div>
             </div>
           </template>
         </span>
@@ -387,6 +425,14 @@ import {
 } from "../../shared/xhsPublishPolicy.js";
 import { resolveEffectivePublishMode } from "../../shared/accountPublishSettings.js";
 import {
+  buildVideoLinkOption,
+  getSupportedVideoLinkTypes,
+  getVideoLinkTypeCapability,
+  platformSupportsVideoLink,
+  resolveVideoLinkOption,
+  validateVideoLinkValue,
+} from "../../shared/videoLink.js";
+import {
   isBt2SelectAllShortcut,
   isVideohaoBt2AllowedChar,
   sanitizeVideohaoBt2Input,
@@ -437,6 +483,7 @@ export default {
       bqTags: [],
       bqComposing: false,
       platformStatements: {},
+      platformVideoLinks: {},
       checkedPlatformIds: [],
       checkAllPlatforms: false,
       checkAllIndeterminate: false,
@@ -508,6 +555,7 @@ export default {
   },
   methods: {
     platformSupportsCreativeStatement,
+    platformSupportsVideoLink,
     /** 把字符串按 # / 空格 / 逗号 / 分号 / 顿号 切成多个标签 */
     _splitBqTokens(raw) {
       if (!raw) return [];
@@ -601,6 +649,7 @@ export default {
       this.bqTags = [];
       this.bqComposing = false;
       this.resetPlatformStatementState();
+      this.resetPlatformVideoLinks();
       this.form = { title: defaultTitle, bt1: "", bt2: "" };
       this.thisShow = false;
       this.closeWindow = true;
@@ -626,6 +675,7 @@ export default {
       };
       this.bqTags = parseBqToTags(form.bq);
       this.resetPlatformStatementState();
+      this.resetPlatformVideoLinks();
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -648,6 +698,7 @@ export default {
           this.$refs.tree.setCheckedKeys(checkedKeys);
         }
         this.applyRepublishPlatformStatements(form.creativeStatement);
+        this.applyRepublishPlatformVideoLinks();
         this.onTreeCheck();
       });
       return true;
@@ -715,8 +766,18 @@ export default {
       };
     },
     buildPlatformVideoPayload(platformNode, baseVideo) {
+      const link = buildVideoLinkOption(
+        platformNode.pt,
+        this.getPlatformVideoLinkType(platformNode.id, platformNode.pt),
+        this.getPlatformVideoLinkValue(platformNode.id)
+      );
       return {
         ...baseVideo,
+        publishOptions: {
+          link: link.ok
+            ? link.value
+            : buildVideoLinkOption(platformNode.pt, "", "").value,
+        },
         data: {
           ...baseVideo.data,
           creativeStatement: this.getPlatformStatement(platformNode.id),
@@ -729,6 +790,67 @@ export default {
       this.checkAllPlatforms = false;
       this.checkAllIndeterminate = false;
       this.batchCreativeStatement = CREATIVE_STATEMENT_DEFAULT;
+    },
+    resetPlatformVideoLinks() {
+      this.platformVideoLinks = {};
+    },
+    getPlatformVideoLinkOptions(platform) {
+      return getSupportedVideoLinkTypes(platform);
+    },
+    getPlatformVideoLinkType(nodeId, platform) {
+      const state = this.platformVideoLinks[nodeId];
+      if (state && state.type) return state.type;
+      const first = this.getPlatformVideoLinkOptions(platform)[0];
+      return first ? first.type : "";
+    },
+    getPlatformVideoLinkValue(nodeId) {
+      const state = this.platformVideoLinks[nodeId];
+      return String((state && state.value) || "");
+    },
+    setPlatformVideoLinkType(nodeId, platform, type) {
+      const old = this.platformVideoLinks[nodeId] || {};
+      this.$set(this.platformVideoLinks, nodeId, {
+        type: String(type || ""),
+        value: old.type === type ? String(old.value || "") : "",
+      });
+    },
+    setPlatformVideoLinkValue(nodeId, platform, value) {
+      this.$set(this.platformVideoLinks, nodeId, {
+        type: this.getPlatformVideoLinkType(nodeId, platform),
+        value: String(value || "").trim(),
+      });
+    },
+    getPlatformVideoLinkTypeInfo(data) {
+      return getVideoLinkTypeCapability(
+        data.pt,
+        this.getPlatformVideoLinkType(data.id, data.pt)
+      );
+    },
+    getPlatformVideoLinkPlaceholder(data) {
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return (info && info.placeholder) || "输入链接内容";
+    },
+    platformVideoLinkNeedsValue(data) {
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return Boolean(info && info.inputKind !== "none");
+    },
+    getPlatformVideoLinkMaxlength(data) {
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return (info && info.maxLength) || 512;
+    },
+    validatePlatformVideoLinks(platforms) {
+      for (const platform of platforms || []) {
+        if (!platformSupportsVideoLink(platform.pt)) continue;
+        const checked = validateVideoLinkValue(
+          platform.pt,
+          this.getPlatformVideoLinkType(platform.id, platform.pt),
+          this.getPlatformVideoLinkValue(platform.id)
+        );
+        if (!checked.ok) {
+          return `${platform.phone} ${platform.pt}：${checked.error}`;
+        }
+      }
+      return "";
     },
     getAllPlatformLeafNodes() {
       const leaves = [];
@@ -760,6 +882,20 @@ export default {
         }
       });
       this.platformStatements = next;
+    },
+    applyRepublishPlatformVideoLinks() {
+      const next = { ...this.platformVideoLinks };
+      this.getAllPlatformLeafNodes().forEach((node) => {
+        const rec = this.findRepublishRecord(node.pt, node.phone);
+        const link = resolveVideoLinkOption(
+          node.pt,
+          rec && rec.publishOptions
+        );
+        if (link && link.enabled && link.value) {
+          next[node.id] = { type: link.type, value: String(link.value) };
+        }
+      });
+      this.platformVideoLinks = next;
     },
     handleCheckAllPlatforms(checked) {
       if (!this.$refs.tree) return;
@@ -952,6 +1088,7 @@ export default {
       this.bqTags = [];
       this.bqComposing = false;
       this.resetPlatformStatementState();
+      this.resetPlatformVideoLinks();
       this.form = { title: "", bt1: "", bt2: "" };
       this.thisShow = false;
       this.closeWindow = true;
@@ -1103,6 +1240,11 @@ export default {
         this.$message.warning("请至少选择一个平台");
         return;
       }
+      const linkError = this.validatePlatformVideoLinks(platforms);
+      if (linkError) {
+        this.$message.warning(linkError);
+        return;
+      }
       if (
         isDraftMode &&
         platforms.some((p) => String(p.pt || "").includes("头条"))
@@ -1173,6 +1315,7 @@ export default {
                 bt2Filled: video.data.bt2Filled,
                 bq: video.data.bq,
                 creativeStatement: video.data.creativeStatement,
+                publishOptions: video.publishOptions,
                 filePath: this.localFilePath,
                 useragent: this.ptConfig[p.pt].useragent,
                 phone: p.phone,
@@ -1244,6 +1387,7 @@ export default {
               bt2Filled: video.data.bt2Filled,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
+              publishOptions: video.publishOptions,
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
               republishCount: oldRepublish + 1,
@@ -1273,6 +1417,7 @@ export default {
               bt2Filled: video.data.bt2Filled,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
+              publishOptions: video.publishOptions,
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,
@@ -1330,6 +1475,7 @@ export default {
       this.dirPath = "";
       this.dirXlsxRows = [];
       this.dirXlsxError = "";
+      this.resetPlatformVideoLinks();
       this.scheduledPublish = false;
       this.publishAt = "";
       this.dirPublishVisible = true;
@@ -1745,6 +1891,10 @@ export default {
   min-width: 120px;
   box-sizing: border-box;
 }
+.custom-tree-node.platform-leaf-node.platform-link-capable {
+  width: 240px;
+  min-width: 240px;
+}
 .platform-leaf-main {
   display: flex;
   flex-wrap: wrap;
@@ -1766,6 +1916,30 @@ export default {
 }
 .platform-statement-select {
   width: 100%;
+}
+.platform-link-row {
+  width: 100%;
+  margin-top: 6px;
+}
+.platform-link-label {
+  display: block;
+  margin-bottom: 3px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: #606266;
+}
+.platform-link-controls {
+  display: flex;
+  width: 100%;
+  gap: 6px;
+}
+.platform-link-type {
+  width: 82px;
+  flex: 0 0 82px;
+}
+.platform-link-controls > .el-input {
+  min-width: 0;
+  flex: 1 1 auto;
 }
 :deep(.platform-statement-select .el-input) {
   width: 100%;
