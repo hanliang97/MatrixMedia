@@ -109,6 +109,11 @@ function requestQuit() {
 if (!cliMode) {
   app.on("before-quit", (event) => {
     if (allowQuit) return;
+    // ponytail: 本地开发热重启会被 kill，跳过退出二次确认，避免卡死
+    if (process.env.NODE_ENV === "development") {
+      allowQuit = true;
+      return;
+    }
     event.preventDefault();
     setImmediate(() => {
       requestQuit();
