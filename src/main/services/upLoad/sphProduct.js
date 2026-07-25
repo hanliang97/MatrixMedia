@@ -170,37 +170,59 @@ async function openProductDialog(page) {
   await waitForProductDialog(page);
 }
 
-async function searchProduct(page, productId) {
-  const searched = await page.evaluate((id) => {
+export async function searchProduct(page, productId) {
+  const dialogHandle = await page.evaluateHandle(() => {
     const app = document.querySelector("wujie-app.wujie_iframe");
     const root = app && app.shadowRoot;
-    if (!root) return { ok: false, reason: "shadow_root_not_found" };
-    const dialogs = Array.from(root.querySelectorAll(".weui-desktop-dialog"));
-    const dialog = dialogs.find((item) =>
-      String(item.textContent || "").includes("从橱窗添加商品")
+    if (!root) return null;
+    return (
+      Array.from(root.querySelectorAll(".weui-desktop-dialog")).find(
+        (item) =>
+          String(item.textContent || "").includes("从橱窗添加商品") &&
+          window.getComputedStyle(item).display !== "none"
+      ) || null
     );
-    if (!dialog) return { ok: false, reason: "product_dialog_not_found" };
-    const input = dialog.querySelector(
+  });
+  const dialog = dialogHandle && dialogHandle.asElement();
+  if (!dialog) {
+    if (dialogHandle) await dialogHandle.dispose();
+    throw productError(
+      "product_dialog_not_found",
+      "未找到视频号商品弹窗"
+    );
+  }
+
+  try {
+    const input = await dialog.$(
       'input[placeholder="请输入商品名称/编码搜索"]'
     );
-    if (!input) return { ok: false, reason: "product_search_input_not_found" };
-    const setter = Object.getOwnPropertyDescriptor(
-      window.HTMLInputElement.prototype,
-      "value"
-    ).set;
-    setter.call(input, id);
-    input.dispatchEvent(new Event("input", { bubbles: true }));
-    input.dispatchEvent(new Event("change", { bubbles: true }));
-    const button = dialog.querySelector(".search-btn button");
-    if (!button) return { ok: false, reason: "product_search_button_not_found" };
-    button.click();
-    return { ok: true };
-  }, productId);
-  if (!searched || !searched.ok) {
-    throw productError(
-      searched && searched.reason ? searched.reason : "product_search_failed",
-      "视频号商品搜索失败"
-    );
+    if (!input) {
+      throw productError(
+        "product_search_input_not_found",
+        "未找到视频号商品编号输入框"
+      );
+    }
+    const button = await dialog.$(".search-btn button");
+    if (!button) {
+      throw productError(
+        "product_search_button_not_found",
+        "未找到视频号商品搜索按钮"
+      );
+    }
+
+    await input.click({ delay: 80 });
+    const modifier = process.platform === "darwin" ? "Meta" : "Control";
+    await page.keyboard.down(modifier);
+    try {
+      await page.keyboard.press("A");
+    } finally {
+      await page.keyboard.up(modifier);
+    }
+    await page.keyboard.press("Backspace");
+    await page.keyboard.type(productId, { delay: 50 });
+    await button.click({ delay: 120 });
+  } finally {
+    await dialogHandle.dispose();
   }
 }
 
