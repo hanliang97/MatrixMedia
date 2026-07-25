@@ -52,57 +52,78 @@ cd mcp && npm install && npm run build
 
 ## Tool 一览
 
-| Tool              | 底层 CLI              | 说明                                           |
-| ----------------- | --------------------- | ---------------------------------------------- |
-| `list_accounts`   | `cli accounts --json` | 列出本机已登录账号，支持按平台过滤             |
-| `list_history`    | `cli history --json`  | 查询本机发布记录，支持按平台/状态/天数过滤     |
-| `publish_video`   | `cli publish ...`     | 发布视频（最长约 35 分钟，支持定时发布）       |
-| `publish_article` | `cli publish-article ...` | 发布掘金文章（需已登录掘金账号）           |
+| Tool              | 底层 CLI                  | 说明                                           |
+| ----------------- | ------------------------- | ---------------------------------------------- |
+| `list_accounts`   | `cli accounts --json`     | 列出本机已登录账号，支持按平台过滤             |
+| `list_history`    | `cli history --json`      | 查询本机发布记录，支持按平台/状态/天数过滤     |
+| `publish_video`   | `cli publish ...`         | 发布视频（最长约 35 分钟，支持草稿和定时发布） |
+| `publish_article` | `cli publish-article ...` | 发布掘金文章（需已登录掘金账号）               |
 
 ### list_accounts
 
-| 参数       | 必填 | 说明                                                                 |
-| ---------- | ---- | -------------------------------------------------------------------- |
+| 参数       | 必填 | 说明                                                                              |
+| ---------- | ---- | --------------------------------------------------------------------------------- |
 | `platform` | 否   | 平台过滤：`dy` / `ks` / `blbl` / `bjh` / `tt` / `sph` / `xhs` / `juejin` / `fqsp` |
 
 ### list_history
 
-| 参数       | 必填 | 说明                                           |
-| ---------- | ---- | ---------------------------------------------- |
-| `days`     | 否   | 最近 N 天，默认 7                              |
-| `platform` | 否   | 平台过滤                                       |
+| 参数       | 必填 | 说明                                              |
+| ---------- | ---- | ------------------------------------------------- |
+| `days`     | 否   | 最近 N 天，默认 7                                 |
+| `platform` | 否   | 平台过滤                                          |
 | `status`   | 否   | `success` / `failed` / `publishing` / `scheduled` |
-| `all`      | 否   | 为 `true` 时返回全部历史                       |
+| `all`      | 否   | 为 `true` 时返回全部历史                          |
 
 ### publish_video
 
-| 参数        | 必填 | 说明                               |
-| ----------- | ---- | ---------------------------------- |
-| `platform`  | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph` |
-| `file`      | 是   | 视频文件绝对路径                   |
-| `title`     | 是   | 视频标题                           |
-| `phone`     | 是   | 账号手机号，用于推导 session partition |
-| `bt2`       | 否   | 第二标题 / 视频号短标              |
-| `tags`      | 否   | 标签字符串                         |
-| `address`   | 否   | 地址（百家号等）                   |
-| `publishAt` | 否   | 定时发布，`YYYY-MM-DD HH:mm`       |
-| `show`      | 否   | 是否显示底层浏览器窗口             |
+| 参数           | 必填 | 说明                                                          |
+| -------------- | ---- | ------------------------------------------------------------- |
+| `platform`     | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph`                   |
+| `file`         | 是   | 视频文件绝对路径                                              |
+| `title`        | 是   | 视频标题                                                      |
+| `phone`        | 是   | 账号手机号，用于推导 session partition                        |
+| `bt2`          | 否   | 第二标题 / 视频号短标                                         |
+| `tags`         | 否   | 标签字符串                                                    |
+| `address`      | 否   | 地址（百家号等）                                              |
+| `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm`                                  |
+| `show`         | 否   | 是否显示底层浏览器窗口                                        |
+| `draft`             | 否   | `true` 时保存到草稿箱，不直接发布                             |
+| `creativeStatement` | 否   | 创作声明 / 视频号视频标注                                     |
+| `sphProductId`      | 否   | 视频号商品上架编号（推荐）                                    |
+| `sphLink`           | 否   | 视频号链接对象；与 `sphProductId` 同时传时优先 `sphProductId` |
+
+视频号商品上架草稿调用参数示例：
+
+```json
+{
+  "platform": "sph",
+  "file": "D:\\videos\\a.mp4",
+  "title": "视频标题",
+  "phone": "13800138000",
+  "bt2": "视频号短标题",
+  "draft": true,
+  "sphProductId": "10000591263144",
+  "creativeStatement": "含AI生成内容"
+}
+```
+
+当 `platform` 不是 `sph` 时，`sphProductId` / `sphLink` 会被忽略。若商品添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
 
 ### publish_article
 
-| 参数        | 必填 | 说明                               |
-| ----------- | ---- | ---------------------------------- |
-| `platform`  | 是   | 目前仅支持 `juejin`                |
-| `phone`     | 是   | 已登录掘金账号手机号               |
-| `title`     | 是   | 文章标题                           |
-| `content`   | 二选一 | 正文内容                         |
-| `file`      | 二选一 | Markdown 文件路径                |
-| `cover`     | 否   | 封面图片路径                       |
-| `category`  | 否   | 分类                               |
-| `tags`      | 否   | 标签                               |
-| `summary`   | 否   | 摘要                               |
-| `publishAt` | 否   | 定时发布时间                       |
-| `show`      | 否   | 是否显示底层浏览器窗口             |
+| 参数        | 必填   | 说明                   |
+| ----------- | ------ | ---------------------- |
+| `platform`  | 是     | 目前仅支持 `juejin`    |
+| `phone`     | 是     | 已登录掘金账号手机号   |
+| `title`     | 是     | 文章标题               |
+| `content`   | 二选一 | 正文内容               |
+| `file`      | 二选一 | Markdown 文件路径      |
+| `cover`     | 否     | 封面图片路径           |
+| `category`  | 否     | 分类                   |
+| `tags`      | 否     | 标签                   |
+| `summary`   | 否     | 摘要                   |
+| `publishAt` | 否     | 定时发布时间           |
+| `show`      | 否     | 是否显示底层浏览器窗口 |
 
 ## 登录说明
 

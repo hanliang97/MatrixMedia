@@ -69,7 +69,7 @@
 | `tt`   | 头条     | toutiao / 头条         | 是     |
 | `ks`   | 快手     | kuaishou / 快手        | 是     |
 | `xhs`  | 小红书   | xiaohongshu / 小红书   | 是     |
-| `fqsp` | 番茄视频 | fanqie / fq / 番茄视频 | 可用 |
+| `fqsp` | 番茄视频 | fanqie / fq / 番茄视频 | 可用   |
 
 > 掘金文章请使用 CLI `publish-article`，当前无 HTTP 接口。
 
@@ -127,12 +127,16 @@
 | `bt2`                | 否     | 视频号短标（含视频号时强烈建议填写）                                                                                                     |
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分后再按平台补 `#` 或去 `#`                                                       |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
+| `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
+| `sphProductId`       | 否     | 视频号商品上架快捷字段（商品编号）；仅视频号生效，等价于 `platformOptions.sph.link.type=product`                                         |
+| `sphLink`            | 否     | 视频号链接对象，如 `{ "type": "product", "value": "商品编号" }`；与 `sphProductId` 同时传时优先 `sphProductId`                           |
+| `platformOptions`    | 否     | 平台专属参数容器；视频号商品也可用 `platformOptions.sph.link`，不会应用到其他平台                                                        |
 | `creativeStatement`  | 否     | 全局创作声明，等同 GUI「批量设置创作声明」；支持 value、中文 label 或平台页面原文案（如 `内容由AI生成`）                                 |
 | `creativeStatements` | 否     | 按平台覆盖声明，key 用 code 或中文名，如 `{ "dy": "ai_generated", "blbl": "fiction" }`；某平台不支持所选值时回退 `none`                  |
 
 **创作声明优先级**（与 GUI 一致）：`platforms[].creativeStatement` > `creativeStatements[平台]` > `creativeStatement`。
 
-不支持创作声明的平台（如视频号）会忽略并回退为 `none`。可用 `GET /creative-statements` 查询各平台可用选项。
+视频号已支持「视频标注」创作声明。某平台不支持所选值时回退为 `none`。可用 `GET /creative-statements` 查询各平台可用选项。
 
 **响应体（JSON）**：
 
@@ -151,6 +155,7 @@
 
 - 参数错误：HTTP `400`
 - 单平台发布失败（如未登录）：HTTP `200`，但 `success: false`、`exitCode: 3`
+- 视频号链接添加失败但草稿保存成功：HTTP `200`，`success: false`、`status: needs_attention`、`exitCode: 4`
 - 多平台：HTTP 只表示任务是否提交成功，最终结果请查询发布记录
 - 服务已配置 CORS，浏览器或本机脚本均可调用
 
@@ -169,6 +174,35 @@ curl -X POST http://127.0.0.1:30088/publish \
     "tags": "减脂 健身"
   }'
 ```
+
+视频号商品上架并保存草稿（推荐快捷字段）：
+
+```bash
+curl -X POST http://127.0.0.1:30088/publish \
+  -H "Content-Type: application/json" \
+  -d '{
+    "platform": "sph",
+    "phone": "13800138000",
+    "file": "/Users/me/video.mp4",
+    "title": "视频标题",
+    "bt2": "视频号短标题",
+    "draft": true,
+    "sphProductId": "10000591263144",
+    "creativeStatement": "含AI生成内容"
+  }'
+```
+
+也可用完整对象：
+
+```json
+{
+  "platformOptions": {
+    "sph": { "link": { "type": "product", "value": "10000591263144" } }
+  }
+}
+```
+
+`sphProductId` / `sphLink` / `platformOptions.sph` 只会被视频号任务读取。多平台发布时其他平台会忽略它们；不同视频号账号可在各个 `platforms[]` 对象内分别覆盖商品编号。
 
 远程视频 URL：
 

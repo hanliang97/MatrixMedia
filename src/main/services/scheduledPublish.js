@@ -141,6 +141,7 @@ export function buildTaskPayloadFromRecord(record) {
     mmCliSuppressWindow: false,
     publishMode: record.publishMode || "publish",
     publishToDraft: record.publishMode === "draft",
+    publishOptions: record.publishOptions || {},
     closeWindowAfterPublish: true,
     useragent: record.useragent || cfg.useragent,
     partition: record.partition,

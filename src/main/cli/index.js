@@ -279,6 +279,7 @@ async function runBatchDirPublish(v, cfg) {
       mmCliSuppressWindow: false,
       publishMode: effectivePublishMode.publishMode,
       publishToDraft: effectivePublishMode.publishToDraft,
+      publishOptions: v.publishOptions || {},
       closeWindowAfterPublish: true,
       useragent: cfg.useragent,
       partition: v.partition,
@@ -310,6 +311,7 @@ async function runBatchDirPublish(v, cfg) {
       publishFailCount: 0,
       publishMode: effectivePublishMode.publishMode,
       publishToDraft: effectivePublishMode.publishToDraft,
+      publishOptions: v.publishOptions || {},
       publishStatus: effectivePublishMode.publishToDraft ? "drafting" : "publishing",
       lastPublishMessage: effectivePublishMode.publishToDraft
         ? "等待保存草稿结果"
@@ -554,11 +556,25 @@ export async function runCliMain(argv = process.argv) {
         JSON.stringify({
           channel: "puppeteerFile-done",
           status: true,
+          resultStatus: result.status,
+          publishMode: result.publishMode,
+          message: result.message,
+        })
+      );
+    } else if (result.exitCode === 4) {
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: false,
+          resultStatus: result.status,
+          publishMode: result.publishMode,
+          outcome: result.outcome,
+          needsAttention: true,
           message: result.message,
         })
       );
     } else if (result.exitCode === 3) {
-      console.error("登录态异常或未登录");
+      console.error(result.message || "登录态异常或未登录");
       if (v.platform === "抖音") {
         console.error(
           "提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"

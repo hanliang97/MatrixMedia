@@ -12,6 +12,7 @@ import { winURL } from "../config/StaticPath";
 import downloadFile from "./downloadFile";
 import { registerPuppeteerIpc } from "./puppeteerFile";
 import { registerScheduledPublishIpc } from "./scheduledPublish";
+import { registerSphWindowProductsIpc } from "./sphWindowProducts";
 import { createLaunchInstallerHandler } from "./launchInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
 import {
@@ -207,6 +208,7 @@ export default {
     // puppeteerFile 上传文件发布，获取登录状态
     registerPuppeteerIpc();
     registerScheduledPublishIpc();
+    registerSphWindowProductsIpc(ipcMain);
 
     // 通用的渲染进程 → 主进程日志透传通道，方便把 webview / Vue 里
     // 不开 DevTools 就看不到的输出，直接打到「主程序日志」那个终端面板。
@@ -431,19 +433,31 @@ export default {
 
     // ── Chrome 浏览器路径配置 ──────────────────────────────────
     ipcMain.handle("chrome:getPath", async () => {
-      const { getConfiguredChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      const { getConfiguredChromePath, getChromeDisplayName } = await import(
+        "./chromeConfig.js"
+      );
       const chromePath = getConfiguredChromePath();
-      return { path: chromePath, displayName: getChromeDisplayName(chromePath) };
+      return {
+        path: chromePath,
+        displayName: getChromeDisplayName(chromePath),
+      };
     });
 
     ipcMain.handle("chrome:setPath", async (_event, chromePath) => {
-      const { setConfiguredChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      const { setConfiguredChromePath, getChromeDisplayName } = await import(
+        "./chromeConfig.js"
+      );
       setConfiguredChromePath(chromePath);
-      return { path: chromePath, displayName: getChromeDisplayName(chromePath) };
+      return {
+        path: chromePath,
+        displayName: getChromeDisplayName(chromePath),
+      };
     });
 
     ipcMain.handle("chrome:autoDetect", async () => {
-      const { autoDetectChromePath, getChromeDisplayName } = await import("./chromeConfig.js");
+      const { autoDetectChromePath, getChromeDisplayName } = await import(
+        "./chromeConfig.js"
+      );
       const detected = autoDetectChromePath() || "";
       return { path: detected, displayName: getChromeDisplayName(detected) };
     });
@@ -460,7 +474,9 @@ export default {
         {
           title: isMac ? "选择 Chrome 浏览器" : "选择 Chrome 浏览器可执行文件",
           // macOS 选 .app 目录；Windows/Linux 选可执行文件
-          properties: isMac ? ["openFile", "treatPackageAsDirectory"] : ["openFile"],
+          properties: isMac
+            ? ["openFile", "treatPackageAsDirectory"]
+            : ["openFile"],
           filters: isMac
             ? [{ name: "应用程序", extensions: ["app"] }]
             : process.platform === "win32"
@@ -473,10 +489,19 @@ export default {
       let selected = result.filePaths[0];
       // macOS: 用户选了 .app 包，自动解析出内部可执行文件路径
       if (isMac && selected.endsWith(".app")) {
-        const { resolveAppBundleExecutable, getChromeDisplayName } = await import("./chromeConfig.js");
+        const { resolveAppBundleExecutable, getChromeDisplayName } =
+          await import("./chromeConfig.js");
         const resolved = resolveAppBundleExecutable(selected);
-        if (resolved) return { path: resolved, displayName: getChromeDisplayName(resolved) };
-        return { path: selected, displayName: path.basename(selected, ".app"), error: "无法解析该应用的可执行文件" };
+        if (resolved)
+          return {
+            path: resolved,
+            displayName: getChromeDisplayName(resolved),
+          };
+        return {
+          path: selected,
+          displayName: path.basename(selected, ".app"),
+          error: "无法解析该应用的可执行文件",
+        };
       }
       const { getChromeDisplayName } = await import("./chromeConfig.js");
       return { path: selected, displayName: getChromeDisplayName(selected) };
@@ -507,7 +532,10 @@ export default {
         const { resolveChromePath } = await import("./chromeConfig.js");
         const chromePath = resolveChromePath();
         if (!chromePath) {
-          return { ok: false, message: "未找到 Chrome 浏览器，请先在发布设置中配置 Chrome 路径" };
+          return {
+            ok: false,
+            message: "未找到 Chrome 浏览器，请先在发布设置中配置 Chrome 路径",
+          };
         }
 
         const path = await import("path");
@@ -566,7 +594,10 @@ export default {
       } catch (err) {
         _xhsRealChromeLoginBrowser = null;
         console.error("[xhs-chrome-login] 启动失败:", err?.message || err);
-        return { ok: false, message: "启动真实浏览器失败: " + (err?.message || err) };
+        return {
+          ok: false,
+          message: "启动真实浏览器失败: " + (err?.message || err),
+        };
       }
     });
 

@@ -68,6 +68,9 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
     bt: "标题",
     bt2: "短标题",
     bq: "#标签",
+    publishOptions: {
+      link: { enabled: true, type: "product", value: "10000591263144" },
+    },
     address: "广州",
     filePath: "/tmp/v.mp4",
     useragent: "ua",
@@ -83,6 +86,7 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
   assert.strictEqual(r.bt, "标题");
   assert.strictEqual(r.bq, "#标签");
   assert.strictEqual(r.filePath, "/tmp/v.mp4");
+  assert.strictEqual(r.publishOptions.link.value, "10000591263144");
   assert.ok(r.scheduledPublishAt > fixedNow);
 })();
 
@@ -119,11 +123,15 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
     filePath: "/tmp/v.mp4",
     selectedFile: "v.mp4",
     phone: "13800138000",
+    publishOptions: {
+      link: { enabled: true, type: "product", value: "10000591263144" },
+    },
   });
   assert.strictEqual(payload.bookName, "任务名");
   assert.strictEqual(payload.data.bt1, "标题");
   assert.strictEqual(payload.data.textOtherName, "视频文本名");
   assert.strictEqual(payload.pt, "抖音");
+  assert.strictEqual(payload.publishOptions.link.value, "10000591263144");
   assert.notStrictEqual(payload.taskId, "old");
 })();
 

@@ -12,141 +12,153 @@
       <el-button
         :type="activeTab === 'docs' ? 'primary' : 'info'"
         @click="activeTab = 'docs'"
-      >📋 项目文档</el-button>
+        >📋 项目文档</el-button
+      >
       <el-button
         :type="activeTab === 'dev' ? 'danger' : 'info'"
         @click="activeTab = 'dev'"
-      >🚀 快速开发新平台</el-button>
+        >🚀 快速开发新平台</el-button
+      >
     </div>
 
     <!-- Tab: 项目文档 -->
     <div v-if="activeTab === 'docs'">
-    <el-card class="section-card" shadow="never">
-      <div slot="header" class="card-header">
-        <span>项目概览</span>
-      </div>
-      <ul class="overview-list">
-        <li>
-          支持 GUI 图形界面、CLI 命令行、内置 HTTP API、MCP Server 四种接入方式
-        </li>
-        <li>CLI 与 GUI 共用同一 session partition，登录态可复用</li>
-        <li>
-          HTTP API 需 GUI 主进程已启动（默认端口 <code>{{ httpPort }}</code
-          >）
-        </li>
-        <li>MCP Server 通过 stdio 调用 CLI 子进程，不直接请求 HTTP</li>
-      </ul>
-    </el-card>
+      <el-card class="section-card" shadow="never">
+        <div slot="header" class="card-header">
+          <span>项目概览</span>
+        </div>
+        <ul class="overview-list">
+          <li>
+            支持 GUI 图形界面、CLI 命令行、内置 HTTP API、MCP Server
+            四种接入方式
+          </li>
+          <li>CLI 与 GUI 共用同一 session partition，登录态可复用</li>
+          <li>CLI 会临时启动不显示 GUI 的 Electron 进程，任务结束后自动退出</li>
+          <li>
+            HTTP API 需 GUI 主进程已启动（默认端口 <code>{{ httpPort }}</code
+            >）
+          </li>
+          <li>MCP Server 通过 stdio 调用 CLI 子进程，不直接请求 HTTP</li>
+        </ul>
+      </el-card>
 
-    <el-card class="section-card" shadow="never">
-      <div slot="header" class="card-header">
-        <span>HTTP API</span>
-        <span class="card-sub">基础地址：http://127.0.0.1:{{ httpPort }}</span>
-      </div>
-      <p class="section-tip">
-        GUI 启动后自动监听本机端口，与 CLI 共用登录态与发布记录。<code
-          >POST /publish</code
+      <el-card class="section-card" shadow="never">
+        <div slot="header" class="card-header">
+          <span>HTTP API</span>
+          <span class="card-sub"
+            >基础地址：http://127.0.0.1:{{ httpPort }}</span
+          >
+        </div>
+        <p class="section-tip">
+          GUI 启动后自动监听本机端口，与 CLI 共用登录态与发布记录。<code
+            >POST /publish</code
+          >
+          支持下方<strong>全部 {{ videoPlatforms.length }} 个视频平台</strong
+          >；可传单平台 <code>platform</code> 或多平台
+          <code>platforms</code> 数组（二者不可同时传）。
+        </p>
+        <el-table :data="httpRoutes" border size="small" class="doc-table">
+          <el-table-column prop="method" label="方法" width="80" />
+          <el-table-column prop="path" label="路径" width="140" />
+          <el-table-column prop="desc" label="说明" />
+        </el-table>
+        <div class="code-label platform-table-label">
+          支持的视频平台（platform / platforms 均可使用 code 或中文名）
+        </div>
+        <el-table :data="videoPlatforms" border size="small" class="doc-table">
+          <el-table-column prop="code" label="推荐 code" width="100" />
+          <el-table-column prop="name" label="平台" width="100" />
+          <el-table-column prop="aliases" label="别名" width="180">
+            <template slot-scope="scope">
+              {{ scope.row.aliases.join(" / ") }}
+            </template>
+          </el-table-column>
+          <el-table-column prop="status" label="自动化" />
+        </el-table>
+        <el-table
+          :data="httpPublishParams"
+          border
+          size="small"
+          class="doc-table"
         >
-        支持下方<strong>全部 {{ videoPlatforms.length }} 个视频平台</strong
-        >；可传单平台 <code>platform</code> 或多平台
-        <code>platforms</code> 数组（二者不可同时传）。
-      </p>
-      <el-table :data="httpRoutes" border size="small" class="doc-table">
-        <el-table-column prop="method" label="方法" width="80" />
-        <el-table-column prop="path" label="路径" width="140" />
-        <el-table-column prop="desc" label="说明" />
-      </el-table>
-      <div class="code-label platform-table-label">
-        支持的视频平台（platform / platforms 均可使用 code 或中文名）
-      </div>
-      <el-table :data="videoPlatforms" border size="small" class="doc-table">
-        <el-table-column prop="code" label="推荐 code" width="100" />
-        <el-table-column prop="name" label="平台" width="100" />
-        <el-table-column prop="aliases" label="别名" width="180">
-          <template slot-scope="scope">
-            {{ scope.row.aliases.join(" / ") }}
-          </template>
-        </el-table-column>
-        <el-table-column prop="status" label="自动化" />
-      </el-table>
-      <el-table :data="httpPublishParams" border size="small" class="doc-table">
-        <el-table-column prop="field" label="字段" width="140" />
-        <el-table-column prop="required" label="必填" width="72" />
-        <el-table-column prop="desc" label="说明" />
-      </el-table>
-      <div class="code-block">
-        <div class="code-label">单平台发布（platform）</div>
-        <pre class="code-pre">{{ curlPublishExample }}</pre>
-      </div>
-      <div class="code-block">
-        <div class="code-label">多平台发布（platforms 字符串数组）</div>
-        <pre class="code-pre">{{ curlMultiPublishExample }}</pre>
-      </div>
-      <div class="code-block">
-        <div class="code-label">
-          多平台发布（platforms 对象数组，可覆盖各平台 phone）
+          <el-table-column prop="field" label="字段" width="140" />
+          <el-table-column prop="required" label="必填" width="72" />
+          <el-table-column prop="desc" label="说明" />
+        </el-table>
+        <div class="code-block">
+          <div class="code-label">单平台发布（platform）</div>
+          <pre class="code-pre">{{ curlPublishExample }}</pre>
         </div>
-        <pre class="code-pre">{{ curlMultiPublishObjectExample }}</pre>
-      </div>
-    </el-card>
-
-    <el-card class="section-card" shadow="never">
-      <div slot="header" class="card-header">
-        <span>MCP 调用方式</span>
-      </div>
-      <p class="section-tip">
-        构建 MCP Server 后，在 Claude Desktop / Cursor / Cline 等工具中配置
-        stdio transport。
-      </p>
-      <div class="code-block">
-        <div class="code-label">构建</div>
-        <pre class="code-pre">cd mcp && npm install && npm run build</pre>
-      </div>
-      <div class="code-block">
-        <div class="code-label">
-          配置示例（.cursor/mcp.json 或 claude_desktop_config.json）
+        <div class="code-block">
+          <div class="code-label">多平台发布（platforms 字符串数组）</div>
+          <pre class="code-pre">{{ curlMultiPublishExample }}</pre>
         </div>
-        <pre class="code-pre">{{ mcpConfigExample }}</pre>
-      </div>
-      <el-table :data="mcpTools" border size="small" class="doc-table">
-        <el-table-column prop="name" label="Tool" width="160" />
-        <el-table-column prop="desc" label="说明" />
-        <el-table-column prop="cli" label="底层 CLI" width="200" />
-      </el-table>
-      <p class="section-note">
-        登录说明：所有平台需在 GUI 中完成登录后再通过 MCP 发布；MCP 运行在无头
-        stdio 环境，无法弹出扫码窗口。
-      </p>
-    </el-card>
+        <div class="code-block">
+          <div class="code-label">
+            多平台发布（platforms 对象数组，可覆盖各平台 phone）
+          </div>
+          <pre class="code-pre">{{ curlMultiPublishObjectExample }}</pre>
+        </div>
+      </el-card>
 
-    <el-card class="section-card" shadow="never">
-      <div slot="header" class="card-header">
-        <span>CLI 调用方式</span>
-      </div>
-      <p class="section-tip">
-        argv 含子串 <code>cli</code> 即进入无 GUI 流程。
-      </p>
-      <div class="code-block">
-        <div class="code-label">入口</div>
-        <pre class="code-pre">
+      <el-card class="section-card" shadow="never">
+        <div slot="header" class="card-header">
+          <span>MCP 调用方式</span>
+        </div>
+        <p class="section-tip">
+          构建 MCP Server 后，在 Claude Desktop / Cursor / Cline 等工具中配置
+          stdio transport。
+        </p>
+        <div class="code-block">
+          <div class="code-label">构建</div>
+          <pre class="code-pre">cd mcp && npm install && npm run build</pre>
+        </div>
+        <div class="code-block">
+          <div class="code-label">
+            配置示例（.cursor/mcp.json 或 claude_desktop_config.json）
+          </div>
+          <pre class="code-pre">{{ mcpConfigExample }}</pre>
+        </div>
+        <el-table :data="mcpTools" border size="small" class="doc-table">
+          <el-table-column prop="name" label="Tool" width="160" />
+          <el-table-column prop="desc" label="说明" />
+          <el-table-column prop="cli" label="底层 CLI" width="200" />
+        </el-table>
+        <p class="section-note">
+          登录说明：所有平台需在 GUI 中完成登录后再通过 MCP 发布；MCP 运行在无头
+          stdio 环境，无法弹出扫码窗口。
+        </p>
+      </el-card>
+
+      <el-card class="section-card" shadow="never">
+        <div slot="header" class="card-header">
+          <span>CLI 调用方式</span>
+        </div>
+        <p class="section-tip">
+          argv 含子串 <code>cli</code> 即进入无 GUI 流程。
+        </p>
+        <div class="code-block">
+          <div class="code-label">入口</div>
+          <pre class="code-pre">
 matrixmedia cli &lt;子命令&gt; [选项]
 electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre
-        >
-      </div>
-      <el-table :data="cliCommands" border size="small" class="doc-table">
-        <el-table-column prop="cmd" label="子命令" width="140" />
-        <el-table-column prop="desc" label="说明" />
-      </el-table>
-      <div class="code-block">
-        <div class="code-label">常用示例</div>
-        <pre class="code-pre">{{ cliExamples }}</pre>
-      </div>
-      <el-table :data="exitCodes" border size="small" class="doc-table">
-        <el-table-column prop="code" label="退出码" width="80" />
-        <el-table-column prop="desc" label="含义" />
-      </el-table>
-    </el-card>
-    </div><!-- /Tab: 项目文档 -->
+          >
+        </div>
+        <el-table :data="cliCommands" border size="small" class="doc-table">
+          <el-table-column prop="cmd" label="子命令" width="140" />
+          <el-table-column prop="desc" label="说明" />
+        </el-table>
+        <div class="code-block">
+          <div class="code-label">常用示例</div>
+          <pre class="code-pre">{{ cliExamples }}</pre>
+        </div>
+        <el-table :data="exitCodes" border size="small" class="doc-table">
+          <el-table-column prop="code" label="退出码" width="80" />
+          <el-table-column prop="desc" label="含义" />
+        </el-table>
+      </el-card>
+    </div>
+    <!-- /Tab: 项目文档 -->
 
     <!-- Tab: 快速开发新平台 -->
     <div v-if="activeTab === 'dev'" class="dev-guide-content">
@@ -158,13 +170,19 @@ electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre
             size="mini"
             style="float: right"
             @click="openGitHubRepo"
-          >前往 GitHub 仓库</el-button>
+            >前往 GitHub 仓库</el-button
+          >
         </div>
 
         <!-- 第一步：环境准备 -->
         <div class="dev-section">
           <h3>第一步：环境准备</h3>
-          <el-table :data="envRequirements" border size="small" class="doc-table">
+          <el-table
+            :data="envRequirements"
+            border
+            size="small"
+            class="doc-table"
+          >
             <el-table-column prop="name" label="工具" width="140" />
             <el-table-column prop="version" label="版本要求" width="120" />
             <el-table-column prop="desc" label="说明" />
@@ -206,7 +224,9 @@ electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre
           </div>
           <div class="code-block">
             <div class="code-label">在 upLoad/index.js 中注册</div>
-            <pre class="code-pre">export { default as mypt } from "./mypt.js";</pre>
+            <pre class="code-pre">
+export { default as mypt } from "./mypt.js";</pre
+            >
           </div>
         </div>
 
@@ -224,12 +244,14 @@ electron . cli &lt;子命令&gt; [选项]   # 开发环境</pre
           </el-table>
           <div class="code-block">
             <div class="code-label">在 zt/index.js 中注册</div>
-            <pre class="code-pre">import mypt from "./mypt.js";
+            <pre class="code-pre">
+import mypt from "./mypt.js";
 // 在 default export 对象中添加
 export default {
   // ...已有平台
   mypt,
-};</pre>
+};</pre
+            >
           </div>
         </div>
 
@@ -238,7 +260,8 @@ export default {
           <h3>第五步：平台图标</h3>
           <p class="section-tip">
             在 <code>src/renderer/layout/components/Sidebar/ptcion/</code>
-            目录下放置平台图标文件， 文件名需与平台在 configUrl.js 中的 key 一致。
+            目录下放置平台图标文件， 文件名需与平台在 configUrl.js 中的 key
+            一致。
           </p>
           <el-table :data="iconFiles" border size="small" class="doc-table">
             <el-table-column prop="file" label="文件路径" width="360" />
@@ -271,7 +294,8 @@ export default {
         <div class="dev-section">
           <h3>第八步：MCP Server 支持（可选）</h3>
           <p class="section-tip">
-            如需通过 MCP（Claude Desktop / Cursor / Cline）调用新平台发布，需修改 MCP 工具定义。
+            如需通过 MCP（Claude Desktop / Cursor /
+            Cline）调用新平台发布，需修改 MCP 工具定义。
           </p>
           <el-table :data="mcpFiles" border size="small" class="doc-table">
             <el-table-column prop="file" label="文件路径" width="360" />
@@ -293,7 +317,8 @@ export default {
           </el-table>
         </div>
       </el-card>
-    </div><!-- /Tab: 快速开发新平台 -->
+    </div>
+    <!-- /Tab: 快速开发新平台 -->
   </div>
 </template>
 
@@ -371,6 +396,21 @@ export default {
           required: "否",
           desc: "定时发布 YYYY-MM-DD HH:mm:ss（多平台时需全部一致）",
         },
+        {
+          field: "draft",
+          required: "否",
+          desc: "true 时保存到草稿箱，不直接发布",
+        },
+        {
+          field: "sphProductId",
+          required: "否",
+          desc: "视频号商品上架编号（快捷字段）",
+        },
+        {
+          field: "platformOptions",
+          required: "否",
+          desc: "平台专属参数；视频号商品也可用 platformOptions.sph.link",
+        },
       ],
       mcpTools: [
         {
@@ -385,7 +425,7 @@ export default {
         },
         {
           name: "publish_video",
-          desc: "发布视频到指定平台（最长约 35 分钟，支持定时发布）",
+          desc: "发布视频到指定平台（支持草稿、定时发布和视频号商品链接）",
           cli: "cli publish ...",
         },
         {
@@ -412,6 +452,7 @@ export default {
         { code: "1", desc: "未捕获异常" },
         { code: "2", desc: "参数错误" },
         { code: "3", desc: "业务失败（未登录、上传失败等）" },
+        { code: "4", desc: "视频号链接失败，已转存草稿，需人工检查" },
       ],
       curlPublishExample: `curl -X POST http://127.0.0.1:30088/publish \\
   -H "Content-Type: application/json" \\
@@ -461,6 +502,9 @@ matrixmedia cli login -p dy --phone 13800138000
 # 发布视频
 matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
 
+# 视频号商品上架并保存草稿
+matrixmedia cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 -t "标题" --bt2 "视频号短标题" --draft --sph-product-id 10000591263144
+
 # 发布掘金文章
 matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md
 
@@ -469,10 +513,26 @@ matrixmedia cli accounts --json
 matrixmedia cli history --json --days 7`,
       envRequirements: [
         { name: "Node.js", version: "≥ 16.x", desc: "推荐 18 LTS 或 20 LTS" },
-        { name: "Yarn", version: "≥ 1.22", desc: "包管理器，yarn install 安装依赖" },
-        { name: "Electron", version: "项目内置", desc: "无需单独安装，yarn install 后自动获取" },
-        { name: "Puppeteer", version: "项目内置", desc: "核心自动化引擎，用于驱动浏览器上传" },
-        { name: "Chrome", version: "≥ 120", desc: "Puppeteer 会自动下载 Chromium，也可使用系统 Chrome" },
+        {
+          name: "Yarn",
+          version: "≥ 1.22",
+          desc: "包管理器，yarn install 安装依赖",
+        },
+        {
+          name: "Electron",
+          version: "项目内置",
+          desc: "无需单独安装，yarn install 后自动获取",
+        },
+        {
+          name: "Puppeteer",
+          version: "项目内置",
+          desc: "核心自动化引擎，用于驱动浏览器上传",
+        },
+        {
+          name: "Chrome",
+          version: "≥ 120",
+          desc: "Puppeteer 会自动下载 Chromium，也可使用系统 Chrome",
+        },
       ],
       configFiles: [
         {
@@ -608,15 +668,35 @@ matrixmedia cli history --json --days 7`,
         { step: "1", file: "（环境）Node.js ≥ 16 + Yarn", action: "安装" },
         { step: "2", file: "src/renderer/utils/configUrl.js", action: "修改" },
         { step: "2", file: "src/main/config/ptConfig.js", action: "修改" },
-        { step: "3", file: "src/main/services/upLoad/新平台.js", action: "新建" },
-        { step: "3", file: "src/main/services/upLoad/index.js", action: "修改" },
+        {
+          step: "3",
+          file: "src/main/services/upLoad/新平台.js",
+          action: "新建",
+        },
+        {
+          step: "3",
+          file: "src/main/services/upLoad/index.js",
+          action: "修改",
+        },
         { step: "4", file: "src/main/services/zt/新平台.js", action: "新建" },
         { step: "4", file: "src/main/services/zt/index.js", action: "修改" },
-        { step: "5", file: "src/renderer/layout/components/Sidebar/ptcion/新平台.png", action: "新建" },
-        { step: "6", file: "src/renderer/utils/getLoginInfo.js", action: "按需" },
+        {
+          step: "5",
+          file: "src/renderer/layout/components/Sidebar/ptcion/新平台.png",
+          action: "新建",
+        },
+        {
+          step: "6",
+          file: "src/renderer/utils/getLoginInfo.js",
+          action: "按需",
+        },
         { step: "7", file: "src/main/cli/parsePublishArgs.js", action: "修改" },
         { step: "7", file: "src/main/cli/parseLoginArgs.js", action: "按需" },
-        { step: "7", file: "src/main/services/cliLogin/新平台.js", action: "按需" },
+        {
+          step: "7",
+          file: "src/main/services/cliLogin/新平台.js",
+          action: "按需",
+        },
         { step: "8", file: "mcp/src/tools/publish.ts", action: "修改" },
       ],
       configExample: `export default {

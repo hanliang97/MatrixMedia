@@ -37,15 +37,16 @@ import {
   cancelPuppeteerTasks,
 } from "./services/puppeteerFile";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
+import { initializeElectronRuntime } from "./services/electronStartup";
 
 const cliMode = isCliMode(process.argv);
-installMainProcessLogFile(app);
 
 // 确保 dev / cli / 打包后 userData 路径一致（都用 matrix-video）
 // 否则 persist: partition 的 cookie 会存在不同目录，登录状态不共享
 if (app.name !== "matrix-video") {
   app.name = "matrix-video";
 }
+installMainProcessLogFile(app);
 
 if (process.platform === "win32") {
   app.setAppUserModelId("com.matrix.video");
@@ -108,6 +109,11 @@ function requestQuit() {
 if (!cliMode) {
   app.on("before-quit", (event) => {
     if (allowQuit) return;
+    // ponytail: 本地开发热重启会被 kill，跳过退出二次确认，避免卡死
+    if (process.env.NODE_ENV === "development") {
+      allowQuit = true;
+      return;
+    }
     event.preventDefault();
     setImmediate(() => {
       requestQuit();
@@ -115,29 +121,26 @@ if (!cliMode) {
   });
 }
 
-pie.initialize(app).then(() => {
-  if (cliMode) {
-    const startCli = () => {
-      runCliMain(process.argv)
-        .then((code) => {
-          app.exit(typeof code === "number" ? code : 0);
-        })
-        .catch((err) => {
-          console.error(err);
-          app.exit(1);
-        });
-    };
-    if (app.isReady()) {
-      startCli();
-    } else {
-      app.on("ready", startCli);
+async function startApplication() {
+  try {
+    await initializeElectronRuntime({ app, pie });
+    if (cliMode) {
+      console.log("[startup] CLI 参数已识别，开始执行命令");
+      const code = await runCliMain(process.argv);
+      const exitCode = typeof code === "number" ? code : 0;
+      console.log(`[startup] CLI 执行结束，退出码=${exitCode}`);
+      app.exit(exitCode);
+      return;
     }
-  } else if (app.isReady()) {
     onAppReady();
-  } else {
-    app.on("ready", onAppReady);
+  } catch (err) {
+    const message = err && err.stack ? err.stack : String(err);
+    console.error("[startup] Electron/Puppeteer 启动失败:", message);
+    app.exit(1);
   }
-});
+}
+
+startApplication();
 
 function onAppReady() {
   startScheduledPublishScheduler();

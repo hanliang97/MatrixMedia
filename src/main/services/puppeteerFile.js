@@ -17,6 +17,7 @@ import {
 } from "../../shared/xhsPublishPolicy.js";
 import { resolveChromePath } from "./chromeConfig.js";
 import xhsChromeHandler from "./upLoad/xhsChrome.js";
+import { isPlatformLoginUrl } from "../../shared/platformPageState.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -862,6 +863,20 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
             console.log(
               `尝试${currentAttempt} URL不匹配: ${currentUrl}，关闭窗口并重新尝试`
             );
+            if (isPlatformLoginUrl(data.pt, currentUrl)) {
+              const message = `${data.pt}登录状态已失效，请重新登录后再试`;
+              console.error(`[auth] ${message}: ${currentUrl}`);
+              safeReply("puppeteer-noLogin", {
+                ...data,
+                currentUrl,
+                message,
+              });
+              finishOnce();
+              if (win && !win.isDestroyed()) {
+                closePublishWinProgrammatically(win);
+              }
+              return;
+            }
             if (isXhsTask) {
               safeReply("puppeteerFile-done", {
                 ...data,

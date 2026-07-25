@@ -10,6 +10,10 @@ import {
   resolveCreativeStatementForPlatform,
   getCreativeStatementPlatformKey,
 } from "../../shared/creativeStatement.js";
+import {
+  VIDEO_LINK_TYPES,
+  buildVideoLinkOption,
+} from "../../shared/videoLink.js";
 
 export { PLATFORM_ALIASES, VIDEO_PUBLISH_CANONICAL, resolvePublishPlatform };
 
@@ -39,6 +43,9 @@ export function parsePublishArgs(subArgv) {
     config: null,
     creativeStatement: null,
     draft: false,
+    sphLinkType: null,
+    sphLinkValue: null,
+    publishOptions: {},
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -73,6 +80,14 @@ export function parsePublishArgs(subArgv) {
       out.creativeStatement = args[++i];
     } else if (a === "--draft") {
       out.draft = true;
+    } else if (a === "--sph-link-type") {
+      out.sphLinkType = args[++i];
+    } else if (a === "--sph-link-value") {
+      out.sphLinkValue = args[++i];
+    } else if (a === "--sph-product-id") {
+      // 商品上架快捷参数：等价于 --sph-link-type product --sph-link-value <id>
+      out.sphLinkType = VIDEO_LINK_TYPES.PRODUCT;
+      out.sphLinkValue = args[++i];
     }
   }
 
@@ -84,6 +99,55 @@ export function parsePublishArgs(subArgv) {
     return { ok: false, error: `未知平台: ${out.platform}` };
   }
   out.platform = pt;
+
+  // 视频号链接是平台专属参数；误传给其他平台时直接忽略。
+  if (out.platform === "视频号") {
+    const hasType =
+      out.sphLinkType != null && String(out.sphLinkType).trim() !== "";
+    const hasValue =
+      out.sphLinkValue != null && String(out.sphLinkValue).trim() !== "";
+    // 只传商品编号时默认按商品上架处理。
+    if (hasValue && !hasType) {
+      out.sphLinkType = VIDEO_LINK_TYPES.PRODUCT;
+    }
+    const resolvedHasType =
+      out.sphLinkType != null && String(out.sphLinkType).trim() !== "";
+    if (resolvedHasType) {
+      const typeAliases = {
+        none: VIDEO_LINK_TYPES.NONE,
+        无: VIDEO_LINK_TYPES.NONE,
+        product: VIDEO_LINK_TYPES.PRODUCT,
+        商品: VIDEO_LINK_TYPES.PRODUCT,
+      };
+      const linkType =
+        typeAliases[String(out.sphLinkType).trim().toLowerCase()];
+      if (!linkType) {
+        return {
+          ok: false,
+          error: "--sph-link-type 当前仅支持 none 或 product",
+        };
+      }
+      if (linkType === VIDEO_LINK_TYPES.PRODUCT && !hasValue) {
+        return {
+          ok: false,
+          error:
+            "视频号商品上架必须提供 --sph-product-id 或 --sph-link-value <商品编号>",
+        };
+      }
+      if (linkType === VIDEO_LINK_TYPES.NONE && hasValue) {
+        return {
+          ok: false,
+          error: "--sph-link-type none 不应同时提供商品编号",
+        };
+      }
+      const built = buildVideoLinkOption("视频号", linkType, out.sphLinkValue);
+      if (!built.ok) return { ok: false, error: built.error };
+      out.publishOptions = { link: built.value };
+    }
+  } else {
+    out.sphLinkType = null;
+    out.sphLinkValue = null;
+  }
 
   if (!out.file && !out.dir) {
     return {
@@ -224,6 +288,26 @@ export function publishBodyToArgv(body) {
     ["creativeStatement", "creative-statement", "cs"],
     "--creative-statement"
   );
+  const sphLink =
+    (body.sphLink && typeof body.sphLink === "object" && body.sphLink) ||
+    (body.platformOptions &&
+      body.platformOptions.sph &&
+      body.platformOptions.sph.link);
+  const sphProductId = pickBodyValue(body, [
+    "sphProductId",
+    "sph-product-id",
+    "productId",
+  ]);
+  if (sphProductId != null && String(sphProductId).trim() !== "") {
+    argv.push("--sph-product-id", String(sphProductId).trim());
+  } else if (sphLink && typeof sphLink === "object") {
+    if (sphLink.type != null && String(sphLink.type).trim() !== "") {
+      argv.push("--sph-link-type", String(sphLink.type));
+    }
+    if (sphLink.value != null && String(sphLink.value).trim() !== "") {
+      argv.push("--sph-link-value", String(sphLink.value));
+    }
+  }
 
   if (body.show === true) argv.push("--show");
   if (body.closeWindowAfterPublish === false) argv.push("--no-close-window");
@@ -261,6 +345,11 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "show",
   "closeWindowAfterPublish",
   "draft",
+  "platformOptions",
+  "sphLink",
+  "sphProductId",
+  "sph-product-id",
+  "productId",
 ];
 
 function extractSharedPublishBody(body) {
@@ -271,6 +360,29 @@ function extractSharedPublishBody(body) {
     }
   }
   return shared;
+}
+
+function mergePublishBody(shared, target) {
+  const sharedPlatformOptions =
+    shared.platformOptions && typeof shared.platformOptions === "object"
+      ? shared.platformOptions
+      : {};
+  const targetPlatformOptions =
+    target.platformOptions && typeof target.platformOptions === "object"
+      ? target.platformOptions
+      : {};
+  const platformOptions = { ...sharedPlatformOptions };
+  for (const [platformKey, options] of Object.entries(targetPlatformOptions)) {
+    platformOptions[platformKey] = {
+      ...(sharedPlatformOptions[platformKey] || {}),
+      ...(options || {}),
+    };
+  }
+  return {
+    ...shared,
+    ...target,
+    ...(Object.keys(platformOptions).length > 0 ? { platformOptions } : {}),
+  };
 }
 
 function normalizePublishTargets(body) {
@@ -384,13 +496,14 @@ export function parseMultiPublishRequest(body) {
   const skipped = [];
 
   for (let i = 0; i < targets.length; i++) {
-    const merged = { ...shared, ...targets[i] };
+    const merged = mergePublishBody(shared, targets[i]);
     const item = parsePublishRequest(merged);
     if (!item.ok) {
       const label =
         targets[i].platform != null ? String(targets[i].platform) : `#${i + 1}`;
       // 对于未知平台，跳过并记录，不阻断其他平台的发布
-      const rawPt = targets[i].platform != null ? String(targets[i].platform).trim() : "";
+      const rawPt =
+        targets[i].platform != null ? String(targets[i].platform).trim() : "";
       const canonical = resolvePublishPlatform(rawPt);
       if (rawPt && !isVideoPublishPlatform(canonical)) {
         skipped.push({ platform: rawPt, reason: item.error });
@@ -472,9 +585,12 @@ export function publishHelpText() {
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
       --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
                             里开启了「默认发布到草稿」，即使不加该参数也会自动走草稿。
+      --sph-product-id <id>   视频号商品上架（快捷参数，等价于 product + 商品编号）
+      --sph-link-type <type>  视频号链接类型：none | product；传给其他平台时忽略
+      --sph-link-value <id>   视频号商品编号；可单独传（默认按商品上架）
   -h, --help            显示帮助
 
-退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）
+退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）, 4 已转存草稿需检查
 退出码 (批量 --dir): 0 全部成功, 1 部分失败, 2 全部失败
 
 示例:
@@ -484,7 +600,8 @@ export function publishHelpText() {
   matrixmedia cli publish -p sph --phone 13800138000 -f ./v.mp4 \\\\
     -t "新手第一天跑步就坚持 5 公里是什么体验" \\\\
     --bt2 "5公里新手挑战" \\\\
-    --tags "跑步 新手 减脂"
+    --tags "跑步 新手 减脂" \\
+    --sph-product-id 10000591263144 --draft
   # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：
   matrixmedia cli publish -p blbl --phone 13800138000 -f ./v.mp4 -t "标题" --tags "游戏 解说 开黑"
   # 一次性定时发布：必须提供实际视频、标题、账号等完整发布参数
