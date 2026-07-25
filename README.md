@@ -457,10 +457,12 @@ yarn build
 
 ## Star History
 
-<a href="https://www.star-history.com/?type=date&repos=hanliang97%2FMatrixMedia">
+## Star History
+
+<a href="https://www.star-history.com/?repos=hanliang97%2FMatrixMedia&type=date&legend=top-left">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&theme=dark&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
-   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=1biBAMHMDhnXuLywe6Xn5oQd3R4Ra-wf6GZqNsK6Mg1423RISpSHC6yIM8893XknqnOd_R5qPheBpTbX30_s5mR1VP4GTr_lh6AIHgm206Fdq558JptG6SAweYQ7v0QhD7N2cm2y9Xoc4WfLAr6lha-tqj12q5iX3IlyA2t8C1IZg4zxaEAwKLRAs2_v" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&theme=dark&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
  </picture>
 </a>
