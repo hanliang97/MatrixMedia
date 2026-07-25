@@ -31,10 +31,13 @@ export function normalizeVideoProductId(value) {
 }
 
 export function validateVideoProductId(value) {
+  const normalized = normalizeVideoProductId(value);
+  // 空编号表示未配置商品；真正启用商品时由 validateVideoLinkValue 强制非空。
+  if (!normalized) return { ok: true, productId: "" };
   const checked = validateVideoLinkValue(
     "视频号",
     VIDEO_LINK_TYPES.PRODUCT,
-    value
+    normalized
   );
   return checked.ok
     ? { ok: true, productId: checked.value }

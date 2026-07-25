@@ -95,16 +95,22 @@ export function getVideoLinkTypeCapability(platform, type) {
   );
 }
 
-export function getSupportedVideoLinkTypes(platform) {
+/** GUI 可展示的平台链接类型（含尚未开放自动化的占位项）。 */
+export function getDisplayableVideoLinkTypes(platform) {
   const capability = getVideoLinkCapability(platform);
   if (!capability) return [];
-  return capability.types.filter(
-    (item) => item.platformAvailable && item.automationSupported
+  return capability.types.filter((item) => item.platformAvailable);
+}
+
+/** 已支持自动化的链接类型。 */
+export function getSupportedVideoLinkTypes(platform) {
+  return getDisplayableVideoLinkTypes(platform).filter(
+    (item) => item.automationSupported
   );
 }
 
 export function platformSupportsVideoLink(platform) {
-  return getSupportedVideoLinkTypes(platform).some(
+  return getDisplayableVideoLinkTypes(platform).some(
     (item) => item.type !== VIDEO_LINK_TYPES.NONE
   );
 }
@@ -115,13 +121,26 @@ export function normalizeVideoLinkValue(value) {
 
 export function validateVideoLinkValue(platform, type, value) {
   const normalized = normalizeVideoLinkValue(value);
-  const typeCapability = getVideoLinkTypeCapability(platform, type);
-  if (type === VIDEO_LINK_TYPES.NONE) return { ok: true, value: "" };
-  if (!normalized) return { ok: true, value: "" };
-  if (!typeCapability || !typeCapability.automationSupported) {
+  const resolvedType = String(type || VIDEO_LINK_TYPES.NONE);
+  const typeCapability = getVideoLinkTypeCapability(platform, resolvedType);
+  if (resolvedType === VIDEO_LINK_TYPES.NONE) return { ok: true, value: "" };
+  if (!typeCapability) {
     return { ok: false, value: normalized, error: "当前链接类型尚未开放" };
   }
-  if (type === VIDEO_LINK_TYPES.PRODUCT && !/^\d+$/.test(normalized)) {
+  if (!typeCapability.automationSupported) {
+    return { ok: false, value: normalized, error: "当前链接类型尚未开放" };
+  }
+  if (!normalized) {
+    return {
+      ok: false,
+      value: "",
+      error:
+        resolvedType === VIDEO_LINK_TYPES.PRODUCT
+          ? "请选择或填写商品编号"
+          : "请填写链接内容",
+    };
+  }
+  if (resolvedType === VIDEO_LINK_TYPES.PRODUCT && !/^\d+$/.test(normalized)) {
     return { ok: false, value: normalized, error: "商品编码只能包含数字" };
   }
   return { ok: true, value: normalized };
@@ -161,11 +180,12 @@ export function resolveVideoLinkOption(platform, publishOptions = {}) {
     const resolvedType = String(link.type || VIDEO_LINK_TYPES.NONE);
     const typeCapability = getVideoLinkTypeCapability(platform, resolvedType);
     return {
-      enabled:
-        resolvedType !== VIDEO_LINK_TYPES.NONE && link.enabled === true,
+      enabled: resolvedType !== VIDEO_LINK_TYPES.NONE && link.enabled === true,
       type: resolvedType,
       inputKind:
-        link.inputKind || (typeCapability && typeCapability.inputKind) || "text",
+        link.inputKind ||
+        (typeCapability && typeCapability.inputKind) ||
+        "text",
       value: normalizeVideoLinkValue(link.value),
       selectionMode:
         link.selectionMode ||

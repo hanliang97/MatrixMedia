@@ -10,6 +10,7 @@ export const CREATIVE_STATEMENT_VALUES = {
   MARKETING: "marketing",
   PERSONAL_OPINION: "personal_opinion",
   REPOST: "repost",
+  SELF_SHOT: "self_shot",
   SELF_MADE_NO_REPOST: "self_made_no_repost",
 };
 
@@ -31,6 +32,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       blbl: "内容无需标注",
       dy: "无需添加自主声明",
       bjh: "无需声明",
+      sph: "无需标注",
     },
   },
   {
@@ -43,6 +45,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       ks: "内容为AI生成",
       tt: "AI生成",
       xhs: "笔记含AI合成内容",
+      sph: "含AI生成内容",
     },
   },
   {
@@ -55,6 +58,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       ks: "演绎情节，仅供娱乐",
       tt: "虚构演绎，故事经历",
       xhs: "虚构演绎，仅供娱乐",
+      sph: "内容为虚构剧情，仅供娱乐",
     },
   },
   {
@@ -65,6 +69,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       dy: "内容含营销推广信息",
       bjh: "内容含营销信息",
       xhs: "内容包含营销广告",
+      sph: "内容包含营销广告",
     },
   },
   {
@@ -75,6 +80,7 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       dy: "内容为个人观点或见解",
       bjh: "个人观点，仅供参考",
       ks: "个人观点，仅供参考",
+      sph: "个人观点，仅供参考",
     },
   },
   {
@@ -86,6 +92,15 @@ export const CREATIVE_STATEMENT_OPTIONS = [
       bjh: "内容为转载",
       tt: "取自站外",
       ks: "素材来源于网络",
+      sph: "内容为转载",
+    },
+  },
+  {
+    value: CREATIVE_STATEMENT_VALUES.SELF_SHOT,
+    label: "自行拍摄",
+    onlyPlatforms: ["sph"],
+    platformLabels: {
+      sph: "内容为自行拍摄",
     },
   },
   {
@@ -107,6 +122,7 @@ export const CREATIVE_STATEMENT_PLATFORM_KEYS = {
   快手: "ks",
   头条: "tt",
   小红书: "xhs",
+  视频号: "sph",
 };
 
 export function getCreativeStatementPlatformKey(pt) {
@@ -150,6 +166,7 @@ const NONE_LABEL_ALIASES = new Set([
   CREATIVE_STATEMENT_NONE_LABEL,
   "内容无需标注",
   "无需添加自主声明",
+  "无需标注",
 ]);
 
 const LABEL_TO_VALUE = (() => {
@@ -215,6 +232,10 @@ export function resolveTtCreativeStatementLabel(value) {
 
 export function resolveXhsCreativeStatementLabel(value) {
   return getCreativeStatementLabel(value, "xhs");
+}
+
+export function resolveSphCreativeStatementLabel(value) {
+  return getCreativeStatementLabel(value, "sph");
 }
 
 /**

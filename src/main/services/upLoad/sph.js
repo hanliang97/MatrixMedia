@@ -1,6 +1,10 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
+import {
+  isCreativeStatementNone,
+  resolveSphCreativeStatementLabel,
+} from "../../../shared/creativeStatement.js";
 import { attachSphVideoLink } from "./sphLink.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
@@ -92,6 +96,51 @@ async function tryDeclareOriginal(page) {
   }
 }
 
+/**
+ * 选择视频号「视频标注」（.post-with-mark-tag）。
+ * 自行拍摄时间/地点、转载来源为平台选填，本轮只点主选项。
+ */
+async function applySphCreativeStatement(page, value) {
+  if (isCreativeStatementNone(value)) return;
+  const label = resolveSphCreativeStatementLabel(value);
+  if (!label || label === "无标注" || label === "无需标注") return;
+
+  const opened = await page.evaluate(() => {
+    const app = document.querySelector("wujie-app.wujie_iframe");
+    const root = app && app.shadowRoot;
+    if (!root) return false;
+    const trigger = root.querySelector(".post-with-mark-tag .select-display");
+    if (!trigger) return false;
+    trigger.click();
+    return true;
+  });
+  if (!opened) {
+    console.log("视频标注：未找到入口，跳过");
+    return;
+  }
+
+  await page.waitForTimeout(300);
+  const clicked = await page.evaluate((expected) => {
+    const app = document.querySelector("wujie-app.wujie_iframe");
+    const root = app && app.shadowRoot;
+    if (!root) return false;
+    const options = Array.from(root.querySelectorAll(".mark-tag-option"));
+    const target = options.find((item) => {
+      const main = item.querySelector(".option-main");
+      return String((main && main.textContent) || "").trim() === expected;
+    });
+    if (!target) return false;
+    target.click();
+    return true;
+  }, label);
+  if (!clicked) {
+    console.warn(`视频标注：未找到选项「${label}」，跳过`);
+    return;
+  }
+  console.log(`[sph][mark-tag] 已选择：${label}`);
+  await page.waitForTimeout(400);
+}
+
 async function clickSphDraftButton(page) {
   const draftBtn = await page.waitForSelector(
     "wujie-app.wujie_iframe >>> .form-btns>div:first-child button",
@@ -130,7 +179,8 @@ async function waitSphUploadProcessing(page) {
 
 async function fallbackLinkFailureToDraft(page, data, window, event, error) {
   const detail =
-    (error && error.message) || (typeof error === "string" ? error : String(error));
+    (error && error.message) ||
+    (typeof error === "string" ? error : String(error));
   try {
     // 链接在表单前半段填写；失败时仍需等待视频处理完成后才能可靠保存草稿。
     await waitSphUploadProcessing(page);
@@ -150,7 +200,9 @@ async function fallbackLinkFailureToDraft(page, data, window, event, error) {
   } catch (draftError) {
     const draftDetail =
       (draftError && draftError.message) || String(draftError || "未知错误");
-    throw new Error(`视频号链接添加失败：${detail}；保存草稿也失败：${draftDetail}`);
+    throw new Error(
+      `视频号链接添加失败：${detail}；保存草稿也失败：${draftDetail}`
+    );
   }
 }
 
@@ -206,7 +258,9 @@ export default async function (page, data, window, event, onFinish) {
       try {
         const selectedLink = await attachSphVideoLink(page, link);
         console.log(
-          `[sph][link] 已添加 ${selectedLink.type} ${selectedLink.value}: ${selectedLink.label || ""}`
+          `[sph][link] 已添加 ${selectedLink.type} ${selectedLink.value}: ${
+            selectedLink.label || ""
+          }`
         );
       } catch (linkError) {
         console.error("[sph][link] 添加链接失败:", linkError);
@@ -219,6 +273,18 @@ export default async function (page, data, window, event, onFinish) {
         );
         if (handled) return;
       }
+    }
+
+    try {
+      await applySphCreativeStatement(
+        page,
+        data.data && data.data.creativeStatement
+      );
+    } catch (markError) {
+      console.warn(
+        "视频标注选择未完成:",
+        markError && markError.message ? markError.message : markError
+      );
     }
 
     await tryDeclareOriginal(page);

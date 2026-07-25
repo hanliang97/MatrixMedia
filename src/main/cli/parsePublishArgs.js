@@ -84,6 +84,10 @@ export function parsePublishArgs(subArgv) {
       out.sphLinkType = args[++i];
     } else if (a === "--sph-link-value") {
       out.sphLinkValue = args[++i];
+    } else if (a === "--sph-product-id") {
+      // 商品上架快捷参数：等价于 --sph-link-type product --sph-link-value <id>
+      out.sphLinkType = VIDEO_LINK_TYPES.PRODUCT;
+      out.sphLinkValue = args[++i];
     }
   }
 
@@ -98,27 +102,43 @@ export function parsePublishArgs(subArgv) {
 
   // 视频号链接是平台专属参数；误传给其他平台时直接忽略。
   if (out.platform === "视频号") {
-    const hasType = out.sphLinkType != null && String(out.sphLinkType).trim() !== "";
-    const hasValue = out.sphLinkValue != null && String(out.sphLinkValue).trim() !== "";
+    const hasType =
+      out.sphLinkType != null && String(out.sphLinkType).trim() !== "";
+    const hasValue =
+      out.sphLinkValue != null && String(out.sphLinkValue).trim() !== "";
+    // 只传商品编号时默认按商品上架处理。
     if (hasValue && !hasType) {
-      return { ok: false, error: "使用 --sph-link-value 时必须同时提供 --sph-link-type product" };
+      out.sphLinkType = VIDEO_LINK_TYPES.PRODUCT;
     }
-    if (hasType) {
+    const resolvedHasType =
+      out.sphLinkType != null && String(out.sphLinkType).trim() !== "";
+    if (resolvedHasType) {
       const typeAliases = {
         none: VIDEO_LINK_TYPES.NONE,
-        "无": VIDEO_LINK_TYPES.NONE,
+        无: VIDEO_LINK_TYPES.NONE,
         product: VIDEO_LINK_TYPES.PRODUCT,
-        "商品": VIDEO_LINK_TYPES.PRODUCT,
+        商品: VIDEO_LINK_TYPES.PRODUCT,
       };
-      const linkType = typeAliases[String(out.sphLinkType).trim().toLowerCase()];
+      const linkType =
+        typeAliases[String(out.sphLinkType).trim().toLowerCase()];
       if (!linkType) {
-        return { ok: false, error: "--sph-link-type 当前仅支持 none 或 product" };
+        return {
+          ok: false,
+          error: "--sph-link-type 当前仅支持 none 或 product",
+        };
       }
       if (linkType === VIDEO_LINK_TYPES.PRODUCT && !hasValue) {
-        return { ok: false, error: "视频号商品链接必须提供 --sph-link-value <商品编号>" };
+        return {
+          ok: false,
+          error:
+            "视频号商品上架必须提供 --sph-product-id 或 --sph-link-value <商品编号>",
+        };
       }
       if (linkType === VIDEO_LINK_TYPES.NONE && hasValue) {
-        return { ok: false, error: "--sph-link-type none 不应同时提供 --sph-link-value" };
+        return {
+          ok: false,
+          error: "--sph-link-type none 不应同时提供商品编号",
+        };
       }
       const built = buildVideoLinkOption("视频号", linkType, out.sphLinkValue);
       if (!built.ok) return { ok: false, error: built.error };
@@ -269,10 +289,18 @@ export function publishBodyToArgv(body) {
     "--creative-statement"
   );
   const sphLink =
-    body.platformOptions &&
-    body.platformOptions.sph &&
-    body.platformOptions.sph.link;
-  if (sphLink && typeof sphLink === "object") {
+    (body.sphLink && typeof body.sphLink === "object" && body.sphLink) ||
+    (body.platformOptions &&
+      body.platformOptions.sph &&
+      body.platformOptions.sph.link);
+  const sphProductId = pickBodyValue(body, [
+    "sphProductId",
+    "sph-product-id",
+    "productId",
+  ]);
+  if (sphProductId != null && String(sphProductId).trim() !== "") {
+    argv.push("--sph-product-id", String(sphProductId).trim());
+  } else if (sphLink && typeof sphLink === "object") {
     if (sphLink.type != null && String(sphLink.type).trim() !== "") {
       argv.push("--sph-link-type", String(sphLink.type));
     }
@@ -318,6 +346,10 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "closeWindowAfterPublish",
   "draft",
   "platformOptions",
+  "sphLink",
+  "sphProductId",
+  "sph-product-id",
+  "productId",
 ];
 
 function extractSharedPublishBody(body) {
@@ -470,7 +502,8 @@ export function parseMultiPublishRequest(body) {
       const label =
         targets[i].platform != null ? String(targets[i].platform) : `#${i + 1}`;
       // 对于未知平台，跳过并记录，不阻断其他平台的发布
-      const rawPt = targets[i].platform != null ? String(targets[i].platform).trim() : "";
+      const rawPt =
+        targets[i].platform != null ? String(targets[i].platform).trim() : "";
       const canonical = resolvePublishPlatform(rawPt);
       if (rawPt && !isVideoPublishPlatform(canonical)) {
         skipped.push({ platform: rawPt, reason: item.error });
@@ -552,8 +585,9 @@ export function publishHelpText() {
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
       --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
                             里开启了「默认发布到草稿」，即使不加该参数也会自动走草稿。
+      --sph-product-id <id>   视频号商品上架（快捷参数，等价于 product + 商品编号）
       --sph-link-type <type>  视频号链接类型：none | product；传给其他平台时忽略
-      --sph-link-value <id>   视频号商品编号；type=product 时必填
+      --sph-link-value <id>   视频号商品编号；可单独传（默认按商品上架）
   -h, --help            显示帮助
 
 退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）, 4 已转存草稿需检查
@@ -567,7 +601,7 @@ export function publishHelpText() {
     -t "新手第一天跑步就坚持 5 公里是什么体验" \\\\
     --bt2 "5公里新手挑战" \\\\
     --tags "跑步 新手 减脂" \\
-    --sph-link-type product --sph-link-value 10000591263144 --draft
+    --sph-product-id 10000591263144 --draft
   # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：
   matrixmedia cli publish -p blbl --phone 13800138000 -f ./v.mp4 -t "标题" --tags "游戏 解说 开黑"
   # 一次性定时发布：必须提供实际视频、标题、账号等完整发布参数

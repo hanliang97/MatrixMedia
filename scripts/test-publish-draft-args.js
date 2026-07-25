@@ -16,12 +16,7 @@ const { resolvePublishCompletion } = require("../src/shared/publishResult");
 
 // 基础有效 argv（不含 --draft）
 function baseArgv() {
-  return [
-    "-p", "dy",
-    "--phone", "13800138000",
-    "-f", "./v.mp4",
-    "-t", "标题",
-  ];
+  return ["-p", "dy", "--phone", "13800138000", "-f", "./v.mp4", "-t", "标题"];
 }
 
 // 1) 不加 --draft：draft 字段应为 false
@@ -52,7 +47,11 @@ const r3 = parsePublishRequest({
   draft: true,
 });
 assert.strictEqual(r3.ok, true);
-assert.strictEqual(r3.value.draft, true, "HTTP body draft:true 应解析为 draft=true");
+assert.strictEqual(
+  r3.value.draft,
+  true,
+  "HTTP body draft:true 应解析为 draft=true"
+);
 
 // 4) HTTP body draft: false → argv 不含 --draft → parsed.draft=false
 const argv4 = publishBodyToArgv({
@@ -72,7 +71,11 @@ const r4 = parsePublishRequest({
   draft: false,
 });
 assert.strictEqual(r4.ok, true);
-assert.strictEqual(r4.value.draft, false, "HTTP body draft:false 应解析为 draft=false");
+assert.strictEqual(
+  r4.value.draft,
+  false,
+  "HTTP body draft:false 应解析为 draft=false"
+);
 
 // 5) HTTP body 不传 draft → parsed.draft=false
 const r5 = parsePublishRequest({
@@ -86,13 +89,19 @@ assert.strictEqual(r5.value.draft, false, "不传 draft 应为 false");
 
 // 6) CLI：视频号商品链接进入 publishOptions，且可与草稿模式同时使用
 const r6 = parsePublishArgs([
-  "-p", "sph",
-  "--phone", "13800138000",
-  "-f", "./v.mp4",
-  "-t", "标题",
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
   "--draft",
-  "--sph-link-type", "product",
-  "--sph-link-value", "10000591263144",
+  "--sph-link-type",
+  "product",
+  "--sph-link-value",
+  "10000591263144",
 ]);
 assert.strictEqual(r6.ok, true);
 assert.strictEqual(r6.value.draft, true);
@@ -107,11 +116,16 @@ assert.deepStrictEqual(r6.value.publishOptions.link, {
 
 // 7) 视频号商品缺少编号时报参数错误
 const r7 = parsePublishArgs([
-  "-p", "sph",
-  "--phone", "13800138000",
-  "-f", "./v.mp4",
-  "-t", "标题",
-  "--sph-link-type", "product",
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--sph-link-type",
+  "product",
 ]);
 assert.strictEqual(r7.ok, false);
 assert.ok(r7.error.includes("商品编号"));
@@ -119,8 +133,10 @@ assert.ok(r7.error.includes("商品编号"));
 // 8) 视频号专属参数误传给其他平台时忽略，不报错
 const r8 = parsePublishArgs([
   ...baseArgv(),
-  "--sph-link-type", "product",
-  "--sph-link-value", "not-a-product-id",
+  "--sph-link-type",
+  "product",
+  "--sph-link-value",
+  "not-a-product-id",
 ]);
 assert.strictEqual(r8.ok, true);
 assert.deepStrictEqual(r8.value.publishOptions, {});
@@ -182,7 +198,62 @@ assert.deepStrictEqual(
   ["100", "200"]
 );
 
-// 12) 主动草稿成功与“链接失败后转存草稿”必须返回不同结果
+// 12) CLI 快捷参数 --sph-product-id
+const r12 = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--sph-product-id",
+  "10000591263144",
+]);
+assert.strictEqual(r12.ok, true);
+assert.strictEqual(r12.value.publishOptions.link.value, "10000591263144");
+assert.strictEqual(r12.value.publishOptions.link.enabled, true);
+
+// 13) 只传 --sph-link-value 时默认按商品上架
+const r13 = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--sph-link-value",
+  "10000591263144",
+]);
+assert.strictEqual(r13.ok, true);
+assert.strictEqual(r13.value.publishOptions.link.type, "product");
+
+// 14) HTTP 快捷字段 sphProductId
+const r14 = parsePublishRequest({
+  platform: "sph",
+  phone: "13800138000",
+  file: "./v.mp4",
+  title: "标题",
+  sphProductId: "10000591263144",
+});
+assert.strictEqual(r14.ok, true);
+assert.strictEqual(r14.value.publishOptions.link.value, "10000591263144");
+
+// 15) HTTP sphLink 对象
+const r15 = parsePublishRequest({
+  platform: "sph",
+  phone: "13800138000",
+  file: "./v.mp4",
+  title: "标题",
+  sphLink: { type: "product", value: "10000591263144" },
+});
+assert.strictEqual(r15.ok, true);
+assert.strictEqual(r15.value.publishOptions.link.value, "10000591263144");
+
+// 16) 主动草稿成功与“链接失败后转存草稿”必须返回不同结果
 assert.deepStrictEqual(
   resolvePublishCompletion({
     status: true,
