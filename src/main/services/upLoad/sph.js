@@ -2,6 +2,8 @@ import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
 import { attachSphVideoLink } from "./sphLink.js";
+import { applySphLocationMode } from "./sphLocation.js";
+import { findAccountPublishSettings } from "../accountPublishSettingsResolver.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -128,11 +130,19 @@ async function waitSphUploadProcessing(page) {
   await page.waitForTimeout(2000);
 }
 
-async function fallbackLinkFailureToDraft(page, data, window, event, error) {
+async function fallbackFormFailureToDraft(
+  page,
+  data,
+  window,
+  event,
+  error,
+  failureStage,
+  failureLabel
+) {
   const detail =
     (error && error.message) || (typeof error === "string" ? error : String(error));
   try {
-    // 链接在表单前半段填写；失败时仍需等待视频处理完成后才能可靠保存草稿。
+    // 表单项在发布前半段处理；失败时仍需等待视频处理完成后才能可靠保存草稿。
     await waitSphUploadProcessing(page);
     await clickSphDraftButton(page);
     event.reply("puppeteerFile-done", {
@@ -142,15 +152,17 @@ async function fallbackLinkFailureToDraft(page, data, window, event, error) {
       publishMode: "draft",
       publishToDraft: true,
       needsAttention: true,
-      failureStage: "video_link",
-      message: `视频号链接添加失败，视频已保存为草稿：${detail}`,
+      failureStage,
+      message: `${failureLabel}失败，视频已保存为草稿：${detail}`,
     });
     maybeClosePublishWindow({ ...data, closeWindowAfterPublish: true }, window);
     return true;
   } catch (draftError) {
     const draftDetail =
       (draftError && draftError.message) || String(draftError || "未知错误");
-    throw new Error(`视频号链接添加失败：${detail}；保存草稿也失败：${draftDetail}`);
+    throw new Error(
+      `${failureLabel}失败：${detail}；保存草稿也失败：${draftDetail}`
+    );
   }
 }
 
@@ -210,15 +222,45 @@ export default async function (page, data, window, event, onFinish) {
         );
       } catch (linkError) {
         console.error("[sph][link] 添加链接失败:", linkError);
-        const handled = await fallbackLinkFailureToDraft(
+        const handled = await fallbackFormFailureToDraft(
           page,
           data,
           window,
           event,
-          linkError
+          linkError,
+          "video_link",
+          "视频号链接添加"
         );
         if (handled) return;
       }
+    }
+
+    const accountSettings =
+      findAccountPublishSettings({ phone: data.phone, pt: data.pt }) || {};
+    try {
+      const locationResult = await applySphLocationMode(
+        page,
+        accountSettings.sphLocationMode
+      );
+      if (locationResult.mode === "none") {
+        console.log(
+          locationResult.changed
+            ? "[sph][location] 已选择不显示位置"
+            : "[sph][location] 当前已是不显示位置"
+        );
+      }
+    } catch (locationError) {
+      console.error("[sph][location] 设置位置失败:", locationError);
+      const handled = await fallbackFormFailureToDraft(
+        page,
+        data,
+        window,
+        event,
+        locationError,
+        "location",
+        "视频号关闭位置显示"
+      );
+      if (handled) return;
     }
 
     await tryDeclareOriginal(page);

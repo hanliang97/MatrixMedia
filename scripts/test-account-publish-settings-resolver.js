@@ -56,8 +56,9 @@ module.exports = { changeData, __setStore: setStore };
     "2026-06-26": [
       {
         phone: "13800138000",
-        pt: "小红书",
+        pt: "视频号",
         defaultPublishToDraft: true,
+        sphLocationMode: "none",
       },
       {
         phone: "13900139000",
@@ -72,8 +73,9 @@ module.exports = { changeData, __setStore: setStore };
   const debugResult = mockUtils.changeData({ fileName: "account", type: "get", item: { page: 1, pageSize: 9999 } });
   console.log("debug mock changeData result keys:", Object.keys(debugResult.data || {}));
 
-  const s1 = findAccountPublishSettings({ phone: "13800138000", pt: "小红书" });
+  const s1 = findAccountPublishSettings({ phone: "13800138000", pt: "视频号" });
   assert.strictEqual(s1 && s1.defaultPublishToDraft, true);
+  assert.strictEqual(s1 && s1.sphLocationMode, "none");
 
   const s2 = findAccountPublishSettings({ phone: "13900139000", pt: "抖音" });
   assert.strictEqual(s2 && s2.defaultPublishToDraft, false);
@@ -83,7 +85,7 @@ module.exports = { changeData, __setStore: setStore };
 
   const m1 = resolveAccountPublishMode({
     phone: "13800138000",
-    pt: "小红书",
+    pt: "视频号",
     requestDraftMode: false,
   });
   assert.deepStrictEqual(m1, { publishMode: "draft", publishToDraft: true });
@@ -111,7 +113,7 @@ module.exports = { changeData, __setStore: setStore };
 
   const m5 = resolveAccountPublishMode({
     phone: "13800138000-主号",
-    pt: "小红书",
+    pt: "视频号",
     requestDraftMode: false,
   });
   assert.deepStrictEqual(m5, { publishMode: "draft", publishToDraft: true });

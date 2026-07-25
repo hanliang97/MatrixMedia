@@ -1,9 +1,21 @@
 "use strict";
 
+export const SPH_LOCATION_MODES = Object.freeze({
+  PLATFORM_DEFAULT: "platform_default",
+  NONE: "none",
+});
+
+export function normalizeSphLocationMode(value) {
+  return value === SPH_LOCATION_MODES.NONE
+    ? SPH_LOCATION_MODES.NONE
+    : SPH_LOCATION_MODES.PLATFORM_DEFAULT;
+}
+
 export function normalizeAccountPublishSettings(settings = {}) {
   return {
     defaultPublishToDraft: Boolean(settings.defaultPublishToDraft),
     useRealBrowser: Boolean(settings.useRealBrowser),
+    sphLocationMode: normalizeSphLocationMode(settings.sphLocationMode),
   };
 }
 
@@ -47,6 +59,11 @@ export function updateAccountTreePublishSettings(accountTree = {}, patch = {}) {
         child.meta.defaultPublishToDraft = Boolean(patch.defaultPublishToDraft);
         if (typeof patch.useRealBrowser === "boolean") {
           child.meta.useRealBrowser = patch.useRealBrowser;
+        }
+        if (targetPt === "视频号") {
+          child.meta.sphLocationMode = normalizeSphLocationMode(
+            patch.sphLocationMode
+          );
         }
       }
     });

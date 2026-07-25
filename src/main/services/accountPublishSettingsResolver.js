@@ -4,6 +4,7 @@ import { changeData } from "../server/utils";
 import {
   resolveEffectivePublishMode,
   isDefaultPublishToDraftEnabled,
+  normalizeAccountPublishSettings,
 } from "../../shared/accountPublishSettings.js";
 
 function normalizePhone(value) {
@@ -13,7 +14,7 @@ function normalizePhone(value) {
 /**
  * 从账号数据文件夹里查匹配 phone + pt 的账号记录
  * @param {{ phone?: string, pt?: string }} query
- * @returns {{ defaultPublishToDraft: boolean } | null}
+ * @returns {{ defaultPublishToDraft: boolean, useRealBrowser: boolean, sphLocationMode: "platform_default"|"none" } | null}
  */
 export function findAccountPublishSettings({ phone, pt } = {}) {
   const targetPhone = normalizePhone(phone);
@@ -38,9 +39,10 @@ export function findAccountPublishSettings({ phone, pt } = {}) {
           normalizePhone(row.phone) === targetPhone &&
           String(row.pt || "") === targetPt
         ) {
-          return {
+          return normalizeAccountPublishSettings({
+            ...row,
             defaultPublishToDraft: isDefaultPublishToDraftEnabled(row),
-          };
+          });
         }
       }
     }

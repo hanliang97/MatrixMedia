@@ -102,11 +102,25 @@
       </template>
       <!-- 其他平台：默认发布到草稿 -->
       <template v-else>
-        <p class="section-tip">开启后，该账号在视频发布时会优先保存到草稿。</p>
+        <p class="section-tip">
+          开启默认草稿后，该账号在视频发布时会优先保存到草稿。
+          <template v-if="isSphPlatform">
+            关闭平台默认位置后，发布时会自动选择“不显示位置”。
+          </template>
+        </p>
         <el-form label-width="120px" class="form-block">
           <el-form-item label="默认发布到草稿">
             <el-switch
               v-model="defaultPublishToDraft"
+              active-text="开启"
+              inactive-text="关闭"
+            />
+          </el-form-item>
+          <el-form-item v-if="isSphPlatform" label="使用平台默认位置">
+            <el-switch
+              v-model="sphLocationMode"
+              active-value="platform_default"
+              inactive-value="none"
               active-text="开启"
               inactive-text="关闭"
             />
@@ -209,6 +223,7 @@ export default {
       savingProxy: false,
       defaultPublishToDraft: false,
       useRealBrowser: false,
+      sphLocationMode: "platform_default",
       savingPublishSettings: false,
       // Chrome 路径配置
       chromePath: "",
@@ -221,6 +236,9 @@ export default {
   computed: {
     isXhsPlatform() {
       return isXhsPlatform(this.title);
+    },
+    isSphPlatform() {
+      return this.title === "视频号";
     },
     proxyDisplay() {
       const display = getAccountProxyDisplay({ proxies: this.proxyList });
@@ -270,6 +288,7 @@ export default {
       const settings = normalizeAccountPublishSettings(this.urldata || {});
       this.defaultPublishToDraft = settings.defaultPublishToDraft;
       this.useRealBrowser = settings.useRealBrowser;
+      this.sphLocationMode = settings.sphLocationMode;
       this.chromeTestResult = null;
       // 异步加载全局 Chrome 路径配置
       ipcRenderer.invoke("chrome:getPath").then((res) => {
@@ -296,6 +315,7 @@ export default {
         const settings = normalizeAccountPublishSettings({
           defaultPublishToDraft: this.defaultPublishToDraft,
           useRealBrowser: this.useRealBrowser,
+          sphLocationMode: this.sphLocationMode,
         });
         const res = await dataRequest({
           type: "update",
@@ -305,6 +325,7 @@ export default {
             date: this.urldata.date,
             defaultPublishToDraft: settings.defaultPublishToDraft,
             useRealBrowser: settings.useRealBrowser,
+            sphLocationMode: settings.sphLocationMode,
           },
         });
         if (!res || res.success === false) {
@@ -313,14 +334,17 @@ export default {
         }
         this.defaultPublishToDraft = settings.defaultPublishToDraft;
         this.useRealBrowser = settings.useRealBrowser;
+        this.sphLocationMode = settings.sphLocationMode;
         this.urldata = {
           ...this.urldata,
           defaultPublishToDraft: settings.defaultPublishToDraft,
           useRealBrowser: settings.useRealBrowser,
+          sphLocationMode: settings.sphLocationMode,
         };
         this.$route.meta.defaultPublishToDraft = settings.defaultPublishToDraft;
         this.$route.meta.useRealBrowser = settings.useRealBrowser;
-        this.syncAccountTreePublishSettings(settings.defaultPublishToDraft, settings.useRealBrowser);
+        this.$route.meta.sphLocationMode = settings.sphLocationMode;
+        this.syncAccountTreePublishSettings(settings);
         this.$message.success("发布设置已保存");
       } catch (e) {
         this.$message.error(
@@ -330,15 +354,16 @@ export default {
         this.savingPublishSettings = false;
       }
     },
-    syncAccountTreePublishSettings(defaultPublishToDraft, useRealBrowser) {
+    syncAccountTreePublishSettings(settings) {
       try {
         const raw = localStorage.getItem("accountTree");
         const tree = raw ? JSON.parse(raw) : {};
         const nextTree = updateAccountTreePublishSettings(tree, {
           phone: this.urldata.phone,
           pt: this.title,
-          defaultPublishToDraft,
-          useRealBrowser,
+          defaultPublishToDraft: settings.defaultPublishToDraft,
+          useRealBrowser: settings.useRealBrowser,
+          sphLocationMode: settings.sphLocationMode,
         });
         localStorage.setItem("accountTree", JSON.stringify(nextTree));
       } catch (e) {
