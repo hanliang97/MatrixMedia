@@ -259,10 +259,24 @@
       />
 
       <div slot="footer" class="dialog-footer">
-        <el-button @click="goBackToMeta">上一步</el-button>
-        <el-button @click="platformVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleBatchPublish">发布</el-button>
-        <el-button type="primary" @click="handleBatchPublishToDraft"
+        <el-button :disabled="publishing" @click="goBackToMeta"
+          >上一步</el-button
+        >
+        <el-button :disabled="publishing" @click="platformVisible = false"
+          >取消</el-button
+        >
+        <el-button
+          type="primary"
+          :loading="publishing"
+          :disabled="publishing"
+          @click="handleBatchPublish"
+          >发布</el-button
+        >
+        <el-button
+          type="primary"
+          :loading="publishing"
+          :disabled="publishing"
+          @click="handleBatchPublishToDraft"
           >发布到草稿</el-button
         >
       </div>
@@ -513,6 +527,7 @@ export default {
       dirXlsxRows: [], // [{fileName, title, tags}]
       dirXlsxError: "",
       dirBatchFiles: [],
+      publishing: false,
     };
   },
   computed: {
@@ -1225,6 +1240,16 @@ export default {
     },
 
     async submitBatchPublish(mode = "publish") {
+      if (this.publishing) return;
+      this.publishing = true;
+      try {
+        return await this.doSubmitBatchPublish(mode);
+      } finally {
+        this.publishing = false;
+      }
+    },
+
+    async doSubmitBatchPublish(mode = "publish") {
       const isDraftMode = mode === "draft";
       // Directory batch mode
       if (this.dirBatchFiles && this.dirBatchFiles.length > 0) {
