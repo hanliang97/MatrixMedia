@@ -16,17 +16,25 @@
   <img src="./src/renderer/layout/components/Sidebar/ptcion/xhs.png" alt="小红书" width="36" />
 </p>
 
+## 官网
+
+GitHub Pages：https://hanliang97.github.io/MatrixMedia/
+
+（源码在仓库 `website/`；首次部署后需在 GitHub → Settings → Pages 将 Source 设为 `gh-pages` 分支。）
+
 ## 软件下载地址
 
 国内 gitee 下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
 
 github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
 
-
 ## 工具使用文档
 
 国内文档地址
 https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
+
+官网文档（与上同步公开部分）：https://hanliang97.github.io/MatrixMedia/
+
 ## 关键词（便于搜索）
 
 自媒体、自媒体矩阵、矩阵发布、矩阵运营、内容矩阵、视频矩阵、多平台矩阵、跨平台发布、批量发布、批量上传、批量分发、一键发布、多账号发布、多平台发布、本地视频发布、短视频矩阵、内容分发、账号矩阵、自动化发布、CLI 批量、命令行发布、无头发布、智能体编排、OpenClaw、MCP 发布、抖音矩阵、快手矩阵、小红书矩阵、百家号矩阵、哔哩哔哩矩阵、头条矩阵、视频号矩阵、番茄视频、番茄视频矩阵、MatrixMedia、矩媒、pubtw
@@ -169,24 +177,24 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | 发布页   | https://pugc.yueduwuxian.com/fqvideo/home/publish-video |
 | 作品列表 | https://pugc.yueduwuxian.com/fqvideo/home/video-list    |
 
-| 能力                    | 状态   |
-| ----------------------- | ------ |
-| GUI 添加账号 / 登录窗口 | 可用   |
-| GUI / CLI 自动发布      | 可用   |
+| 能力                    | 状态                |
+| ----------------------- | ------------------- |
+| GUI 添加账号 / 登录窗口 | 可用                |
+| GUI / CLI 自动发布      | 可用                |
 | 登录 Cookie 自动检测    | 可用（`sessionid`） |
-| 发布审核状态回查        | 可用   |
+| 发布审核状态回查        | 可用                |
 
 **CLI / 配置别名**：`fqsp`、`fanqie`、`fq`、`番茄视频`
 
 **主要代码位置**：
 
-| 文件                               | 说明               |
-| ---------------------------------- | ------------------ |
-| `src/renderer/utils/configUrl.js`  | 渲染层 URL         |
+| 文件                               | 说明                |
+| ---------------------------------- | ------------------- |
+| `src/renderer/utils/configUrl.js`  | 渲染层 URL          |
 | `src/main/config/ptConfig.js`      | 主进程 / CLI 用 URL |
-| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑       |
-| `src/main/services/zt/fqsp.js`     | 审核状态查询       |
-| `src/main/services/getCookie.js`   | 登录态 Cookie 规则 |
+| `src/main/services/upLoad/fqsp.js` | 自动发布逻辑        |
+| `src/main/services/zt/fqsp.js`     | 审核状态查询        |
+| `src/main/services/getCookie.js`   | 登录态 Cookie 规则  |
 
 侧栏图标（可选）：将 `fqsp.png` 放到 `src/renderer/layout/components/Sidebar/ptcion/`。
 
@@ -194,13 +202,13 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 
 从项目根或已安装应用启动时，在参数中加入 **`cli`** 即进入 CLI（不打开主窗口）。完整参数说明见 **[docs/cli.md](./docs/cli.md)**。子命令一览：
 
-| 子命令                | 支持平台                                                                                             | 作用                                                           |
-| --------------------- | ---------------------------------------------------------------------------------------------------- | -------------------------------------------------------------- |
-| `cli login`           | **抖音**（`-p dy`）、**视频号**（`-p sph`）                                                          | 终端二维码扫码登录                                             |
+| 子命令                | 支持平台                                                                      | 作用                                                           |
+| --------------------- | ----------------------------------------------------------------------------- | -------------------------------------------------------------- |
+| `cli login`           | **抖音**（`-p dy`）、**视频号**（`-p sph`）                                   | 终端二维码扫码登录                                             |
 | `cli publish`         | **8 个已自动化平台**（`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs \| fqsp`） | 发布视频（本地路径或 http(s) URL，与 GUI「本地视频发布」等价） |
-| `cli publish-article` | **掘金**（`juejin`）                                                                                 | 发布文章（`--content` 或 `--file`）                            |
-| `cli accounts`        | 全平台（含 `fqsp` 番茄视频）                                                                         | 列出所有账号并实时检测 cookie 登录态                           |
-| `cli history`         | 全平台（含 `fqsp` 番茄视频）                                                                         | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤  |
+| `cli publish-article` | **掘金**（`juejin`）                                                          | 发布文章（`--content` 或 `--file`）                            |
+| `cli accounts`        | 全平台（含 `fqsp` 番茄视频）                                                  | 列出所有账号并实时检测 cookie 登录态                           |
+| `cli history`         | 全平台（含 `fqsp` 番茄视频）                                                  | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤  |
 
 > **非 CLI 登录平台的登录怎么办？** 当前 CLI 登录已实现抖音与视频号；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
@@ -438,8 +446,6 @@ curl -X POST http://127.0.0.1:30088/publish \
 2. 请勿将本项目用于批量作弊、恶意营销、侵权搬运、刷量等违规用途，由此产生的风险与责任由使用者自行承担。
 3. 涉及账号、Cookie、本地素材等敏感数据时，请妥善保管并自行评估安全风险。
 4. 部分平台（如哔哩哔哩）可能需要人工参与（例如手动上传封面），请以平台当前页面规则为准。
-
-
 
 ## 开发环境 node 20
 
