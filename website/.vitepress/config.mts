@@ -25,6 +25,20 @@ export default defineConfig({
 
   head: [
     ["link", { rel: "icon", href: "/MatrixMedia/favicon.ico" }],
+    [
+      "meta",
+      {
+        name: "google-site-verification",
+        content: "Ji_T0CJx2Uv14x-nF78rWJQVVtbsrDho0H1j0u24kAo",
+      },
+    ],
+    [
+      "meta",
+      {
+        name: "msvalidate.01",
+        content: "E09E49AE2F08294BF4ECDACECB14D364",
+      },
+    ],
     ["meta", { name: "robots", content: "index,follow" }],
     ["meta", { name: "theme-color", content: "#0f766e" }],
     ["meta", { property: "og:type", content: "website" }],
