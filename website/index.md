@@ -39,17 +39,27 @@ features:
 
 ## 文档与教程
 
-| 入口 | 说明 |
-| --- | --- |
-| [快速开始](/guide/getting-started) | 下载安装与上手路径 |
-| [CLI](/reference/cli) | 命令行登录、发布与查询 |
-| [HTTP API](/reference/http-api) | 本机 HTTP 发布接口 |
-| [MCP](/reference/mcp) | Model Context Protocol 接入 |
-| [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7) | B 站演示 |
-| [Gitee 下载](https://gitee.com/gzlingyi_0/pubtw/releases/) | 国内 Releases |
+| 入口                                                       | 说明                        |
+| ---------------------------------------------------------- | --------------------------- |
+| [快速开始](/guide/getting-started)                         | 下载安装与上手路径          |
+| [CLI](/reference/cli)                                      | 命令行登录、发布与查询      |
+| [HTTP API](/reference/http-api)                            | 本机 HTTP 发布接口          |
+| [MCP](/reference/mcp)                                      | Model Context Protocol 接入 |
+| [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)    | B 站演示                    |
+| [Gitee 下载](https://gitee.com/gzlingyi_0/pubtw/releases/) | 国内 Releases               |
 
 ## 开源说明
 
 本项目以 **GPL-2.0** 开源。欢迎在 [GitHub](https://github.com/hanliang97/MatrixMedia) Star、提 Issue 与 PR。
 
 国内使用文档也可参考 [Gitee Wiki](https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804)。
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=hanliang97%2FMatrixMedia&type=date&legend=top-left">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&theme=dark&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
+    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
+    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
+  </picture>
+</a>

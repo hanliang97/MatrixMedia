@@ -18,22 +18,19 @@
 
 ## 官网
 
-GitHub Pages：https://hanliang97.github.io/MatrixMedia/
+[GitHub Pages · 矩媒官网](https://hanliang97.github.io/MatrixMedia/)
 
 （源码在仓库 `website/`；首次部署后需在 GitHub → Settings → Pages 将 Source 设为 `gh-pages` 分支。）
 
 ## 软件下载地址
 
-国内 gitee 下载地址 https://gitee.com/gzlingyi_0/pubtw/releases/
-
-github 下载地址为 https://github.com/hanliang97/MatrixMedia/releases
+- 国内 Gitee：[gitee.com/gzlingyi_0/pubtw/releases](https://gitee.com/gzlingyi_0/pubtw/releases/)
+- GitHub：[github.com/hanliang97/MatrixMedia/releases](https://github.com/hanliang97/MatrixMedia/releases)
 
 ## 工具使用文档
 
-国内文档地址
-https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804
-
-官网文档（与上同步公开部分）：https://hanliang97.github.io/MatrixMedia/
+- 国内文档：[Gitee Wiki](https://gitee.com/gzlingyi_0/pubtw/wikis/pages?sort_id=14772656&doc_id=7335804)
+- 官网文档：[hanliang97.github.io/MatrixMedia](https://hanliang97.github.io/MatrixMedia/)
 
 ## 关键词（便于搜索）
 
@@ -460,8 +457,6 @@ yarn dev
 ##### build 命令在不同系统环境中，需要的的不一样，需要自己根据自身环境进行配置
 
 yarn build
-
-## Star History
 
 ## Star History
 

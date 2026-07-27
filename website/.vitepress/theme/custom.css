@@ -24,3 +24,8 @@
   font-size: 0.9rem;
   color: var(--vp-c-text-2);
 }
+
+.VPHome .vp-doc img[alt="Star History Chart"] {
+  max-width: 100%;
+  height: auto;
+}
