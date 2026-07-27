@@ -56,10 +56,8 @@ features:
 
 ## Star History
 
-<a href="https://www.star-history.com/?repos=hanliang97%2FMatrixMedia&type=date&legend=top-left">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&theme=dark&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
-    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
-    <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=hanliang97/MatrixMedia&type=date&legend=top-left&sealed_token=e4cVgVwtHcXivuAHq9wCjXaykvJCKDP73Jp_s71S9xmzZxi2iD9fdkwdL6977hG7j9rRqLDQH25TwiZhydVJrXHmm-et_8ul06SVXS2vZoQoUYJcKcrRiw" />
-  </picture>
+<a href="https://github.com/hanliang97/MatrixMedia/stargazers">
+  <img alt="GitHub stars" src="https://img.shields.io/github/stars/hanliang97/MatrixMedia?style=for-the-badge&logo=github" />
 </a>
+
+查看增长曲线：[Star History · MatrixMedia](https://www.star-history.com/#hanliang97/MatrixMedia&Date&legend=top-left)
