@@ -251,7 +251,12 @@ function main() {
     console.log('跳过版本升级，使用当前版本:', nextVersion)
   } else {
     run('git checkout main')
-    if (!SKIP_GIT) run('git pull --ff-only origin main')
+    if (!SKIP_GIT) {
+      // 用 fetch + merge --ff-only 替代 git pull，避免仓库 rename 重定向时
+      // pull 解析分支出现 "Cannot fast-forward to multiple branches" 歧义
+      run('git fetch origin main')
+      run('git merge --ff-only origin/main')
+    }
 
     const pkg = JSON.parse(fs.readFileSync(PKG, 'utf8'))
     const prev = pkg.version
@@ -280,7 +285,8 @@ function main() {
 
       // 合并 main 到 prod，触发 GitHub Actions 走 GitHub Release（保留原行为）
       run('git checkout prod')
-      run('git pull --ff-only origin prod')
+      run('git fetch origin prod')
+      run('git merge --ff-only origin/prod')
       run(`git merge main -m "chore: merge main for release v${nextVersion}"`)
       run('git push origin prod')
       run('git checkout main')
