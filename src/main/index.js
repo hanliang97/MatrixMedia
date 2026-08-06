@@ -1,5 +1,9 @@
 "use strict";
 
+// 必须在首次 console.* 之前安装，防止输出管道被外部关闭时异步 EPIPE 崩溃主进程
+import { installStdioEpipeGuard } from "./services/stdioEpipeGuard";
+installStdioEpipeGuard();
+
 const electron = require("electron");
 if (typeof electron !== "object" || !electron.app) {
   const runAsNode = process.env.ELECTRON_RUN_AS_NODE;
