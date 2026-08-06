@@ -20,6 +20,7 @@ import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
 import { runSingleFilePublish } from "../services/publishVideo";
+import { reportPublishEvent } from "../services/usageTelemetry";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
@@ -347,6 +348,9 @@ async function runBatchDirPublish(v, cfg) {
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
+      if (status === "success") {
+        reportPublishEvent().catch(() => {});
+      }
       try {
         changeData({
           fileName: "pushData",
@@ -734,6 +738,9 @@ export async function runCliMain(argv = process.argv) {
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
+      if (status === "success") {
+        reportPublishEvent().catch(() => {});
+      }
       try {
         changeData({
           fileName: "pushData",

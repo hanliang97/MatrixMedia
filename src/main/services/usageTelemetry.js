@@ -21,6 +21,7 @@ import { GIST_ID as GEN_GIST_ID, GIST_TOKEN as GEN_GIST_TOKEN } from "./telemetr
 
 const GITHUB_API = "https://api.github.com";
 const GIST_FILENAME = "events.json";
+const PUBLISH_FILENAME = "publish-events.json";
 const MAX_EVENTS = 5000; // 最多保留最近 5000 条，避免无限增长
 const NO_TELEMETRY_FILE = "no-telemetry";
 const TOKEN_FILE = "gist-token";
@@ -109,7 +110,7 @@ function githubHeaders(token, extra = {}) {
   );
 }
 
-async function fetchGist(gistId, token) {
+async function fetchGist(gistId, token, filename) {
   const opts = {
     method: "GET",
     hostname: "api.github.com",
@@ -122,14 +123,14 @@ async function fetchGist(gistId, token) {
     throw new Error(`github gist get failed: ${res.status}`);
   }
   const data = JSON.parse(res.body || "{}");
-  const file = data.files && data.files[GIST_FILENAME];
+  const file = data.files && data.files[filename];
   const content = file && file.content ? file.content : "[]";
   return content;
 }
 
-async function updateGist(gistId, token, content) {
+async function updateGist(gistId, token, filename, content) {
   const body = JSON.stringify({
-    files: { [GIST_FILENAME]: { content } },
+    files: { [filename]: { content } },
   });
   const opts = {
     method: "PATCH",
@@ -169,15 +170,41 @@ export async function reportUsageTelemetry(app, mode = "gui") {
     const token = getGistToken();
     if (!gistId || !token) return false; // 未配置，跳过
     const event = collectEvent(mode);
-    const content = await fetchGist(gistId, token);
+    const content = await fetchGist(gistId, token, GIST_FILENAME);
     let prev = [];
     try { prev = content ? JSON.parse(content) : []; } catch (_) { prev = []; }
     const next = appendEvent(prev, event);
-    await updateGist(gistId, token, JSON.stringify(next, null, 2));
+    await updateGist(gistId, token, GIST_FILENAME, JSON.stringify(next, null, 2));
     return true;
   } catch (err) {
     try {
       console.warn("[telemetry] 上报失败（静默）:", err && err.message ? err.message : err);
+    } catch (_) {}
+    return false;
+  }
+}
+
+/**
+ * 上报一次"发布成功"事件。best-effort，失败静默。
+ * 国内网络可能访问不到 Gist，失败绝不影响发布流程。
+ * 只记录时间戳，不记录任何来源/账号/平台信息。
+ */
+export async function reportPublishEvent() {
+  try {
+    if (isTelemetryDisabled()) return false;
+    const gistId = getGistId();
+    const token = getGistToken();
+    if (!gistId || !token) return false; // 未配置，跳过
+    const event = { ts: new Date().toISOString() };
+    const content = await fetchGist(gistId, token, PUBLISH_FILENAME);
+    let prev = [];
+    try { prev = content ? JSON.parse(content) : []; } catch (_) { prev = []; }
+    const next = appendEvent(prev, event);
+    await updateGist(gistId, token, PUBLISH_FILENAME, JSON.stringify(next, null, 2));
+    return true;
+  } catch (err) {
+    try {
+      console.warn("[telemetry] 发布上报失败（静默）:", err && err.message ? err.message : err);
     } catch (_) {}
     return false;
   }

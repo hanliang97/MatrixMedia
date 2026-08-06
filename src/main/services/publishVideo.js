@@ -14,6 +14,7 @@ import {
 } from "./resolvePublishFile";
 import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 import { resolvePublishCompletion } from "../../shared/publishResult.js";
+import { reportPublishEvent } from "./usageTelemetry";
 
 function fileStemFromSource(source) {
   const raw = String(source || "").trim();
@@ -258,6 +259,10 @@ async function runSingleFilePublishInner(
 
   const updateRecord = (status, message) => {
     if (!recordId) return;
+    // 发布成功（含草稿）时，匿名上报一次（best-effort，失败静默，不影响发布）
+    if (status === "success" || status === "draft") {
+      reportPublishEvent().catch(() => {});
+    }
     try {
       changeData({
         fileName: "pushData",

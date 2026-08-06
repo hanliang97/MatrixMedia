@@ -2,17 +2,22 @@
 import { ref, computed, onMounted } from 'vue'
 
 const GIST_ID = '9bd67e622baa655abf30cc151f0fcf5a'
-const GIST_FILENAME = 'events.json'
-const CACHE_KEY = 'mm_opens_count_cache'
+const OPENS_FILE = 'events.json'
+const PUBLISH_FILE = 'publish-events.json'
+const CACHE_KEY = 'mm_home_count_cache'
 const CACHE_TTL = 5 * 60 * 1000
 
-const total = ref(null)
+const opensTotal = ref(null)
 const opens7d = ref(null)
+const pubTotal = ref(null)
+const pub7d = ref(null)
 const loading = ref(true)
 const error = ref(false)
 
-const displayTotal = computed(() => (total.value === null ? '—' : total.value.toLocaleString()))
-const display7d = computed(() => (opens7d.value === null ? '—' : opens7d.value.toLocaleString()))
+const dOpenT = computed(() => opensTotal.value === null ? '—' : opensTotal.value.toLocaleString())
+const dOpen7 = computed(() => opens7d.value === null ? '—' : opens7d.value.toLocaleString())
+const dPubT = computed(() => pubTotal.value === null ? '—' : pubTotal.value.toLocaleString())
+const dPub7 = computed(() => pub7d.value === null ? '—' : pub7d.value.toLocaleString())
 
 function readCache() {
   try {
@@ -28,19 +33,37 @@ function writeCache(data) {
   try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data })) } catch (_) {}
 }
 
+function countArr(files, name) {
+  try {
+    const f = files && files[name]
+    const arr = JSON.parse((f && f.content) || '[]')
+    return Array.isArray(arr) ? arr : []
+  } catch (_) { return [] }
+}
+function since7d(arr) {
+  const cutoff = Date.now() - 7 * 24 * 3600 * 1000
+  return arr.filter((e) => new Date(e.ts).getTime() >= cutoff).length
+}
+
 async function load() {
   loading.value = true
   error.value = false
   const cached = readCache()
   if (cached && cached.data) {
-    total.value = cached.data.total
-    opens7d.value = cached.data.opens7d
+    apply(cached.data)
     loading.value = false
     refresh().catch(() => {})
     return
   }
   await refresh()
   loading.value = false
+}
+
+function apply(d) {
+  opensTotal.value = d.opensTotal
+  opens7d.value = d.opens7d
+  pubTotal.value = d.pubTotal
+  pub7d.value = d.pub7d
 }
 
 async function refresh() {
@@ -50,14 +73,18 @@ async function refresh() {
     })
     if (!res.ok) { error.value = true; return }
     const data = await res.json()
-    const file = data.files && data.files[GIST_FILENAME]
-    const arr = JSON.parse((file && file.content) || '[]')
-    const t = Array.isArray(arr) ? arr.length : 0
-    const cutoff = Date.now() - 7 * 24 * 3600 * 1000
-    const w7 = arr.filter((e) => new Date(e.ts).getTime() >= cutoff).length
-    total.value = t
-    opens7d.value = w7
-    writeCache({ total: t, opens7d: w7 })
+    const files = data.files || {}
+    const opens = countArr(files, OPENS_FILE)
+    const pubs = countArr(files, PUBLISH_FILE)
+    const d = {
+      opensTotal: opens.length,
+      opens7d: since7d(opens),
+      pubTotal: pubs.length,
+      pub7d: since7d(pubs)
+    }
+    apply(d)
+    writeCache(d)
+    error.value = false
   } catch (_) {
     error.value = true
   }
@@ -68,12 +95,14 @@ onMounted(() => { load() })
 
 <template>
   <div class="hoc">
-    <a class="hoc-badge" href="/MatrixMedia/community" title="查看社区打开统计">
+    <a class="hoc-badge" href="/MatrixMedia/community" title="查看社区打开与发布统计">
       <span class="hoc-dot" :class="{ 'hoc-dot--live': !loading && !error }"></span>
       <span v-if="loading" class="hoc-text">软件打开次数加载中…</span>
       <span v-else-if="error" class="hoc-text">软件打开次数 · 点击查看详情</span>
       <span v-else class="hoc-text">
-        软件打开次数：已累计 <strong>{{ displayTotal }}</strong> 次 · 近 7 天 <strong>{{ display7d }}</strong> 次
+        软件打开次数：已累计 <strong>{{ dOpenT }}</strong> 次 · 近 7 天 <strong>{{ dOpen7 }}</strong> 次
+        <span class="hoc-sep">|</span>
+        累计代发视频 <strong>{{ dPubT }}</strong> · 近 7 天 <strong>{{ dPub7 }}</strong> 次
       </span>
     </a>
   </div>
@@ -94,6 +123,7 @@ onMounted(() => { load() })
 }
 .hoc-badge:hover { opacity: .85; }
 .hoc-text strong { font-weight: 700; }
+.hoc-sep { opacity: 0.4; margin: 0 4px; }
 .hoc-dot {
   width: 8px; height: 8px; border-radius: 50%;
   background: var(--vp-c-text-3);
