@@ -70,10 +70,10 @@ onMounted(() => { load() })
   <div class="hoc">
     <a class="hoc-badge" href="/MatrixMedia/community" title="查看社区打开统计">
       <span class="hoc-dot" :class="{ 'hoc-dot--live': !loading && !error }"></span>
-      <span v-if="loading" class="hoc-text">统计加载中…</span>
-      <span v-else-if="error" class="hoc-text">已发布 · 点击查看统计</span>
+      <span v-if="loading" class="hoc-text">软件打开次数加载中…</span>
+      <span v-else-if="error" class="hoc-text">软件打开次数 · 点击查看详情</span>
       <span v-else class="hoc-text">
-        已累计打开 <strong>{{ displayTotal }}</strong> 次 · 近 7 天 <strong>{{ display7d }}</strong> 次
+        软件打开次数：已累计 <strong>{{ displayTotal }}</strong> 次 · 近 7 天 <strong>{{ display7d }}</strong> 次
       </span>
     </a>
   </div>
