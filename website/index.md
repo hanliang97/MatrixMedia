@@ -45,6 +45,7 @@ features:
 | [CLI](/reference/cli)                                      | 命令行登录、发布与查询      |
 | [HTTP API](/reference/http-api)                            | 本机 HTTP 发布接口          |
 | [MCP](/reference/mcp)                                      | Model Context Protocol 接入 |
+| [社区 · 打开统计](/community)                              | 匿名打开次数看板（Gist）    |
 | [教程视频](https://www.bilibili.com/video/BV1fiX5BzEb7)    | B 站演示                    |
 | [Gitee 下载](https://gitee.com/gzlingyi_0/pubtw/releases/) | 国内 Releases               |
 

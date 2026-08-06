@@ -38,6 +38,7 @@ import {
 } from "./services/puppeteerFile";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
 import { initializeElectronRuntime } from "./services/electronStartup";
+import { reportUsageTelemetry } from "./services/usageTelemetry";
 
 const cliMode = isCliMode(process.argv);
 
@@ -124,6 +125,8 @@ if (!cliMode) {
 async function startApplication() {
   try {
     await initializeElectronRuntime({ app, pie });
+    // 匿名使用统计（best-effort，不阻塞启动）
+    reportUsageTelemetry(app, cliMode ? "cli" : "gui").catch(() => {});
     if (cliMode) {
       console.log("[startup] CLI 参数已识别，开始执行命令");
       const code = await runCliMain(process.argv);

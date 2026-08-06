@@ -1,20 +1,27 @@
 {
   "name": "matrix-video",
-  "version": "0.10.4",
+  "version": "0.10.5",
   "author": "lhl",
   "description": "自媒体免费开源矩阵工具",
   "license": "GPL-2.0-only",
   "main": "./dist/electron/main.js",
   "scripts": {
     "dev": "cross-env TERGET_ENV=development node .electron-vue/dev-runner.js",
+    "predev": "node scripts/gen-telemetry-secret.js",
     "dev:download": "node .electron-vue/dev-download-server.js",
     "build:dir": "cross-env BUILD_TARGET=clean node .electron-vue/build.js",
+    "prebuild:dir": "node scripts/gen-telemetry-secret.js",
     "rm:build": "node scripts/rm-build-dir.js",
     "build:ico": "node scripts/build-ico.js",
     "build": "yarn rm:build && yarn build:ico && yarn build:dir && electron-builder --win --x64",
     "build:mac": "yarn rm:build && yarn build:dir && electron-builder --mac --x64",
-    "build:linux": "yarn rm:build && yarn build:dir && electron-builder --linux --x64",
-    "build:all": "yarn rm:build && yarn build:ico && yarn build:dir && electron-builder --win --x64 --mac --x64 --linux --x64",
+    "build:linux": "yarn rm:build && yarn build:dir && electron-builder --linux --x64 --arm64",
+    "build:linux:x64": "yarn rm:build && yarn build:dir && electron-builder --linux --x64",
+    "build:linux:arm64": "yarn rm:build && yarn build:dir && electron-builder --linux --arm64",
+    "build:linux:deb": "yarn rm:build && yarn build:dir && electron-builder --linux deb --x64 --arm64",
+    "build:linux:appimage": "yarn rm:build && yarn build:dir && electron-builder --linux AppImage --x64 --arm64",
+    "build:linux:tar": "yarn rm:build && yarn build:dir && electron-builder --linux tar.gz --x64 --arm64",
+    "build:all": "yarn rm:build && yarn build:ico && yarn build:dir && electron-builder --win --x64 --mac --x64 --linux --x64 --arm64",
     "dep:upgrade": "yarn upgrade-interactive --latest",
     "postinstall": "electron-builder install-app-deps",
     "pushall": "node pushall.js",
@@ -86,11 +93,57 @@
     },
     "linux": {
       "target": [
-        "AppImage"
+        "AppImage",
+        "deb",
+        "rpm",
+        "tar.gz"
       ],
       "category": "Utility",
       "icon": "lib/icons/icon.png",
-      "maintainer": "lhl"
+      "maintainer": "lhl",
+      "vendor": "MatrixMedia",
+      "synopsis": "自媒体矩阵批量发布工具",
+      "description": "MatrixMedia 矩媒：多平台视频矩阵发布与批量分发工具，支持 GUI、CLI、HTTP API 与 MCP。",
+      "desktop": {
+        "Name": "矩媒 MatrixMedia",
+        "Comment": "自媒体矩阵批量发布工具",
+        "Categories": "Utility;Network;AudioVideo;",
+        "Terminal": "false"
+      }
+    },
+    "deb": {
+      "depends": [
+        "libgtk-3-0",
+        "libnotify4",
+        "libnss3",
+        "libxss1",
+        "libxtst6",
+        "xdg-utils",
+        "libatspi2.0-0",
+        "libdrm2",
+        "libgbm1"
+      ],
+      "category": "Utility"
+    },
+    "rpm": {
+      "depends": [
+        "gtk3",
+        "libnotify",
+        "nss",
+        "libXScrnSaver",
+        "libXtst",
+        "xdg-utils",
+        "at-spi2-atk",
+        "libdrm",
+        "mesa-libgbm"
+      ]
+    },
+    "appImage": {
+      "artifactName": "MatrixMedia-${version}-${os}-${arch}.AppImage"
+    },
+    "tar": {
+      "artifactName": "MatrixMedia-${version}-${os}-${arch}.tar.gz",
+      "compression": "gzip"
     }
   },
   "dependencies": {
