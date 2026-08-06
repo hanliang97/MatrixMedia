@@ -140,10 +140,6 @@
     },
     "appImage": {
       "artifactName": "MatrixMedia-${version}-${os}-${arch}.AppImage"
-    },
-    "tar": {
-      "artifactName": "MatrixMedia-${version}-${os}-${arch}.tar.gz",
-      "compression": "gzip"
     }
   },
   "dependencies": {
