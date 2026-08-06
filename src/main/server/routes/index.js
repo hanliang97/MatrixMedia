@@ -52,7 +52,11 @@ router.get("/creative-statements", async function (req, res) {
 });
 
 router.post("/changeData", function (req, res) {
-  res.send(changeData({ ...req.body }));
+  const origin = req.headers.origin || req.headers.referer || "";
+  if (origin && !/^(file:|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(origin)) {
+    return res.status(403).json({ success: false, message: "Forbidden" });
+  }
+  res.json(changeData({ ...req.body }));
 });
 
 router.post("/publish", async function (req, res) {
