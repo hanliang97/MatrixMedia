@@ -20,7 +20,7 @@
 
 [GitHub Pages · 矩媒官网](https://hanliang97.github.io/MatrixMedia/)
 
-（源码在仓库 `website/`；首次部署后需在 GitHub → Settings → Pages 将 Source 设为 `gh-pages` 分支。）
+（源码在仓库 `website/`；GitHub → Settings → Pages → Source 须选 **GitHub Actions**。若 deploy 步骤反复「Timeout reached」，先运行 `scripts/clear-stuck-github-pages-deployments.sh` 清理卡住的 deployment。）
 
 ## 软件下载地址
 
