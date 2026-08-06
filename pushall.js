@@ -3,8 +3,10 @@
  * 1. 在 main 上升版本号并提交、push origin main，同时打 v{version} 本地 tag 并推送
  * 2. 切到 prod 合并 main 后 push origin prod（触发 GitHub Actions 打 GitHub Release）
  * 3. 回到 main，本地生成 release-notes.md（使用 prev tag..HEAD 区间，修复 Gitee 日志为空）
- * 4. 本地执行 electron-builder 打包（默认全平台，可用 --platforms 限制）
- * 5. 直接调用 upload-gitee.js 把 .exe/.dmg 上传到 Gitee Release（token 从 .token 读取）
+ * 4. 本地执行 electron-builder 打包（只打 macOS 本地能产出的：win exe / mac dmg / linux AppImage+tar.gz）
+ *    —— deb / rpm / arm64 交给 CI（.github/workflows/build.yml）
+ * 5. 直接调用 upload-gitee.js 把 .exe/.dmg/.tar.gz 上传到 Gitee Release（token 从 .token 读取）
+ *    超 Gitee 100MB 单文件上限的产物（如 AppImage）自动跳过
  *
  * 用法:
  *   node pushall.js [patch|minor|major] [--platforms=all|mac|win|linux|mac,win,...]
@@ -176,10 +178,11 @@ function buildLocal() {
   run('yarn build:dir')
 
   // 单次 electron-builder 调用，覆盖所有平台
+  // linux 本地只打 AppImage + tar.gz（deb/rpm 需要 fpm/Linux，交给 CI）
   const flags = []
   if (PLATFORMS.includes('win')) flags.push('--win', '--x64')
   if (PLATFORMS.includes('mac')) flags.push('--mac', '--x64')
-  if (PLATFORMS.includes('linux')) flags.push('--linux', '--x64')
+  if (PLATFORMS.includes('linux')) flags.push('--linux', 'AppImage', 'tar.gz', '--x64')
 
   const env = {
     ...process.env,
@@ -196,11 +199,23 @@ function buildLocal() {
 
 function collectArtifacts() {
   if (!fs.existsSync(BUILD_DIR)) return []
-  // Gitee 单文件 100MB 上限，AppImage 通常较大，沿用 CI 策略仅上传 .exe / .dmg
+  // Gitee 单文件 100MB 上限：超过自动跳过（AppImage 常超限，仅本地构建但不传 Gitee）
+  const GITEE_MAX_BYTES = 100 * 1024 * 1024
+  // 上传到 Gitee 的格式：.exe / .dmg / .tar.gz（便携、CLI 友好）
+  const allowRe = /\.(exe|dmg|tar\.gz)$/i
   return fs
     .readdirSync(BUILD_DIR)
-    .filter((f) => /\.(exe|dmg)$/i.test(f))
-    .map((f) => path.join(BUILD_DIR, f))
+    .filter((f) => allowRe.test(f))
+    .map((f) => {
+      const full = path.join(BUILD_DIR, f)
+      const size = fs.statSync(full).size
+      if (size > GITEE_MAX_BYTES) {
+        console.warn(`  ⚠️ 跳过 ${f}（${(size / 1024 / 1024).toFixed(1)}MB 超 Gitee 100MB 上限）`)
+        return null
+      }
+      return full
+    })
+    .filter(Boolean)
 }
 
 function uploadToGitee(token, version, files, releaseBody) {

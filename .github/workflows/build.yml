@@ -62,13 +62,18 @@ jobs:
           node-version: "20.15.1"
       - name: Install dependencies
         run: yarn
-      - name: Build Electron app (Linux x64 AppImage)
+      - name: Build Electron app (Linux x64 + arm64, all targets)
+        # CI 负责 macOS 本地打不了的产物：deb / rpm，以及 arm64 全部格式
         run: yarn build:linux
-      - name: Upload Linux artifact
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: linux-appimage
-          path: build/MatrixMedia-*-linux-*.AppImage
+          name: linux-all
+          path: |
+            build/MatrixMedia-*-linux-*.AppImage
+            build/MatrixMedia-*-linux-*.deb
+            build/MatrixMedia-*-linux-*.rpm
+            build/MatrixMedia-*-linux-*.tar.gz
 
   release-github:
     needs: [build-windows, build-mac, build-linux]
@@ -105,6 +110,9 @@ jobs:
             dist-gh/**/*.exe
             dist-gh/**/*.dmg
             dist-gh/**/*.AppImage
+            dist-gh/**/*.deb
+            dist-gh/**/*.rpm
+            dist-gh/**/*.tar.gz
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     outputs:

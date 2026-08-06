@@ -21,6 +21,7 @@
     "build:linux:deb": "yarn rm:build && yarn build:dir && electron-builder --linux deb --x64 --arm64",
     "build:linux:appimage": "yarn rm:build && yarn build:dir && electron-builder --linux AppImage --x64 --arm64",
     "build:linux:tar": "yarn rm:build && yarn build:dir && electron-builder --linux tar.gz --x64 --arm64",
+    "build:linux:local": "yarn rm:build && yarn build:dir && electron-builder --linux AppImage tar.gz --x64",
     "build:all": "yarn rm:build && yarn build:ico && yarn build:dir && electron-builder --win --x64 --mac --x64 --linux --x64 --arm64",
     "dep:upgrade": "yarn upgrade-interactive --latest",
     "postinstall": "electron-builder install-app-deps",
