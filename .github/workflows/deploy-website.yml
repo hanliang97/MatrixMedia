@@ -14,9 +14,10 @@ permissions:
   pages: write
   id-token: write
 
+# 不 cancel-in-progress：被取消的 run 会留下卡死的 in_progress deployment，堵死队列
 concurrency:
   group: "pages"
-  cancel-in-progress: true
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -42,6 +43,7 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
