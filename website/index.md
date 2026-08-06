@@ -62,3 +62,5 @@ features:
 </a>
 
 查看增长曲线：[Star History · MatrixMedia](https://www.star-history.com/#hanliang97/MatrixMedia&Date&legend=top-left)
+
+<!-- redeploy trigger: 2026-08-06T12:11:55Z -->
