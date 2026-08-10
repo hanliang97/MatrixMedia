@@ -46,7 +46,7 @@ MatrixMedia 在应用启动时会向一个公开 GitHub Gist 追加一条**匿�
 4. Electron 端配置（二选一）：
    - 环境变量 `MATRIXMEDIA_GIST_ID` / `MATRIXMEDIA_GIST_TOKEN`
    - token 放到 `~/.matrixmedia/gist-token` 文件
-5. 官网侧编辑 `website/.vitepress/theme/components/ActiveUsersBoard.vue`，把 `GIST_ID` 填为同一 gist id。
+5. 官网侧编辑 `website/.vitepress/theme/utils/gistStats.js`，把 `GIST_ID` 填为同一 gist id，`GIST_OWNER` 填为 gist 所属 GitHub 用户名（官网通过 `gist.githubusercontent.com/<owner>/<id>/raw/<file>` 读取数据，避免未认证 REST API 的 60 次/小时/IP 限额）。
 
 ## 相关源码
 

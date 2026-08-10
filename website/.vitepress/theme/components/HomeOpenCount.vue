@@ -1,11 +1,6 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
-
-const GIST_ID = '9bd67e622baa655abf30cc151f0fcf5a'
-const OPENS_FILE = 'events.json'
-const PUBLISH_FILE = 'publish-events.json'
-const CACHE_KEY = 'mm_home_count_cache'
-const CACHE_TTL = 5 * 60 * 1000
+import { loadGistEvents, OPENS_FILE, PUBLISH_FILE } from '../utils/gistStats'
 
 const opensTotal = ref(null)
 const opens7d = ref(null)
@@ -19,27 +14,6 @@ const dOpen7 = computed(() => opens7d.value === null ? '—' : opens7d.value.toL
 const dPubT = computed(() => pubTotal.value === null ? '—' : pubTotal.value.toLocaleString())
 const dPub7 = computed(() => pub7d.value === null ? '—' : pub7d.value.toLocaleString())
 
-function readCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY)
-    if (!raw) return null
-    const obj = JSON.parse(raw)
-    if (!obj || !obj.t) return null
-    if (Date.now() - obj.t > CACHE_TTL) return null
-    return obj
-  } catch (_) { return null }
-}
-function writeCache(data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data })) } catch (_) {}
-}
-
-function countArr(files, name) {
-  try {
-    const f = files && files[name]
-    const arr = JSON.parse((f && f.content) || '[]')
-    return Array.isArray(arr) ? arr : []
-  } catch (_) { return [] }
-}
 function since7d(arr) {
   const cutoff = Date.now() - 7 * 24 * 3600 * 1000
   return arr.filter((e) => new Date(e.ts).getTime() >= cutoff).length
@@ -47,47 +21,23 @@ function since7d(arr) {
 
 async function load() {
   loading.value = true
-  error.value = false
-  const cached = readCache()
-  if (cached && cached.data) {
-    apply(cached.data)
-    loading.value = false
-    refresh().catch(() => {})
-    return
-  }
-  await refresh()
-  loading.value = false
-}
-
-function apply(d) {
-  opensTotal.value = d.opensTotal
-  opens7d.value = d.opens7d
-  pubTotal.value = d.pubTotal
-  pub7d.value = d.pub7d
-}
-
-async function refresh() {
-  try {
-    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-    if (!res.ok) { error.value = true; return }
-    const data = await res.json()
-    const files = data.files || {}
-    const opens = countArr(files, OPENS_FILE)
-    const pubs = countArr(files, PUBLISH_FILE)
-    const d = {
-      opensTotal: opens.length,
-      opens7d: since7d(opens),
-      pubTotal: pubs.length,
-      pub7d: since7d(pubs)
-    }
-    apply(d)
-    writeCache(d)
-    error.value = false
-  } catch (_) {
+  const [opensRes, pubsRes] = await Promise.all([
+    loadGistEvents(OPENS_FILE),
+    loadGistEvents(PUBLISH_FILE)
+  ])
+  const opens = opensRes.events
+  const pubs = pubsRes.events
+  // 只要有一份数据可用就展示（含过期缓存兜底）
+  if (!opens.length && !pubs.length && (opensRes.error || pubsRes.error)) {
     error.value = true
+  } else {
+    error.value = false
+    opensTotal.value = opens.length
+    opens7d.value = since7d(opens)
+    pubTotal.value = pubs.length
+    pub7d.value = since7d(pubs)
   }
+  loading.value = false
 }
 
 onMounted(() => { load() })

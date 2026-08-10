@@ -1,11 +1,7 @@
 <script setup>
 import { ref, computed, onMounted } from 'vue'
 
-// 维护者在此填入公开 Gist id（与 Electron 端 MATRIXMEDIA_GIST_ID 一致）
-const GIST_ID = '9bd67e622baa655abf30cc151f0fcf5a'
-const GIST_FILENAME = 'events.json'
-const CACHE_KEY = 'mm_opens_cache'
-const CACHE_TTL = 5 * 60 * 1000 // 5 分钟
+import { loadGistEvents, GIST_ID, OPENS_FILE } from '../utils/gistStats'
 
 const loading = ref(false)
 const error = ref('')
@@ -49,62 +45,29 @@ function fmtDate(s) {
   return d.toLocaleString('zh-CN', { hour12: false })
 }
 
-function readCache() {
-  try {
-    const raw = localStorage.getItem(CACHE_KEY)
-    if (!raw) return null
-    const obj = JSON.parse(raw)
-    if (!obj || !obj.t) return null
-    if (Date.now() - obj.t > CACHE_TTL) return null
-    return obj
-  } catch (_) { return null }
-}
-
-function writeCache(data) {
-  try { localStorage.setItem(CACHE_KEY, JSON.stringify({ t: Date.now(), data })) } catch (_) {}
-}
-
-async function fetchGist() {
+async function fetchGist(force = false) {
   if (!configOk.value) {
-    error.value = '未配置 GIST_ID（维护者请在 ActiveUsersBoard.vue 中填入）'
+    error.value = '未配置 GIST_ID（维护者请在 gistStats.js 中填入）'
     return
   }
   loading.value = true
   error.value = ''
   try {
-    const cached = readCache()
-    if (cached && cached.data) {
-      events.value = cached.data.events || []
-      updatedAt.value = cached.data.updatedAt || null
-      loading.value = false
-      refresh().catch(() => {}) // 后台静默刷新
-      return
+    const res = await loadGistEvents(OPENS_FILE, { force })
+    if (res.error && !res.events.length) {
+      error.value = `数据加载失败：${res.error}`
+    } else {
+      events.value = res.events
+      updatedAt.value = res.updatedAt
+      error.value = res.stale ? '当前展示的是本地缓存数据（远端暂时不可用）' : ''
     }
-    await refresh()
   } finally {
     loading.value = false
   }
 }
 
-async function refresh() {
-  if (!configOk.value) return
-  try {
-    const res = await fetch(`https://api.github.com/gists/${GIST_ID}`, {
-      headers: { Accept: 'application/vnd.github+json' }
-    })
-    if (res.status === 404) { error.value = 'Gist 不存在或未公开'; return }
-    if (!res.ok) { error.value = `GitHub API 返回 ${res.status}`; return }
-    const data = await res.json()
-    const file = data.files && data.files[GIST_FILENAME]
-    const content = file && file.content ? file.content : '[]'
-    const arr = JSON.parse(content || '[]')
-    events.value = arr
-    updatedAt.value = new Date().toISOString()
-    writeCache({ events: arr, updatedAt: updatedAt.value })
-    error.value = ''
-  } catch (e) {
-    error.value = (e && e.message) || String(e)
-  }
+function refresh() {
+  return fetchGist(true)
 }
 
 onMounted(() => { fetchGist() })

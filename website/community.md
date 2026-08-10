@@ -33,6 +33,6 @@ description: 矩媒 MatrixMedia 匿名打开次数统计看板（基于 GitHub G
    - `MATRIXMEDIA_GIST_ID=<gist id>`
    - `MATRIXMEDIA_GIST_TOKEN=<token>`
    或把 token 放到 `~/.matrixmedia/gist-token` 文件中。
-5. 在 `website/.vitepress/theme/components/ActiveUsersBoard.vue` 顶部把 `GIST_ID` 填为同一 gist id。
+5. 在 `website/.vitepress/theme/utils/gistStats.js` 中把 `GIST_ID`、`GIST_OWNER` 填为同一 gist 的 id 与所属用户名。
 
 详见 [遥测参考](/reference/telemetry)。
