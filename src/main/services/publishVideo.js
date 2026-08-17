@@ -14,7 +14,6 @@ import {
 } from "./resolvePublishFile";
 import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 import { resolvePublishCompletion } from "../../shared/publishResult.js";
-import { reportPublishEvent } from "./usageTelemetry";
 
 function fileStemFromSource(source) {
   const raw = String(source || "").trim();
@@ -178,7 +177,9 @@ async function runSingleFilePublishInner(
     publishMode: effectivePublishMode.publishMode,
     publishToDraft: effectivePublishMode.publishToDraft,
     publishOptions: v.publishOptions || {},
-    publishStatus: effectivePublishMode.publishToDraft ? "drafting" : "publishing",
+    publishStatus: effectivePublishMode.publishToDraft
+      ? "drafting"
+      : "publishing",
     lastPublishMessage: effectivePublishMode.publishToDraft
       ? "等待保存草稿结果"
       : "等待发布结果",
@@ -259,10 +260,6 @@ async function runSingleFilePublishInner(
 
   const updateRecord = (status, message) => {
     if (!recordId) return;
-    // 发布成功（含草稿）时，匿名上报一次（best-effort，失败静默，不影响发布）
-    if (status === "success" || status === "draft") {
-      reportPublishEvent().catch(() => {});
-    }
     try {
       changeData({
         fileName: "pushData",
@@ -271,7 +268,8 @@ async function runSingleFilePublishInner(
           id: recordId,
           date: recordDate,
           publishStatus: status,
-          publishSuccessCount: status === "success" || status === "draft" ? 1 : 0,
+          publishSuccessCount:
+            status === "success" || status === "draft" ? 1 : 0,
           publishFailCount: status === "failed" ? 1 : 0,
           lastPublishMessage: message || "",
           lastPublishAt: Date.now(),
@@ -339,8 +337,7 @@ async function runSingleFilePublishInner(
           if (payload && payload.taskId != null && payload.taskId !== taskId) {
             return;
           }
-          const message =
-            (payload && payload.message) || "登录态异常或未登录";
+          const message = (payload && payload.message) || "登录态异常或未登录";
           console.error("登录态异常或未登录:", JSON.stringify(payload));
           updateRecord("failed", message);
           finish({ exitCode: 3, status: "failed", message, id: recordId });

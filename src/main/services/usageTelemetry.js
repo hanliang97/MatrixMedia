@@ -17,11 +17,13 @@ import os from "os";
 import https from "https";
 // 构建期由 scripts/gen-telemetry-secret.js 生成（gitignored，不进仓库）
 // 导出 GIST_ID / GIST_TOKEN 两个常量；缺失时为空字符串
-import { GIST_ID as GEN_GIST_ID, GIST_TOKEN as GEN_GIST_TOKEN } from "./telemetrySecret.generated";
+import {
+  GIST_ID as GEN_GIST_ID,
+  GIST_TOKEN as GEN_GIST_TOKEN,
+} from "./telemetrySecret.generated";
 
 const GITHUB_API = "https://api.github.com";
 const GIST_FILENAME = "events.json";
-const PUBLISH_FILENAME = "publish-events.json";
 const MAX_EVENTS = 5000; // 最多保留最近 5000 条，避免无限增长
 const NO_TELEMETRY_FILE = "no-telemetry";
 const TOKEN_FILE = "gist-token";
@@ -53,13 +55,18 @@ export function getGistId() {
 }
 
 export function getGistToken() {
-  return readEnv("MATRIXMEDIA_GIST_TOKEN") || readConfigFile(TOKEN_FILE) || BUILTIN_GIST_TOKEN;
+  return (
+    readEnv("MATRIXMEDIA_GIST_TOKEN") ||
+    readConfigFile(TOKEN_FILE) ||
+    BUILTIN_GIST_TOKEN
+  );
 }
 
 export function isTelemetryDisabled() {
   if (readEnv("MATRIXMEDIA_DISABLE_TELEMETRY")) return true;
   try {
-    if (fs.existsSync(path.join(configDirPath(), NO_TELEMETRY_FILE))) return true;
+    if (fs.existsSync(path.join(configDirPath(), NO_TELEMETRY_FILE)))
+      return true;
   } catch (_) {}
   return false;
 }
@@ -68,8 +75,12 @@ function collectEvent(mode) {
   const electron = require("electron");
   let version = "unknown";
   let locale = "unknown";
-  try { version = electron.app.getVersion() || "unknown"; } catch (_) {}
-  try { locale = electron.app.getLocale() || process.env.LANG || "unknown"; } catch (_) {}
+  try {
+    version = electron.app.getVersion() || "unknown";
+  } catch (_) {}
+  try {
+    locale = electron.app.getLocale() || process.env.LANG || "unknown";
+  } catch (_) {}
   return {
     ts: new Date().toISOString(),
     version,
@@ -86,12 +97,18 @@ function httpsRequest(options, body) {
       let chunks = "";
       res.on("data", (c) => (chunks += c));
       res.on("end", () => {
-        resolve({ status: res.statusCode || 0, headers: res.headers || {}, body: chunks });
+        resolve({
+          status: res.statusCode || 0,
+          headers: res.headers || {},
+          body: chunks,
+        });
       });
     });
     req.on("error", reject);
     req.setTimeout(8000, () => {
-      try { req.destroy(new Error("telemetry request timeout")); } catch (_) {}
+      try {
+        req.destroy(new Error("telemetry request timeout"));
+      } catch (_) {}
     });
     if (body) req.write(body);
     req.end();
@@ -172,39 +189,25 @@ export async function reportUsageTelemetry(app, mode = "gui") {
     const event = collectEvent(mode);
     const content = await fetchGist(gistId, token, GIST_FILENAME);
     let prev = [];
-    try { prev = content ? JSON.parse(content) : []; } catch (_) { prev = []; }
+    try {
+      prev = content ? JSON.parse(content) : [];
+    } catch (_) {
+      prev = [];
+    }
     const next = appendEvent(prev, event);
-    await updateGist(gistId, token, GIST_FILENAME, JSON.stringify(next, null, 2));
+    await updateGist(
+      gistId,
+      token,
+      GIST_FILENAME,
+      JSON.stringify(next, null, 2)
+    );
     return true;
   } catch (err) {
     try {
-      console.warn("[telemetry] 上报失败（静默）:", err && err.message ? err.message : err);
-    } catch (_) {}
-    return false;
-  }
-}
-
-/**
- * 上报一次"发布成功"事件。best-effort，失败静默。
- * 国内网络可能访问不到 Gist，失败绝不影响发布流程。
- * 只记录时间戳，不记录任何来源/账号/平台信息。
- */
-export async function reportPublishEvent() {
-  try {
-    if (isTelemetryDisabled()) return false;
-    const gistId = getGistId();
-    const token = getGistToken();
-    if (!gistId || !token) return false; // 未配置，跳过
-    const event = { ts: new Date().toISOString() };
-    const content = await fetchGist(gistId, token, PUBLISH_FILENAME);
-    let prev = [];
-    try { prev = content ? JSON.parse(content) : []; } catch (_) { prev = []; }
-    const next = appendEvent(prev, event);
-    await updateGist(gistId, token, PUBLISH_FILENAME, JSON.stringify(next, null, 2));
-    return true;
-  } catch (err) {
-    try {
-      console.warn("[telemetry] 发布上报失败（静默）:", err && err.message ? err.message : err);
+      console.warn(
+        "[telemetry] 上报失败（静默）:",
+        err && err.message ? err.message : err
+      );
     } catch (_) {}
     return false;
   }

@@ -3,8 +3,8 @@
  * 1. 在 main 上升版本号并提交、push origin main，同时打 v{version} 本地 tag 并推送
  * 2. 切到 prod 合并 main 后 push origin prod（触发 GitHub Actions 打 GitHub Release）
  * 3. 回到 main，本地生成 release-notes.md（使用 prev tag..HEAD 区间，修复 Gitee 日志为空）
- * 4. 本地执行 electron-builder 打包（只打 macOS 本地能产出的：win exe / mac dmg / linux AppImage+tar.gz）
- *    —— deb / rpm / arm64 交给 CI（.github/workflows/build.yml）
+ * 4. 本地执行 electron-builder 打包（win exe / mac dmg x64+arm64 / linux AppImage+tar.gz）
+ *    —— deb / rpm / linux arm64 交给 CI（.github/workflows/build.yml）
  * 5. 直接调用 upload-gitee.js 把 .exe/.dmg/.tar.gz 上传到 Gitee Release（token 从 .token 读取）
  *    超 Gitee 100MB 单文件上限的产物（如 AppImage）自动跳过
  *
@@ -18,305 +18,311 @@
  *   gitee_key=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
  */
 
-const fs = require('fs')
-const path = require('path')
-const { execSync, spawnSync } = require('child_process')
+const fs = require("fs");
+const path = require("path");
+const { execSync, spawnSync } = require("child_process");
 
-const ROOT = path.resolve(__dirname)
-const PKG = path.join(ROOT, 'package.json')
-const TOKEN_FILE = path.join(ROOT, '.token')
-const RELEASE_NOTES_PATH = path.join(ROOT, 'release-notes.md')
-const UPLOAD_SCRIPT = path.join(ROOT, 'upload-gitee.js')
-const BUILD_DIR = path.join(ROOT, 'build')
+const ROOT = path.resolve(__dirname);
+const PKG = path.join(ROOT, "package.json");
+const TOKEN_FILE = path.join(ROOT, ".token");
+const RELEASE_NOTES_PATH = path.join(ROOT, "release-notes.md");
+const UPLOAD_SCRIPT = path.join(ROOT, "upload-gitee.js");
+const BUILD_DIR = path.join(ROOT, "build");
 
 // -------- CLI 解析 --------
-const argv = process.argv.slice(2)
-const BUMP = ['patch', 'minor', 'major'].includes(argv[0]) ? argv[0] : 'patch'
+const argv = process.argv.slice(2);
+const BUMP = ["patch", "minor", "major"].includes(argv[0]) ? argv[0] : "patch";
 
 function hasFlag(name) {
-  return argv.includes('--' + name)
+  return argv.includes("--" + name);
 }
 function getOpt(name, def) {
-  const prefix = '--' + name + '='
-  const found = argv.find((a) => a.startsWith(prefix))
-  return found ? found.slice(prefix.length) : def
+  const prefix = "--" + name + "=";
+  const found = argv.find((a) => a.startsWith(prefix));
+  return found ? found.slice(prefix.length) : def;
 }
 
-const SKIP_BUMP = hasFlag('skip-bump')
-const SKIP_GIT = hasFlag('skip-git')
-const SKIP_BUILD = hasFlag('skip-build')
-const SKIP_UPLOAD = hasFlag('skip-upload')
-const PLATFORMS = parsePlatforms(getOpt('platforms', 'all'))
+const SKIP_BUMP = hasFlag("skip-bump");
+const SKIP_GIT = hasFlag("skip-git");
+const SKIP_BUILD = hasFlag("skip-build");
+const SKIP_UPLOAD = hasFlag("skip-upload");
+const PLATFORMS = parsePlatforms(getOpt("platforms", "all"));
 
 function parsePlatforms(spec) {
-  const set = new Set()
-  for (const raw of String(spec).split(',')) {
-    const p = raw.trim().toLowerCase()
-    if (!p) continue
-    if (p === 'all') {
-      ;['win', 'mac', 'linux'].forEach((x) => set.add(x))
-    } else if (['win', 'mac', 'linux'].includes(p)) {
-      set.add(p)
+  const set = new Set();
+  for (const raw of String(spec).split(",")) {
+    const p = raw.trim().toLowerCase();
+    if (!p) continue;
+    if (p === "all") {
+      ["win", "mac", "linux"].forEach((x) => set.add(x));
+    } else if (["win", "mac", "linux"].includes(p)) {
+      set.add(p);
     } else {
-      throw new Error(`未知平台: ${p}（支持: all/win/mac/linux）`)
+      throw new Error(`未知平台: ${p}（支持: all/win/mac/linux）`);
     }
   }
-  if (set.size === 0) throw new Error('platforms 为空')
-  return [...set]
+  if (set.size === 0) throw new Error("platforms 为空");
+  return [...set];
 }
 
 // -------- 基础工具 --------
 function run(cmd, opts = {}) {
-  console.log('$', cmd)
-  execSync(cmd, { cwd: ROOT, stdio: 'inherit', ...opts })
+  console.log("$", cmd);
+  execSync(cmd, { cwd: ROOT, stdio: "inherit", ...opts });
 }
 function runSilent(cmd) {
-  return execSync(cmd, { cwd: ROOT, encoding: 'utf8' }).trim()
+  return execSync(cmd, { cwd: ROOT, encoding: "utf8" }).trim();
 }
 function runOk(cmd) {
   try {
-    runSilent(cmd)
-    return true
+    runSilent(cmd);
+    return true;
   } catch {
-    return false
+    return false;
   }
 }
 
 function assertCleanWorkingTree() {
-  const out = runSilent('git status --porcelain')
+  const out = runSilent("git status --porcelain");
   if (out) {
-    console.error('工作区有未提交改动：')
-    console.error(out)
-    console.error('请先提交/暂存后再执行 pushall.js')
-    process.exit(1)
+    console.error("工作区有未提交改动：");
+    console.error(out);
+    console.error("请先提交/暂存后再执行 pushall.js");
+    process.exit(1);
   }
 }
 
 function bumpSemver(current, type) {
   const parts = String(current)
-    .split('.')
-    .map((s) => parseInt(s, 10))
+    .split(".")
+    .map((s) => parseInt(s, 10));
   if (parts.length !== 3 || parts.some((n) => Number.isNaN(n))) {
-    throw new Error(`无效的 version 字段: ${current}`)
+    throw new Error(`无效的 version 字段: ${current}`);
   }
-  let [major, minor, patch] = parts
-  if (type === 'major') {
-    major += 1
-    minor = 0
-    patch = 0
-  } else if (type === 'minor') {
-    minor += 1
-    patch = 0
+  let [major, minor, patch] = parts;
+  if (type === "major") {
+    major += 1;
+    minor = 0;
+    patch = 0;
+  } else if (type === "minor") {
+    minor += 1;
+    patch = 0;
   } else {
-    patch += 1
+    patch += 1;
     if (patch >= 10) {
-      minor += 1
-      patch = 0
+      minor += 1;
+      patch = 0;
     }
   }
-  return `${major}.${minor}.${patch}`
+  return `${major}.${minor}.${patch}`;
 }
 
 function writePackageVersion(next) {
-  const raw = fs.readFileSync(PKG, 'utf8')
-  const pkg = JSON.parse(raw)
-  pkg.version = next
-  fs.writeFileSync(PKG, JSON.stringify(pkg, null, 2) + '\n', 'utf8')
+  const raw = fs.readFileSync(PKG, "utf8");
+  const pkg = JSON.parse(raw);
+  pkg.version = next;
+  fs.writeFileSync(PKG, JSON.stringify(pkg, null, 2) + "\n", "utf8");
 }
 
 function readGiteeToken() {
   if (!fs.existsSync(TOKEN_FILE)) {
-    throw new Error(`未找到 ${TOKEN_FILE}（请在仓库根目录创建 .token，内容: gitee_key=xxxxx）`)
+    throw new Error(
+      `未找到 ${TOKEN_FILE}（请在仓库根目录创建 .token，内容: gitee_key=xxxxx）`
+    );
   }
-  const map = {}
-  for (const line of fs.readFileSync(TOKEN_FILE, 'utf8').split(/\r?\n/)) {
-    const trimmed = line.trim()
-    if (!trimmed || trimmed.startsWith('#')) continue
-    const idx = trimmed.indexOf('=')
-    if (idx === -1) continue
-    const k = trimmed.slice(0, idx).trim()
-    const v = trimmed.slice(idx + 1).trim()
-    if (k) map[k] = v
+  const map = {};
+  for (const line of fs.readFileSync(TOKEN_FILE, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const idx = trimmed.indexOf("=");
+    if (idx === -1) continue;
+    const k = trimmed.slice(0, idx).trim();
+    const v = trimmed.slice(idx + 1).trim();
+    if (k) map[k] = v;
   }
   const token =
-    map.gitee_key ||
-    map.gitee_token ||
-    map.GITEE_ACCESS_TOKEN ||
-    map.GITEE_KEY
+    map.gitee_key || map.gitee_token || map.GITEE_ACCESS_TOKEN || map.GITEE_KEY;
   if (!token) {
-    throw new Error('.token 中缺少 gitee_key=...（也可写 gitee_token / GITEE_ACCESS_TOKEN）')
+    throw new Error(
+      ".token 中缺少 gitee_key=...（也可写 gitee_token / GITEE_ACCESS_TOKEN）"
+    );
   }
-  return token
+  return token;
 }
 
 function localTagExists(tag) {
-  return runOk(`git rev-parse --verify -q refs/tags/${tag}`)
+  return runOk(`git rev-parse --verify -q refs/tags/${tag}`);
 }
 
 // -------- 主步骤 --------
 function generateReleaseNotes(version) {
-  console.log('生成 release notes...')
-  const res = spawnSync('node', ['scripts/gen-release-notes.js'], {
+  console.log("生成 release notes...");
+  const res = spawnSync("node", ["scripts/gen-release-notes.js"], {
     cwd: ROOT,
-    stdio: 'inherit',
+    stdio: "inherit",
     env: {
       ...process.env,
       VERSION: version,
-      RELEASE_NOTES_PATH: 'release-notes.md'
-    }
-  })
-  if (res.status !== 0) throw new Error('gen-release-notes.js 失败')
-  return fs.readFileSync(RELEASE_NOTES_PATH, 'utf8')
+      RELEASE_NOTES_PATH: "release-notes.md",
+    },
+  });
+  if (res.status !== 0) throw new Error("gen-release-notes.js 失败");
+  return fs.readFileSync(RELEASE_NOTES_PATH, "utf8");
 }
 
 function buildLocal() {
-  console.log('开始本地打包，目标平台:', PLATFORMS.join(','))
+  console.log("开始本地打包，目标平台:", PLATFORMS.join(","));
 
   // 清理 + 渲染进程构建（始终）
-  run('yarn rm:build')
-  if (PLATFORMS.includes('win')) run('yarn build:ico')
-  run('yarn build:dir')
+  run("yarn rm:build");
+  if (PLATFORMS.includes("win")) run("yarn build:ico");
+  run("yarn build:dir");
 
   // 单次 electron-builder 调用，覆盖所有平台
   // linux 本地只打 AppImage + tar.gz（deb/rpm 需要 fpm/Linux，交给 CI）
-  const flags = []
-  if (PLATFORMS.includes('win')) flags.push('--win', '--x64')
-  if (PLATFORMS.includes('mac')) flags.push('--mac', '--x64')
-  if (PLATFORMS.includes('linux')) flags.push('--linux', 'AppImage', 'tar.gz', '--x64')
+  const flags = [];
+  if (PLATFORMS.includes("win")) flags.push("--win", "--x64");
+  if (PLATFORMS.includes("mac")) flags.push("--mac", "--x64", "--arm64");
+  if (PLATFORMS.includes("linux"))
+    flags.push("--linux", "AppImage", "tar.gz", "--x64");
 
   const env = {
     ...process.env,
     // mac 跳过自动签名（与 CI 一致）
-    CSC_IDENTITY_AUTO_DISCOVERY: 'false'
-  }
-  const res = spawnSync('npx', ['--no-install', 'electron-builder', ...flags], {
+    CSC_IDENTITY_AUTO_DISCOVERY: "false",
+  };
+  const res = spawnSync("npx", ["--no-install", "electron-builder", ...flags], {
     cwd: ROOT,
-    stdio: 'inherit',
-    env
-  })
-  if (res.status !== 0) throw new Error('electron-builder 打包失败')
+    stdio: "inherit",
+    env,
+  });
+  if (res.status !== 0) throw new Error("electron-builder 打包失败");
 }
 
 function collectArtifacts() {
-  if (!fs.existsSync(BUILD_DIR)) return []
+  if (!fs.existsSync(BUILD_DIR)) return [];
   // Gitee 单文件 100MB 上限：超过自动跳过（AppImage 常超限，仅本地构建但不传 Gitee）
-  const GITEE_MAX_BYTES = 100 * 1024 * 1024
+  const GITEE_MAX_BYTES = 100 * 1024 * 1024;
   // 上传到 Gitee 的格式：.exe / .dmg / .tar.gz（便携、CLI 友好）
-  const allowRe = /\.(exe|dmg|tar\.gz)$/i
+  const allowRe = /\.(exe|dmg|tar\.gz)$/i;
   return fs
     .readdirSync(BUILD_DIR)
     .filter((f) => allowRe.test(f))
     .map((f) => {
-      const full = path.join(BUILD_DIR, f)
-      const size = fs.statSync(full).size
+      const full = path.join(BUILD_DIR, f);
+      const size = fs.statSync(full).size;
       if (size > GITEE_MAX_BYTES) {
-        console.warn(`  ⚠️ 跳过 ${f}（${(size / 1024 / 1024).toFixed(1)}MB 超 Gitee 100MB 上限）`)
-        return null
+        console.warn(
+          `  ⚠️ 跳过 ${f}（${(size / 1024 / 1024).toFixed(
+            1
+          )}MB 超 Gitee 100MB 上限）`
+        );
+        return null;
       }
-      return full
+      return full;
     })
-    .filter(Boolean)
+    .filter(Boolean);
 }
 
 function uploadToGitee(token, version, files, releaseBody) {
   if (files.length === 0) {
-    throw new Error('build/ 下未找到可上传的 .exe / .dmg 产物')
+    throw new Error("build/ 下未找到可上传的 .exe / .dmg 产物");
   }
-  console.log('上传到 Gitee：')
-  files.forEach((f) => console.log('  -', f))
+  console.log("上传到 Gitee：");
+  files.forEach((f) => console.log("  -", f));
 
-  const res = spawnSync('node', [UPLOAD_SCRIPT, token, version, ...files], {
+  const res = spawnSync("node", [UPLOAD_SCRIPT, token, version, ...files], {
     cwd: ROOT,
-    stdio: 'inherit',
-    env: { ...process.env, RELEASE_BODY: releaseBody }
-  })
-  if (res.status !== 0) throw new Error('upload-gitee.js 上传失败')
+    stdio: "inherit",
+    env: { ...process.env, RELEASE_BODY: releaseBody },
+  });
+  if (res.status !== 0) throw new Error("upload-gitee.js 上传失败");
 }
 
 function main() {
-  assertCleanWorkingTree()
+  assertCleanWorkingTree();
 
   // 提前校验 token，避免打包完才发现没 token
-  const giteeToken = readGiteeToken()
+  const giteeToken = readGiteeToken();
 
   // 拉取远端（含 tags），保证 gen-release-notes 能找到上一个 v* tag
   if (!SKIP_GIT) {
-    run('git fetch origin main prod')
-    run('git fetch --tags --prune --force origin')
+    run("git fetch origin main prod");
+    run("git fetch --tags --prune --force origin");
   }
 
-  let nextVersion
+  let nextVersion;
   if (SKIP_BUMP) {
-    nextVersion = JSON.parse(fs.readFileSync(PKG, 'utf8')).version
-    console.log('跳过版本升级，使用当前版本:', nextVersion)
+    nextVersion = JSON.parse(fs.readFileSync(PKG, "utf8")).version;
+    console.log("跳过版本升级，使用当前版本:", nextVersion);
   } else {
-    run('git checkout main')
+    run("git checkout main");
     if (!SKIP_GIT) {
       // 用 fetch + merge --ff-only 替代 git pull，避免仓库 rename 重定向时
       // pull 解析分支出现 "Cannot fast-forward to multiple branches" 歧义
-      run('git fetch origin main')
-      run('git merge --ff-only origin/main')
+      run("git fetch origin main");
+      run("git merge --ff-only origin/main");
     }
 
-    const pkg = JSON.parse(fs.readFileSync(PKG, 'utf8'))
-    const prev = pkg.version
-    nextVersion = bumpSemver(prev, BUMP)
+    const pkg = JSON.parse(fs.readFileSync(PKG, "utf8"));
+    const prev = pkg.version;
+    nextVersion = bumpSemver(prev, BUMP);
     if (nextVersion === prev) {
-      console.error('版本号未变化')
-      process.exit(1)
+      console.error("版本号未变化");
+      process.exit(1);
     }
-    writePackageVersion(nextVersion)
-    console.log(`版本: ${prev} -> ${nextVersion} (${BUMP})`)
+    writePackageVersion(nextVersion);
+    console.log(`版本: ${prev} -> ${nextVersion} (${BUMP})`);
 
-    run('git add package.json')
-    run(`git commit -m "chore(release): v${nextVersion}"`)
+    run("git add package.json");
+    run(`git commit -m "chore(release): v${nextVersion}"`);
 
     // 本地打 tag —— 关键：保证后续 gen-release-notes 能从 v{prev}..HEAD 算 changelog
-    const tagName = `v${nextVersion}`
+    const tagName = `v${nextVersion}`;
     if (localTagExists(tagName)) {
-      console.warn(`本地已存在 tag ${tagName}，跳过创建`)
+      console.warn(`本地已存在 tag ${tagName}，跳过创建`);
     } else {
-      run(`git tag -a ${tagName} -m "${tagName}"`)
+      run(`git tag -a ${tagName} -m "${tagName}"`);
     }
 
     if (!SKIP_GIT) {
-      run('git push origin main')
-      run(`git push origin ${tagName}`)
+      run("git push origin main");
+      run(`git push origin ${tagName}`);
 
       // 合并 main 到 prod，触发 GitHub Actions 走 GitHub Release（保留原行为）
-      run('git checkout prod')
-      run('git fetch origin prod')
-      run('git merge --ff-only origin/prod')
-      run(`git merge main -m "chore: merge main for release v${nextVersion}"`)
-      run('git push origin prod')
-      run('git checkout main')
+      run("git checkout prod");
+      run("git fetch origin prod");
+      run("git merge --ff-only origin/prod");
+      run(`git merge main -m "chore: merge main for release v${nextVersion}"`);
+      run("git push origin prod");
+      run("git checkout main");
     }
   }
 
   // 生成 release notes（此时 v{prev} 已 fetch，v{next} 已本地打 tag）
-  const releaseBody = generateReleaseNotes(nextVersion)
+  const releaseBody = generateReleaseNotes(nextVersion);
 
   // 本地打包
   if (!SKIP_BUILD) {
-    buildLocal()
+    buildLocal();
   } else {
-    console.log('跳过本地打包')
+    console.log("跳过本地打包");
   }
 
   // 上传 Gitee
   if (!SKIP_UPLOAD) {
-    const files = collectArtifacts()
-    uploadToGitee(giteeToken, nextVersion, files, releaseBody)
+    const files = collectArtifacts();
+    uploadToGitee(giteeToken, nextVersion, files, releaseBody);
   } else {
-    console.log('跳过 Gitee 上传')
+    console.log("跳过 Gitee 上传");
   }
 
-  console.log(`\n✅ 完成。当前分支: main，版本: v${nextVersion}`)
+  console.log(`\n✅ 完成。当前分支: main，版本: v${nextVersion}`);
 }
 
 try {
-  main()
+  main();
 } catch (e) {
-  console.error('❌ 发布失败:', e.message || e)
-  process.exit(1)
+  console.error("❌ 发布失败:", e.message || e);
+  process.exit(1);
 }

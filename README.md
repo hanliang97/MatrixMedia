@@ -269,7 +269,7 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 
 ### macOS：提示“已损坏，无法打开”
 
-macOS 目前仅分发 `x64` 安装包；Apple Silicon（M1/M2/M3）会通过 Rosetta 2 运行。若提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。
+macOS 分发 `x64` 与 `arm64` 两套安装包。Apple Silicon 请用 `MatrixMedia-<version>-mac-arm64.dmg`。若提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。
 
 临时处理方式：
 

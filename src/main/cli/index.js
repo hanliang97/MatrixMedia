@@ -20,7 +20,6 @@ import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
 import { runSingleFilePublish } from "../services/publishVideo";
-import { reportPublishEvent } from "../services/usageTelemetry";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
@@ -313,7 +312,9 @@ async function runBatchDirPublish(v, cfg) {
       publishMode: effectivePublishMode.publishMode,
       publishToDraft: effectivePublishMode.publishToDraft,
       publishOptions: v.publishOptions || {},
-      publishStatus: effectivePublishMode.publishToDraft ? "drafting" : "publishing",
+      publishStatus: effectivePublishMode.publishToDraft
+        ? "drafting"
+        : "publishing",
       lastPublishMessage: effectivePublishMode.publishToDraft
         ? "等待保存草稿结果"
         : "等待发布结果",
@@ -348,9 +349,6 @@ async function runBatchDirPublish(v, cfg) {
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
-      if (status === "success") {
-        reportPublishEvent().catch(() => {});
-      }
       try {
         changeData({
           fileName: "pushData",
@@ -738,9 +736,6 @@ export async function runCliMain(argv = process.argv) {
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
-      if (status === "success") {
-        reportPublishEvent().catch(() => {});
-      }
       try {
         changeData({
           fileName: "pushData",

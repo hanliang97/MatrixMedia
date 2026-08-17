@@ -42,7 +42,7 @@ jobs:
           node-version: "20.15.1"
       - name: Install dependencies
         run: yarn
-      - name: Build Electron app (macOS x64)
+      - name: Build Electron app (macOS x64 + arm64)
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false
         run: yarn build:mac

@@ -162,6 +162,6 @@ electron . cli publish-article -p juejin --phone 13800138000 -t "文章标题" -
 ## 构建命令
 
 - `yarn build`：Windows x64 NSIS
-- `yarn build:mac`：macOS dmg（x64，Apple Silicon 通过 Rosetta 运行）
+- `yarn build:mac`：macOS dmg（x64 + arm64）
 - `yarn build:linux`：Linux AppImage
 - `yarn build:all`：Windows + Linux + macOS

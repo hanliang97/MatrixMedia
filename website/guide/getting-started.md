@@ -20,17 +20,17 @@ description: 下载安装矩媒 MatrixMedia，并了解 GUI、CLI、HTTP API 与
 
 ## macOS
 
-下载 `MatrixMedia-<version>-mac-x64.dmg`，拖入「应用程序」。首次打开若提示无法验证，在「系统设置 → 隐私与安全性」点击「仍要打开」。
+Intel 下载 `MatrixMedia-<version>-mac-x64.dmg`，Apple Silicon 下载 `MatrixMedia-<version>-mac-arm64.dmg`，拖入「应用程序」。首次打开若提示无法验证，在「系统设置 → 隐私与安全性」点击「仍要打开」。
 
 ## Linux
 
 Linux 提供四种安装包，按发行版选择：
 
-| 包格式                     | 适用发行版                  | 安装命令                                       |
-| -------------------------- | --------------------------- | ---------------------------------------------- |
-| `MatrixMedia-<ver>-linux-x64.AppImage` | 通用（免安装）    | `chmod +x *.AppImage && ./MatrixMedia-*.AppImage` |
-| `MatrixMedia-<ver>-linux-x64.deb`      | Debian / Ubuntu  | `sudo dpkg -i MatrixMedia-*.deb`               |
-| `MatrixMedia-<ver>-linux-x64.rpm`      | Fedora / RHEL / openSUSE | `sudo rpm -i MatrixMedia-*.rpm`           |
+| 包格式                                 | 适用发行版                     | 安装命令                                                            |
+| -------------------------------------- | ------------------------------ | ------------------------------------------------------------------- |
+| `MatrixMedia-<ver>-linux-x64.AppImage` | 通用（免安装）                 | `chmod +x *.AppImage && ./MatrixMedia-*.AppImage`                   |
+| `MatrixMedia-<ver>-linux-x64.deb`      | Debian / Ubuntu                | `sudo dpkg -i MatrixMedia-*.deb`                                    |
+| `MatrixMedia-<ver>-linux-x64.rpm`      | Fedora / RHEL / openSUSE       | `sudo rpm -i MatrixMedia-*.rpm`                                     |
 | `MatrixMedia-<ver>-linux-x64.tar.gz`   | 便携版（任意发行版，CLI 友好） | `tar -xzf MatrixMedia-*.tar.gz -C ~/mm && cd ~/mm && ./matrixmedia` |
 
 > arm64 设备（如树莓派、ARM 服务器）请下载文件名含 `arm64` 的对应包。
