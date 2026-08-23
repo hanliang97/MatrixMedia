@@ -28,10 +28,24 @@
     >
       <el-form ref="form" :model="pushData" label-width="88px">
         <el-form-item label="分组">
-          <el-input
+          <el-select
+            ref="groupSelect"
             v-model="pushData.phone"
-            placeholder="可填写手机号、团队名或任意便于识别的名称"
-          />
+            filterable
+            allow-create
+            default-first-option
+            clearable
+            placeholder="选择已有分组，或输入后回车新增"
+            no-data-text="输入分组名称后回车新增"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="name in groupOptions"
+              :key="name"
+              :label="name"
+              :value="name"
+            />
+          </el-select>
         </el-form-item>
         <el-form-item label="平台">
           <el-select v-model="pushData.pt" placeholder="请选择平台">
@@ -74,6 +88,7 @@ export default {
       getAccoutIndex: "",
       ptConfig,
       showDialog: false,
+      groupOptions: [],
       pushData: {
         phone: "",
         pt: "",
@@ -125,8 +140,19 @@ export default {
         this.pushData.pt = "";
       }
     },
+    showDialog(open) {
+      if (open) this.refreshGroupOptions();
+    },
   },
   methods: {
+    refreshGroupOptions() {
+      try {
+        const tree = JSON.parse(localStorage.getItem("accountTree") || "{}");
+        this.groupOptions = Object.keys(tree).filter(Boolean);
+      } catch (e) {
+        this.groupOptions = [];
+      }
+    },
     refreshAccountMenuIndex() {
       const hit = this.$router
         .getRoutes()
@@ -171,8 +197,13 @@ export default {
       this.applyIsRouteFromPath(index);
     },
     addAccount() {
-      if (!String(this.pushData.phone || "").trim()) {
-        this.$message.warning("请填写分组名称");
+      const typed =
+        this.$refs.groupSelect && this.$refs.groupSelect.query
+          ? String(this.$refs.groupSelect.query).trim()
+          : "";
+      const phone = String(this.pushData.phone || "").trim() || typed;
+      if (!phone) {
+        this.$message.warning("请选择或输入分组名称");
         return;
       }
       if (!this.pushData.pt) {
@@ -186,7 +217,11 @@ export default {
       dataRequest({
         type: "add",
         fileName: "account",
-        item: { ...this.pushData, url: this.ptConfig[this.pushData.pt].index },
+        item: {
+          ...this.pushData,
+          phone,
+          url: this.ptConfig[this.pushData.pt].index,
+        },
       }).then(() => {
         this.$message({
           type: "success",
