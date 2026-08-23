@@ -9,6 +9,10 @@ import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
 } from "./uploadTimeouts.js";
+import {
+  buildPlatformVideoText,
+  normalizeVideoTags,
+} from "../../../shared/videoMetadata.js";
 
 async function waitForBlblAutoCover(page) {
   await pollPageUntil(
@@ -26,6 +30,10 @@ async function waitForBlblAutoCover(page) {
   );
 }
 
+export function findBlblCoverEntry(root = document) {
+  return root.querySelector(".cover-empty");
+}
+
 /**
  * 视频上传成功后默认设置封面：
  * 点击「封面设置」→ 弹窗中滑块往左滑 10px → 点击「完成」。
@@ -33,12 +41,22 @@ async function waitForBlblAutoCover(page) {
  */
 async function handleBlblCover(page) {
   try {
-    // 1. 等待并点击封面设置入口（cover-empty.failed 含"封面设置"文案）
-    //    封面加载可能延迟，给足等待时间
-    const coverEntry = await page.waitForSelector(".cover-empty.failed", {
-      timeout: WAIT_SELECTOR_APPEAR_MS,
-    });
+    // 1. 等待并点击新版封面设置入口
+    const deadline = Date.now() + WAIT_SELECTOR_APPEAR_MS;
+    let coverEntry = null;
+    while (!coverEntry && Date.now() < deadline) {
+      const handle = await page
+        .evaluateHandle(findBlblCoverEntry)
+        .catch(() => null);
+      coverEntry = handle?.asElement() || null;
+      if (!coverEntry) {
+        await handle?.dispose();
+        await page.waitForTimeout(2000);
+      }
+    }
+    if (!coverEntry) throw new Error("未找到哔哩哔哩封面设置入口");
     await coverEntry.click({ delay: 200 });
+    await coverEntry.dispose();
     console.log("[blbl] 已点击封面设置入口");
 
     // 2. 等待封面编辑弹窗
@@ -152,6 +170,7 @@ async function selectBlblCreativeStatement(page, data) {
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
+  const text = buildPlatformVideoText("哔哩哔哩", data.data);
 
   console.log(data);
   try {
@@ -169,7 +188,7 @@ export default async function (page, data, window, event) {
     const input = await page.$(selector);
     await input.click({ clickCount: 3 }); // 三击全选
     await page.keyboard.press("Backspace"); // 删除内容
-    await page.keyboard.type(data.data.bt1, { delay: 50 });
+    await page.keyboard.type(text.title, { delay: 50 });
   } catch (e) {
     console.error("❌ 输入标题失败", e);
   }
@@ -186,7 +205,9 @@ export default async function (page, data, window, event) {
     await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
-    await page.waitForSelector(".human-type-list", { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(".human-type-list", {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     const input2 = await page.$('.human-type-list div[title="影视"]');
     await input2.click();
   } catch (e) {
@@ -197,15 +218,14 @@ export default async function (page, data, window, event) {
     await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
-    await page.keyboard.type(data.data.bdText);
+    if (text.description) {
+      await page.keyboard.type(text.description);
+    }
   } catch (e) {
     console.error("❌ 输入简介失败", e);
   }
   try {
-    let tag = data.data.bq
-      .trim()
-      .split(/\s+/)
-      .map(tag => tag.replace(/^#/, ""));
+    const tag = normalizeVideoTags(data.data.tags);
     const selector = ".tag-container .input-instance input";
     await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
@@ -242,9 +262,13 @@ export default async function (page, data, window, event) {
     await page.waitForTimeout(500);
     // 点击一下空白的区域
     await page.click("body", { delay: 200 });
-    await page.waitForSelector(".submit-container .submit-add", { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(".submit-container .submit-add", {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     // 存到草稿
-    await page.waitForSelector(".submit-draft", { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.waitForSelector(".submit-draft", {
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
     if (isDraftMode) {
       await page.click(".submit-draft", { delay: 200 });
     } else {
@@ -252,7 +276,9 @@ export default async function (page, data, window, event) {
       await page.click(".submit-add", { clickCount: 2, delay: 200 });
     }
     // 检测._phone-label_1eni7_34 消失
-    console.log(isDraftMode ? "✅ 哔哩哔哩视频已保存草稿" : "✅ 哔哩哔哩视频上传成功");
+    console.log(
+      isDraftMode ? "✅ 哔哩哔哩视频已保存草稿" : "✅ 哔哩哔哩视频上传成功"
+    );
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,

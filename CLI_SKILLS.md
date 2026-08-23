@@ -30,6 +30,8 @@ AI 调用 `cli publish` 时必须传入真实发布数据，不能只创建空�
 - `-f` / `--file`：实际本地视频路径
 - `-t` / `--title`：实际视频标题
 
+可选语义字段：`--description`（简介）、`--short-title`（仅视频号短标题）、`--tags`（标签）。旧 `--bt2` 仍兼容：视频号当短标题，其他平台当简介。完整映射见 `.cursor/skills/matrixmedia-cli-publish/SKILL.md`。
+
 一次性定时发布使用 `--publish-at "YYYY-MM-DD HH:mm:ss"`，例如：
 
 ```bash
@@ -38,7 +40,7 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/absolute/path/to/video.mp4" \
   -t "视频标题" \
-  --bt2 "短标题" \
+  --description "视频简介" \
   --tags "#标签1 #标签2" \
   --publish-at "2026-05-05 20:30:00"
 ```

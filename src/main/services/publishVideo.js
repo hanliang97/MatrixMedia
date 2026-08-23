@@ -14,6 +14,7 @@ import {
 } from "./resolvePublishFile";
 import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 import { resolvePublishCompletion } from "../../shared/publishResult.js";
+import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 function fileStemFromSource(source) {
   const raw = String(source || "").trim();
@@ -60,8 +61,7 @@ export async function runSingleFilePublish(
 
   const sourceFile = String(v.file || "").trim();
   const stem = fileStemFromSource(sourceFile);
-  const bt1 = String(v.title).trim();
-  const bt2 = (v.bt2 && String(v.bt2).trim()) || bt1;
+  const metadata = normalizeVideoMetadata(v, v.platform);
   const bookName = (v.bookName && String(v.bookName).trim()) || stem;
 
   let cleanupDownload = null;
@@ -93,8 +93,7 @@ export async function runSingleFilePublish(
         sourceFile,
         resolvedFile,
         stem,
-        bt1,
-        bt2,
+        metadata,
         bookName,
       },
       options
@@ -107,7 +106,7 @@ export async function runSingleFilePublish(
 async function runSingleFilePublishInner(
   v,
   cfg,
-  { sourceFile, resolvedFile, stem, bt1, bt2, bookName },
+  { sourceFile, resolvedFile, stem, metadata, bookName },
   options = {}
 ) {
   // 结合「请求显式 draft」与账号「默认发布到草稿」设置，算出最终发布模式
@@ -123,10 +122,11 @@ async function runSingleFilePublishInner(
     textType: "local",
     data: {
       textOtherName: stem,
-      bt1,
-      bt2,
-      bq: String(v.bq || "").trim(),
-      bdText: "",
+      title: metadata.title,
+      description: metadata.description,
+      shortTitle: metadata.shortTitle,
+      tags: metadata.tags,
+      ...metadata.legacy,
       creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
     },
     url: cfg.upload,
@@ -155,9 +155,12 @@ async function runSingleFilePublishInner(
     textType: "local",
     pt: v.platform,
     selectedFile,
-    bt: bt1,
-    bt2,
-    bq: String(v.bq || "").trim(),
+    bt: metadata.title,
+    title: metadata.title,
+    description: metadata.description,
+    shortTitle: metadata.shortTitle,
+    tags: metadata.tags,
+    ...metadata.legacy,
     creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
     filePath:
       v.publishAt && isRemotePublishFile(sourceFile)

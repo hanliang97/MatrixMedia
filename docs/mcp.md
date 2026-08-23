@@ -76,13 +76,17 @@ cd mcp && npm install && npm run build
 
 ### publish_video
 
+视频元数据与 CLI / HTTP 一致：`title` 为标题，`description` 为简介，`shortTitle` 仅视频号短标题，`tags` 为标签。抖音 / 快手 / 视频号会把简介与标签拼进正文；哔哩哔哩简介和标签各自独立填写。旧字段 `bt2` 仍兼容：视频号当短标题，其他平台当简介。
+
 | 参数           | 必填 | 说明                                                          |
 | -------------- | ---- | ------------------------------------------------------------- |
 | `platform`     | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph`                   |
 | `file`         | 是   | 视频文件绝对路径                                              |
 | `title`        | 是   | 视频标题                                                      |
+| `description`  | 否   | 视频简介或正文                                                |
+| `shortTitle`   | 否   | 视频号短标题，建议 6～16 字；其他平台忽略                     |
 | `phone`        | 是   | 账号手机号，用于推导 session partition                        |
-| `bt2`          | 否   | 第二标题 / 视频号短标                                         |
+| `bt2`          | 否   | 旧兼容字段：视频号作为短标题，其他平台作为简介                |
 | `tags`         | 否   | 标签字符串                                                    |
 | `address`      | 否   | 地址（百家号等）                                              |
 | `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm`                                  |
@@ -100,7 +104,8 @@ cd mcp && npm install && npm run build
   "file": "D:\\videos\\a.mp4",
   "title": "视频标题",
   "phone": "13800138000",
-  "bt2": "视频号短标题",
+  "description": "视频简介",
+  "shortTitle": "视频号短标题",
   "draft": true,
   "sphProductId": "10000591263144",
   "creativeStatement": "含AI生成内容"

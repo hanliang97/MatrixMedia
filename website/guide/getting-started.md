@@ -101,7 +101,7 @@ matrixmedia cli login -p dy --phone 13800138000
 matrixmedia cli publish --help
 ```
 
-完整说明见 [CLI 参考](/reference/cli)。
+发布字段与 GUI 一致：`--title` 标题、`--description` 简介、`--short-title` 仅视频号短标题、`--tags` 标签。完整说明见 [CLI 参考](/reference/cli)。
 
 ## HTTP API
 

@@ -20,8 +20,6 @@
 
 [GitHub Pages · 矩媒官网](https://hanliang97.github.io/MatrixMedia/)
 
-（源码在仓库 `website/`；GitHub → Settings → Pages → Source 须选 **GitHub Actions**。若 deploy 步骤反复「Timeout reached」，先运行 `scripts/clear-stuck-github-pages-deployments.sh` 清理卡住的 deployment。）
-
 ## 软件下载地址
 
 - 国内 Gitee：[gitee.com/gzlingyi_0/pubtw/releases](https://gitee.com/gzlingyi_0/pubtw/releases/)
@@ -215,8 +213,11 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 # 抖音登录
 matrixmedia cli login -p dy --phone 13800138000
 
-# 发布视频
-matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
+# 发布视频（简介、标签；视频号另加短标题）
+matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 \
+  -t "标题" --description "视频简介" --tags "#跑步 #新手"
+matrixmedia cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
+  -t "标题" --description "视频简介" --short-title "5公里新手挑战" --tags "#跑步 #新手"
 
 # 发布掘金文章
 matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md
@@ -305,6 +306,8 @@ open /Applications/matrixmedia.app
 | ---- | ---------- | -------------------------------------------------- |
 | POST | `/publish` | 发布视频到单平台或多平台（本地路径或 http(s) URL） |
 
+视频元数据字段与 GUI「本地视频发布」一致：`title` 为标题，`description` 为简介，`shortTitle` 仅视频号短标题，`tags` 为标签。抖音 / 快手 / 视频号会把简介与标签拼进正文；小红书正文写简介、标签走话题控件；哔哩哔哩简介和标签各自独立填写；头条 / 百家号只写标题。旧字段 `bt2` 仍兼容：视频号当短标题，其他平台当简介。
+
 **请求体（JSON）**：
 
 | 字段                 | 必填   | 说明                                                                                                                                     |
@@ -313,9 +316,11 @@ open /Applications/matrixmedia.app
 | `platforms`          | 多平台 | 平台数组，如 `["dy","sph","ks"]`；或对象数组 `[{ "platform": "dy", "phone": "138..." }, ...]`（可覆盖共享字段）                          |
 | `file`               | 是     | 本地视频绝对路径，或 `http://` / `https://` 远程视频 URL（会先下载到临时目录，全部平台发布结束后自动删除；定时发布则在到点执行时再下载） |
 | `title`              | 是     | 视频标题                                                                                                                                 |
+| `description`        | 否     | 视频简介；抖音、快手、视频号会与标签拼接，小红书写入正文，哔哩哔哩写入简介控件                                                           |
+| `shortTitle`         | 否     | 视频号短标题，建议 6 ～ 16 字；其他平台忽略                                                                                              |
 | `phone`              | 二选一 | 账号手机号（与 GUI 账号树一致）；多平台时可作为默认值，单个平台对象内可覆盖                                                              |
 | `partition`          | 二选一 | 完整 session，如 `persist:13800138000抖音`                                                                                               |
-| `bt2`                | 否     | 视频号短标（含视频号时强烈建议填写）                                                                                                     |
+| `bt2`                | 否     | 旧兼容字段：视频号作为短标题，其他平台作为简介                                                                                           |
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分                                                                                |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
 | `creativeStatement`  | 否     | 全局创作声明，等同 GUI「批量设置」；详见 [docs/http-api.md](./docs/http-api.md)                                                          |
@@ -370,7 +375,8 @@ curl -X POST http://127.0.0.1:30088/publish \
     "phone": "13800138000",
     "file": "https://example.com/video.mp4",
     "title": "我的视频标题",
-    "bt2": "5公里新手挑战",
+    "description": "视频简介",
+    "shortTitle": "5公里新手挑战",
     "tags": "跑步 新手",
     "platforms": ["dy", "sph", "ks"]
   }'
@@ -442,7 +448,7 @@ curl -X POST http://127.0.0.1:30088/publish \
 1. 本项目仅用于合法合规的学习与效率提升场景，请严格遵守各平台服务协议与当地法律法规。
 2. 请勿将本项目用于批量作弊、恶意营销、侵权搬运、刷量等违规用途，由此产生的风险与责任由使用者自行承担。
 3. 涉及账号、Cookie、本地素材等敏感数据时，请妥善保管并自行评估安全风险。
-4. 部分平台（如哔哩哔哩）可能需要人工参与（例如手动上传封面），请以平台当前页面规则为准。
+4. 部分平台可能需要人工参与（例如手动上传封面），请以平台当前页面规则为准。
 
 ## 开发环境 node 20
 

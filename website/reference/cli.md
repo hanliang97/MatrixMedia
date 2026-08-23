@@ -85,10 +85,22 @@ electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标�
 | `-p` / `--platform`       | 发布平台                                                                   |
 | `-f` / `--file`           | 本地视频路径 → `filePath`、`data.textOtherName`（文件名无扩展名）          |
 | `--phone` / `--partition` | 会话分区，与账号树一致                                                     |
-| `-t` / `--title`          | **视频标题**（必填）→ `data.bt1`                                           |
+| `-t` / `--title`          | **视频标题**（必填）→ `data.title`                                         |
+| `--description` / `--desc` | **视频简介** → `data.description`                                         |
+| `--short-title`            | **视频号短标题** → `data.shortTitle`，仅视频号消费                        |
 | `--name` / `--book-name`  | **名称**（任务记录名）→ `bookName`；省略时默认与视频文件名（无扩展名）一致 |
-| `--bt2`                   | **概括短标题** → `data.bt2`；省略时默认与视频标题一致（视频号等场景）      |
-| `--tags` / `--bq`         | **视频标签** → `data.bq`                                                   |
+| `--bt2`                   | 旧兼容字段：视频号作为短标题，其他平台作为简介                             |
+| `--tags` / `--bq`         | **视频标签** → `data.tags`                                                 |
+
+平台写入规则：
+
+| 平台 | `--title` | `--description` | `--short-title` | `--tags` |
+| ---- | --------- | --------------- | --------------- | -------- |
+| 抖音 / 快手 / 视频号 | 标题 | 与标签拼进正文 | 仅视频号填写 | 拼进正文末尾，建议带 `#` |
+| 小红书 | 标题 | 写入正文 | 忽略 | 独立话题控件 |
+| 哔哩哔哩 | 标题 | 写入简介控件 | 忽略 | 独立标签控件 |
+| 头条 / 百家号 | 标题 | 忽略 | 忽略 | 忽略 |
+| 番茄视频 | 不写元数据 | 不写元数据 | 不写元数据 | 不写元数据 |
 | `--address`               | **地址** → `data.address`（仅百家号）                                      |
 | `--publish-at`            | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`；创建后立即进入发布历史         |
 | `--show`                  | 当前 CLI 会忽略，仍后台运行                                                |
@@ -118,7 +130,7 @@ electron . cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标�
 
 ```bash
 electron . cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 \
-  -t "视频标题" --bt2 "视频号短标题" --draft \
+  -t "视频标题" --description "视频简介" --short-title "视频号短标题" --draft \
   --sph-product-id 10000591263144
 ```
 

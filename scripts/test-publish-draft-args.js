@@ -5,6 +5,8 @@ require("@babel/register")({
   ignore: [/node_modules/],
 });
 
+const fs = require("fs");
+const path = require("path");
 const assert = require("assert");
 const {
   parsePublishArgs,
@@ -288,5 +290,139 @@ assert.deepStrictEqual(
     exitCode: 4,
   }
 );
+
+// 17) CLI 语义字段应独立解析
+const r17 = parsePublishArgs([
+  ...baseArgv(),
+  "--description",
+  "视频简介",
+  "--short-title",
+  "六个字短标题",
+]);
+assert.strictEqual(r17.ok, true);
+assert.strictEqual(r17.value.description, "视频简介");
+assert.strictEqual(r17.value.shortTitle, "六个字短标题");
+
+// 18) 旧 bt2 按平台分流，不能同时污染简介和短标题
+const legacyDy = parsePublishArgs([...baseArgv(), "--bt2", "旧简介"]);
+assert.strictEqual(legacyDy.value.description, "旧简介");
+assert.strictEqual(legacyDy.value.shortTitle, "");
+const legacySph = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--bt2",
+  "六个字短标题",
+]);
+assert.strictEqual(legacySph.value.description, "");
+assert.strictEqual(legacySph.value.shortTitle, "六个字短标题");
+
+const shortTitleTooShort = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--short-title",
+  "太短了",
+]);
+assert.strictEqual(shortTitleTooShort.ok, false);
+assert.ok(shortTitleTooShort.error.includes("6～16"));
+
+const legacyShortTitleTooLong = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--bt2",
+  "这是一个明显超过十六个字的视频号短标题内容",
+]);
+assert.strictEqual(legacyShortTitleTooLong.ok, false);
+assert.ok(legacyShortTitleTooLong.error.includes("6～16"));
+
+const shortTitleWithPunctuation = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--short-title",
+  "六个字，短标题",
+]);
+assert.strictEqual(shortTitleWithPunctuation.ok, false);
+assert.ok(shortTitleWithPunctuation.error.includes("特殊标点"));
+
+const validShortTitle = parsePublishArgs([
+  "-p",
+  "sph",
+  "--phone",
+  "13800138000",
+  "-f",
+  "./v.mp4",
+  "-t",
+  "标题",
+  "--short-title",
+  "  六个字短标题  ",
+]);
+assert.strictEqual(validShortTitle.ok, true);
+assert.strictEqual(validShortTitle.value.shortTitle, "六个字短标题");
+
+// 19) HTTP 单平台与多平台应保留语义字段
+const semanticHttp = parsePublishRequest({
+  platform: "dy",
+  phone: "13800138000",
+  file: "./v.mp4",
+  title: "标题",
+  description: "HTTP 简介",
+  shortTitle: "HTTP 短标题",
+});
+assert.strictEqual(semanticHttp.value.description, "HTTP 简介");
+assert.strictEqual(semanticHttp.value.shortTitle, "HTTP 短标题");
+const semanticMulti = parseMultiPublishRequest({
+  phone: "13800138000",
+  file: "./v.mp4",
+  title: "标题",
+  description: "共享简介",
+  shortTitle: "共享六字短标题",
+  platforms: ["dy", "sph"],
+});
+assert.strictEqual(semanticMulti.ok, true);
+assert.ok(semanticMulti.value.every((item) => item.description === "共享简介"));
+assert.ok(
+  semanticMulti.value.every((item) => item.shortTitle === "共享六字短标题")
+);
+
+const root = path.join(__dirname, "..");
+const publishVideoSource = fs.readFileSync(
+  path.join(root, "src/main/services/publishVideo.js"),
+  "utf8"
+);
+const mcpPublishSource = fs.readFileSync(
+  path.join(root, "mcp/src/tools/publish.ts"),
+  "utf8"
+);
+assert.ok(publishVideoSource.includes("normalizeVideoMetadata"));
+assert.ok(publishVideoSource.includes("description: metadata.description"));
+assert.ok(publishVideoSource.includes("shortTitle: metadata.shortTitle"));
+assert.ok(publishVideoSource.includes("tags: metadata.tags"));
+assert.ok(mcpPublishSource.includes("description: {"));
+assert.ok(mcpPublishSource.includes("shortTitle: {"));
+assert.ok(mcpPublishSource.includes('"--description"'));
+assert.ok(mcpPublishSource.includes('"--short-title"'));
 
 console.log("test-publish-draft-args passed");

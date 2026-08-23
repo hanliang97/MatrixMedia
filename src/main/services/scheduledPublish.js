@@ -8,6 +8,7 @@ import { runPuppeteerTask } from "./puppeteerFile";
 import { changeData } from "../server/utils";
 import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
 import { isRemotePublishFile, resolvePublishFile } from "./resolvePublishFile";
+import { normalizeVideoRecordMetadata } from "../../shared/videoMetadata.js";
 
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 1000;
@@ -121,17 +122,18 @@ export function buildTaskPayloadFromRecord(record) {
       coverPath: record.coverPath || "",
     };
   }
+  const metadata = normalizeVideoRecordMetadata(record);
   return {
     taskId: Date.now() + Math.random(),
     bookName: record.bookName || record.textOtherName || "",
     textType: record.textType || "local",
     data: {
       textOtherName: record.textOtherName || "",
-      bt1: record.bt || "",
-      bt2: record.bt2 || record.bt || "",
-      bt2Filled: record.bt2Filled || "",
-      bq: record.bq || "",
-      bdText: "",
+      title: metadata.title,
+      description: metadata.description,
+      shortTitle: metadata.shortTitle,
+      tags: metadata.tags,
+      ...metadata.legacy,
       creativeStatement: normalizeCreativeStatement(record.creativeStatement),
     },
     textOtherName: record.textOtherName || "",

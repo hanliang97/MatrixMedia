@@ -6,6 +6,10 @@ import {
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
 } from "./uploadTimeouts.js";
+import {
+  buildPlatformVideoText,
+  normalizeVideoTags,
+} from "../../../shared/videoMetadata.js";
 
 async function selectDyCreativeStatement(page, data) {
   const value = data.data && data.data.creativeStatement;
@@ -133,6 +137,7 @@ export default async function (page, data, window, event) {
     console.error("❌ 输入文件失败", e);
   }
   try {
+    const text = buildPlatformVideoText("抖音", data.data);
     await page.waitForSelector(".semi-input", {
       timeout: WAIT_SELECTOR_APPEAR_MS,
     });
@@ -141,14 +146,18 @@ export default async function (page, data, window, event) {
     // 点击并清空内容
     await input.click({ clickCount: 3 }); // 三击全选
     await page.keyboard.press("Backspace"); // 删除内容
-    await page.type(".semi-input", data.data.bt1, { delay: 50 });
+    await page.type(".semi-input", text.title, { delay: 50 });
 
     const input2 = await page.$(".zone-container.editor-kit-container");
     await input2.click(); // 三击全选
-    await page.keyboard.type(data.data.bt2 + " " + data.data.bq, { delay: 50 });
+    if (text.description) {
+      await page.keyboard.type(text.description, { delay: 50 });
+    }
     // 抖音话题只有遇到空格/回车才会把当前 #xxx 转成话题胶囊；
     // bq 末尾没有分隔符会导致最后一个标签没被识别，这里补一次空格触发。
-    await page.keyboard.press("Space");
+    if (normalizeVideoTags(data.data.tags).length) {
+      await page.keyboard.press("Space");
+    }
   } catch (e) {
     console.error("❌ 输入标题失败", e);
   }

@@ -24,6 +24,7 @@ import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
 import { resolveAccountPublishMode } from "../services/accountPublishSettingsResolver.js";
+import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 export {
   isCliMode,
@@ -66,7 +67,7 @@ function derivePhoneForRecord(v) {
 
 /**
  * Parse xlsx rows for batch publish. Mirrors ipcMain.js dialog:openBatchXlsx logic.
- * Returns [{fileName, title, tags, creativeStatement}] filtered to rows with non-empty fileName.
+ * Returns video metadata rows filtered to rows with non-empty fileName.
  */
 function parseXlsxRows(xlsxPath) {
   const workbook = xlsx.readFile(xlsxPath);
@@ -93,6 +94,20 @@ function parseXlsxRows(xlsxPath) {
         ),
         title: cleanCell(
           map["标题"] != null ? map["标题"] : map["title"] || ""
+        ),
+        description: cleanCell(
+          map["简介"] != null
+            ? map["简介"]
+            : map["description"] != null
+            ? map["description"]
+            : ""
+        ),
+        shortTitle: cleanCell(
+          map["视频号短标题"] != null
+            ? map["视频号短标题"]
+            : map["shorttitle"] != null
+            ? map["shorttitle"]
+            : ""
         ),
         tags: cleanCell(map["标签"] != null ? map["标签"] : map["tags"] || ""),
         creativeStatement: cleanCell(
@@ -233,7 +248,6 @@ async function runBatchDirPublish(v, cfg) {
 
     const stem = fileStem(resolvedFile);
     const bt1 = row.title && row.title.trim() ? row.title.trim() : stem;
-    const bt2 = bt1;
     const bookName = stem;
 
     // Format tags: split by comma (xlsx format), then # prefix for hashtag platforms
@@ -253,6 +267,15 @@ async function runBatchDirPublish(v, cfg) {
     }
 
     const cs = normalizeCreativeStatement(row.creativeStatement || "");
+    const metadata = normalizeVideoMetadata(
+      {
+        title: bt1,
+        description: row.description,
+        shortTitle: row.shortTitle,
+        tags: bq,
+      },
+      v.platform
+    );
 
     // 批量目录发布同样尊重账号「默认发布到草稿」设置 + 显式 --draft
     const effectivePublishMode = resolveAccountPublishMode({
@@ -268,10 +291,11 @@ async function runBatchDirPublish(v, cfg) {
       textType: "local",
       data: {
         textOtherName: stem,
-        bt1,
-        bt2,
-        bq,
-        bdText: "",
+        title: metadata.title,
+        description: metadata.description,
+        shortTitle: metadata.shortTitle,
+        tags: metadata.tags,
+        ...metadata.legacy,
         creativeStatement: cs,
       },
       url: cfg.upload,
@@ -295,9 +319,12 @@ async function runBatchDirPublish(v, cfg) {
       textType: "local",
       pt: v.platform,
       selectedFile,
-      bt: bt1,
-      bt2,
-      bq,
+      bt: metadata.title,
+      title: metadata.title,
+      description: metadata.description,
+      shortTitle: metadata.shortTitle,
+      tags: metadata.tags,
+      ...metadata.legacy,
       filePath: resolvedFile,
       useragent: cfg.useragent,
       phone: derivePhoneForRecord(v),

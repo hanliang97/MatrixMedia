@@ -669,7 +669,7 @@ export default {
             .replace(/[﻿​‌‍ ]/g, "")
             .replace(/[\r\n\t]/g, "")
             .trim();
-        // Normalize: support column headers "文件名"/"fileName", "标题"/"title", "标签"/"tags"
+        // Normalize: support Chinese and semantic English column headers.
         // 列头本身也可能带不可见字符，做一份归一化映射。
         const normalizedRows = rows
           .map((row) => {
@@ -688,6 +688,20 @@ export default {
               ),
               title: cleanCell(
                 map["标题"] != null ? map["标题"] : map["title"] || ""
+              ),
+              description: cleanCell(
+                map["简介"] != null
+                  ? map["简介"]
+                  : map["description"] != null
+                  ? map["description"]
+                  : ""
+              ),
+              shortTitle: cleanCell(
+                map["视频号短标题"] != null
+                  ? map["视频号短标题"]
+                  : map["shorttitle"] != null
+                  ? map["shorttitle"]
+                  : ""
               ),
               tags: cleanCell(
                 map["标签"] != null ? map["标签"] : map["tags"] || ""
@@ -768,9 +782,21 @@ export default {
       try {
         const workbook = xlsx.utils.book_new();
         const wsData = [
-          ["文件名", "标题", "标签"],
-          ["第01集.mp4", "精彩短剧第一集", "短剧,影视,追剧"],
-          ["第02集.mp4", "精彩短剧第二集", "短剧,影视,追剧"],
+          ["文件名", "标题", "简介", "标签", "视频号短标题"],
+          [
+            "第01集.mp4",
+            "精彩短剧第一集",
+            "第一集剧情简介",
+            "短剧,影视,追剧",
+            "短剧第一集精彩看点",
+          ],
+          [
+            "第02集.mp4",
+            "精彩短剧第二集",
+            "第二集剧情简介",
+            "短剧,影视,追剧",
+            "短剧第二集精彩看点",
+          ],
         ];
         const ws = xlsx.utils.aoa_to_sheet(wsData);
         xlsx.utils.book_append_sheet(workbook, ws, "Sheet1");

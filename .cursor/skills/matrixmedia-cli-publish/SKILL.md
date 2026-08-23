@@ -7,24 +7,26 @@ description: Run MatrixMedia in CLI mode for login, video publishing, account st
 
 ## Subcommands
 
-| Subcommand | Platform coverage | Purpose | Writes state? |
-|------------|-------------------|---------|---------------|
-| `cli login` | **Douyin** (`-p dy`) and **视频号** (`-p sph`) | Scan-to-login via terminal QR, `--show` window, or headless puppeteer (Douyin only) | yes (session cookies) |
-| `cli publish` | **All 7 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`) | Publish a local video via puppeteer automation | yes (pushData log) |
-| `cli accounts` | All platforms | List all accounts from the GUI account tree and report current login state | no |
-| `cli history` | All platforms | Read local publish records (pushData) with platform/phone/status filters | no |
+| Subcommand     | Platform coverage                                                   | Purpose                                                                             | Writes state?         |
+| -------------- | ------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | --------------------- |
+| `cli login`    | **Douyin** (`-p dy`) and **视频号** (`-p sph`)                      | Scan-to-login via terminal QR, `--show` window, or headless puppeteer (Douyin only) | yes (session cookies) |
+| `cli publish`  | **All 7 platforms** (`dy \| tt \| ks \| blbl \| bjh \| sph \| xhs`) | Publish a local video via puppeteer automation                                      | yes (pushData log)    |
+| `cli accounts` | All platforms                                                       | List all accounts from the GUI account tree and report current login state          | no                    |
+| `cli history`  | All platforms                                                       | Read local publish records (pushData) with platform/phone/status filters            | no                    |
 
 > **Douyin and 视频号 support CLI login.** Other platforms cannot log in via CLI — ask the user to log in **once in the GUI**; CLI then reuses the same `persist:<phone><platform>` session partition for `cli publish` / `cli accounts`. If `cli accounts` reports `cookie 已过期`, send the user back to the GUI to re-login (or use `cli login` for Douyin/视频号).
 
 ## Quick Start
 
 Use this skill when the user asks to:
+
 - use CLI mode instead of GUI
 - publish videos by command line
 - inspect account login status or publish history from the command line
 - automate login/publish in OpenClaw or other agent workflows
 
 Default publish sequence:
+
 1. Preflight checks
 2. `cli accounts` to verify the target account is logged in (optional but recommended)
 3. `cli login` (only when needed)
@@ -35,12 +37,14 @@ Default publish sequence:
 ## Preflight Checklist
 
 Before running publish commands, ensure:
+
 - current directory is repository root
 - video file path exists
 - `ELECTRON_RUN_AS_NODE` is not globally forced to `1`
 - platform and account identifier are provided
 
 If the user gives incomplete parameters, ask for:
+
 - `platform` (`dy` for Douyin as default)
 - `phone` (preferred) or `partition`
 - `file` path
@@ -96,11 +100,13 @@ ELECTRON_RUN_AS_NODE= electron . cli publish --help
 ```
 
 Windows installer behavior:
+
 - NSIS installer writes install directory to user `PATH`.
 - Executable command is unified as `matrixmedia`.
 - Users should not need to choose between Chinese/English executable names.
 
 macOS installer behavior:
+
 - `.dmg` only delivers the `.app` bundle; it cannot touch user `PATH`.
 - Recommend users run a one-time symlink after drag-installing:
 
@@ -109,6 +115,7 @@ macOS installer behavior:
   ```
 
   After that, plain `matrixmedia cli ...` works in any terminal. The link survives app upgrades as long as the `.app` stays at `/Applications/matrixmedia.app`.
+
 - If the user refuses `sudo`, fall back to an alias in their shell rc:
 
   ```bash
@@ -120,12 +127,15 @@ macOS installer behavior:
 ## Argument Mapping
 
 Map user intent to CLI args:
+
 - `-p`, `--platform`: target platform
 - `--phone` or `--partition`: account/session partition
 - `-f`, `--file`: local video path
 - `-t`, `--title`: required video title
+- `--description`, `--desc`: optional video description/body
+- `--short-title`: optional 视频号 short title, recommended 6–16 characters
 - `--name`, `--book-name`: task name
-- `--bt2`: short summary title（see "Per-Platform Field Semantics" below — **mandatory for 视频号**)
+- `--bt2`: legacy compatibility; short title for 视频号, description for other platforms
 - `--tags`, `--bq`: video tags（space-separated; `#` prefix semantics vary per platform)
 - `--address`: location field (Baidu use case)
 - `--publish-at`: one-time scheduled publish time, format `YYYY-MM-DD HH:mm:ss`
@@ -142,7 +152,8 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/absolute/path/to/video.mp4" \
   -t "视频标题" \
-  --bt2 "短标题" \
+  --description "视频简介" \
+  --short-title "短标题" \
   --tags "#标签1 #标签2" \
   --publish-at "2026-05-05 20:30:00"
 ```
@@ -157,26 +168,26 @@ Rules:
 
 ## Per-Platform Field Semantics
 
-Each platform consumes `bt1` / `bt2` / `bq` differently — this is the single most common source of "looks right but publishes ugly" bugs. Use this table instead of guessing:
+Use the semantic fields directly:
 
-| Platform | `--title` (bt1) | `--bt2` short description | `--tags` (bq) |
-|----------|-----------------|---------------------------|---------------|
-| **视频号** (sph) | Concatenated into description: `bt1 + " " + bq` | **Required.** Separate input box hinting "6–16 字符". Code strips `，。、/,;:!?'"()[]{}<>` → space. Falling back to `bt1` is almost always wrong. | Concatenated into description with `bt1`. Add `#` yourself if you want hashtag styling. |
-| **抖音** (dy) | Title field `.semi-input` | Leads the description: `bt2 + " " + bq`. Falls back to `bt1` if not provided. | Concatenated after `bt2` in description. Add `#` yourself for hashtag styling. |
-| **快手** (ks) | Description: `bt1 + " " + bq` | unused | Concatenated after `bt1` in description. Add `#` for hashtag styling. |
-| **哔哩哔哩** (blbl) | Submission title | unused | **Independent tag widget.** Code does `split(/\s+/)` then strips leading `#`, types each tag followed by Enter. Leading `#` is harmless but redundant. |
-| **百家号** (bjh) | Article title | unused | **unused by current automation** — tags won't be written regardless. |
-| **头条** (tt) | Up to 30 chars | unused | **unused** — a fixed category checkbox is auto-selected instead. |
-| **小红书** (xhs) | Title (falls back to `bt2`) | Body fallback (falls back to `bdText`) | `normalizeTagList` splits `\s+`, strips leading `#`, then re-inserts each as `#tag` in the body. |
+| Platform            | `--title`        | `--description`                | `--short-title`                        | `--tags`                               |
+| ------------------- | ---------------- | ------------------------------ | -------------------------------------- | -------------------------------------- |
+| **视频号** (sph)    | record title     | description body               | optional separate 6–16 character field | appended to description                |
+| **抖音** (dy)       | title input      | description body               | unused                                 | appended to description                |
+| **快手** (ks)       | record title     | description body               | unused                                 | appended to description                |
+| **哔哩哔哩** (blbl) | submission title | independent introduction field | unused                                 | independent tag widget                 |
+| **百家号** (bjh)    | title input      | unused                         | unused                                 | unused                                 |
+| **头条** (tt)       | title input      | unused                         | unused                                 | unused                                 |
+| **小红书** (xhs)    | title input      | body text                      | unused                                 | inserted as topic chips after the body |
 
 ### 视频号短标生成规则（最常踩坑）
 
-When publishing to 视频号, the agent **must** either accept `--bt2` from the user or generate one. Rules when generating:
+When publishing to 视频号, accept `--short-title` from the user or generate one when useful. Rules when generating:
 
 1. Length: **6–16 characters (Chinese chars and ASCII letters each count as 1)**. Aim for 8–12 to be safe.
 2. Punctuation blacklist (will be replaced with space by the uploader): `，。、/ , ; : ! ? ' " ( ) [ ] { } < >`. Avoid entirely, don't try to style with them.
 3. Content: distill the video's core hook / outcome / number — not a truncation of the long title.
-4. Don't reuse `--title` verbatim; the long title already goes into the description, duplicating it in the short-title box looks spammy on feed cards.
+4. Don't reuse `--title` verbatim; the short-title box should contain a concise summary.
 5. Style: short declarative phrase, optionally an emotional beat or a number, no trailing punctuation.
 
 Good vs bad (long title "新手第一天跑步就坚持 5 公里是什么体验"):
@@ -196,7 +207,7 @@ When the user hands over only a long title and asks the agent to publish to 视�
 4. **百家号 / 头条 不消费 `--tags`**。不要为这两个平台耗费思考生成标签，写也被忽略。
 5. **分隔符**：严格 ASCII 空格。`,` `，` `、` `;` `；` `|` 都会被 `split(/\s+/)` 视为标签字符一部分，CLI 会 warn。
 6. **字符集**：中文 / 英文 / 数字；单个标签内部不要空格；哔哩哔哩控件会静默吞 emoji。
-7. **避免跨字段重复**：不要把同一个词同时出现在 `--title` / `--bt2` / `--tags` 里，视频号 / 抖音 / 快手 上会在描述里重复三次，观感极差。
+7. **避免跨字段重复**：不要把同一句话同时放入 `--description` / `--short-title` / `--tags`。
 
 Good vs bad（视频号 / 抖音 / 快手）：
 
@@ -233,12 +244,14 @@ matrixmedia cli accounts [options]
 ```
 
 Key flags:
+
 - `-p, --platform <id>`: filter by platform (`dy|tt|ks|blbl|bjh|sph`).
 - `--phone <id>`: filter by full phone string stored in the account tree.
 - `--logged-in` / `--logged-out`: keep only one side (mutually exclusive).
 - `--json`: machine-readable output (objects with `phone/pt/partition/loggedIn/reason/expireAt/createdAt`).
 
 Rules used per platform (cookie in the persist partition for that site):
+
 - 抖音 → `passport_assist_user`
 - 百家号 → `BDUSS`
 - 头条 → `odin_tt` (value length > 65)
@@ -258,6 +271,7 @@ matrixmedia cli history [options]
 ```
 
 Key flags:
+
 - `-p, --platform <id>`: platform filter.
 - `--phone <id>`: phone filter.
 - `-s, --status <s>`: `success | failed | publishing`（中文同义 `成功 | 失败 | 发布中`）。
@@ -287,6 +301,7 @@ Use this response structure after command execution:
 
 ```markdown
 执行结果：
+
 - 命令：`cli publish ...`
 - 参数：平台/账号/文件/标题
 - 退出码：0|2|3

@@ -18,6 +18,7 @@ import {
 import { resolveChromePath } from "./chromeConfig.js";
 import xhsChromeHandler from "./upLoad/xhsChrome.js";
 import { isPlatformLoginUrl } from "../../shared/platformPageState.js";
+import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -226,8 +227,23 @@ export function runPuppeteerTask(data, transport, onFinish) {
   enqueueTask(data, transport, onFinish);
 }
 
+export function normalizePuppeteerVideoTaskData(data) {
+  if (data.textType && data.textType !== "local") return data;
+  const metadata = normalizeVideoMetadata(data.data, data.pt);
+  data.data = {
+    ...(data.data || {}),
+    title: metadata.title,
+    description: metadata.description,
+    shortTitle: metadata.shortTitle,
+    tags: metadata.tags,
+    ...metadata.legacy,
+  };
+  return data;
+}
+
 async function doUpload(data, transport, queueDone, runtimeTask) {
   data = applyXhsConservativePublishOptions(data);
+  normalizePuppeteerVideoTaskData(data);
   data.partition = data.partition.split("-")[0];
   const isXhsTask = isXhsPlatform(data.pt);
   const maxRetries = getPublishAttemptLimit(data, 5);
@@ -327,7 +343,9 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       // 1. 获取 Chrome 路径
       const chromePath = resolveChromePath();
       if (!chromePath) {
-        console.error("[xhs-chrome] 未找到 Chrome 浏览器，回退到 Electron 窗口模式");
+        console.error(
+          "[xhs-chrome] 未找到 Chrome 浏览器，回退到 Electron 窗口模式"
+        );
         _xhsRealChromeFallback = true;
         return createWindowAndAttempt();
       }
@@ -343,11 +361,18 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       // 2.5 关闭上一次遗留的 Chrome 实例，释放 userDataDir 的 profile 锁。
       //     否则 puppeteerCore.launch 会因 profile 被占而打开 about:blank。
       if (_lastXhsRealChromePid) {
-        console.log("[xhs-chrome] 检测到上次遗留的 Chrome 进程 PID=" + _lastXhsRealChromePid + "，先关闭...");
+        console.log(
+          "[xhs-chrome] 检测到上次遗留的 Chrome 进程 PID=" +
+            _lastXhsRealChromePid +
+            "，先关闭..."
+        );
         try {
           process.kill(_lastXhsRealChromePid);
         } catch (e) {
-          console.warn("[xhs-chrome] 关闭上次 Chrome 进程失败（可能已退出）:", e?.message || e);
+          console.warn(
+            "[xhs-chrome] 关闭上次 Chrome 进程失败（可能已退出）:",
+            e?.message || e
+          );
         }
         _lastXhsRealChromePid = null;
         _lastXhsRealChromeBrowser = null;
@@ -386,7 +411,8 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       });
 
       // 4. 创建 page 并注入反检测脚本
-      const page = (await realBrowser.pages())[0] || (await realBrowser.newPage());
+      const page =
+        (await realBrowser.pages())[0] || (await realBrowser.newPage());
 
       // 注入反自动化检测（在页面 JS 执行前生效）
       await page.evaluateOnNewDocument(() => {
@@ -407,21 +433,28 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       // 6. 检测登录状态：如果被重定向到登录页，提示用户登录
       const LOGIN_WAIT_TIMEOUT = 5 * 60 * 1000;
       const LOGIN_CHECK_INTERVAL = 2000;
-      const isOnPublishPage = (url) => url && url.includes("creator.xiaohongshu.com/publish");
+      const isOnPublishPage = (url) =>
+        url && url.includes("creator.xiaohongshu.com/publish");
 
       let currentUrl = page.url();
       if (!isOnPublishPage(currentUrl)) {
-        console.log("[xhs-chrome] 未在发布页，可能未登录，当前 URL:", currentUrl);
+        console.log(
+          "[xhs-chrome] 未在发布页，可能未登录，当前 URL:",
+          currentUrl
+        );
 
         // 弹窗提醒用户去浏览器登录
-        dialog.showMessageBox({
-          type: "info",
-          title: "小红书 - 真实浏览器登录",
-          message: "请在 Chrome 浏览器中登录小红书",
-          detail: "首次使用真实浏览器发布需要登录一次小红书创作者平台。\n登录成功后将自动继续发布，后续不再需要重复登录。\n\n最多等待 5 分钟。",
-          buttons: ["知道了"],
-          noLink: true,
-        }).catch(() => {});
+        dialog
+          .showMessageBox({
+            type: "info",
+            title: "小红书 - 真实浏览器登录",
+            message: "请在 Chrome 浏览器中登录小红书",
+            detail:
+              "首次使用真实浏览器发布需要登录一次小红书创作者平台。\n登录成功后将自动继续发布，后续不再需要重复登录。\n\n最多等待 5 分钟。",
+            buttons: ["知道了"],
+            noLink: true,
+          })
+          .catch(() => {});
 
         // 轮询等待用户登录
         const loginStartTime = Date.now();
@@ -440,11 +473,20 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
             break;
           }
           // 登录后到了创作者中心但不在发布页，帮用户跳转
-          if (currentUrl.includes("creator.xiaohongshu.com") && !currentUrl.includes("/login")) {
+          if (
+            currentUrl.includes("creator.xiaohongshu.com") &&
+            !currentUrl.includes("/login")
+          ) {
             console.log("[xhs-chrome] 已登录，自动跳转到发布页");
             try {
-              await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 30000 });
-              if (isOnPublishPage(page.url())) { loggedIn = true; break; }
+              await page.goto(data.url, {
+                waitUntil: "domcontentloaded",
+                timeout: 30000,
+              });
+              if (isOnPublishPage(page.url())) {
+                loggedIn = true;
+                break;
+              }
             } catch (_) {}
           }
         }
@@ -479,7 +521,9 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         } catch (_) {
           _lastXhsRealChromePid = null;
         }
-        try { realBrowser.disconnect(); } catch (_) {}
+        try {
+          realBrowser.disconnect();
+        } catch (_) {}
       }
     }
   };
@@ -569,10 +613,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
           };
 
         // 2. 补全 navigator.plugins（Electron 通常为空数组，正常 Chrome 有 PDF Viewer 等）
-        if (
-          !navigator.plugins ||
-          navigator.plugins.length === 0
-        ) {
+        if (!navigator.plugins || navigator.plugins.length === 0) {
           const createFakePlugin = (name, filename, desc) => {
             const plugin = {
               name,
@@ -600,26 +641,24 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               "mhjfbmdgcfjbbpaeojofohoefgiehjai",
               ""
             ),
-            createFakePlugin(
-              "Native Client",
-              "internal-nacl-plugin",
-              ""
-            ),
+            createFakePlugin("Native Client", "internal-nacl-plugin", ""),
           ];
           Object.defineProperty(navigator, "plugins", {
             get() {
               const arr = Object.create(
-                fakePlugins.length === 0 ? Array.prototype : {
-                  ...Object.getPrototypeOf(fakePlugins[0]),
-                  length: fakePlugins.length,
-                  item(i) {
-                    return fakePlugins[i] || null;
-                  },
-                  namedItem(name) {
-                    return fakePlugins.find((p) => p.name === name) || null;
-                  },
-                  refresh() {},
-                }
+                fakePlugins.length === 0
+                  ? Array.prototype
+                  : {
+                      ...Object.getPrototypeOf(fakePlugins[0]),
+                      length: fakePlugins.length,
+                      item(i) {
+                        return fakePlugins[i] || null;
+                      },
+                      namedItem(name) {
+                        return fakePlugins.find((p) => p.name === name) || null;
+                      },
+                      refresh() {},
+                    }
               );
               fakePlugins.forEach((p, i) => (arr[i] = p));
               return arr;
@@ -682,8 +721,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
 
         // 5. 覆盖 permissions.query（Electron 返回状态与 Chrome 不一致）
         const origQuery =
-          window.navigator.permissions &&
-          window.navigator.permissions.query;
+          window.navigator.permissions && window.navigator.permissions.query;
         if (origQuery) {
           const origQueryFn = origQuery.bind(window.navigator.permissions);
           window.navigator.permissions.query = function (parameters) {

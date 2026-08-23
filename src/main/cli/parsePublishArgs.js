@@ -33,6 +33,8 @@ export function parsePublishArgs(subArgv) {
     phone: null,
     partition: null,
     title: null,
+    description: "",
+    shortTitle: "",
     bookName: null,
     bt2: null,
     bq: "",
@@ -60,6 +62,10 @@ export function parsePublishArgs(subArgv) {
       out.partition = args[++i];
     } else if (a === "--title" || a === "-t") {
       out.title = args[++i];
+    } else if (a === "--description" || a === "--desc") {
+      out.description = args[++i] || "";
+    } else if (a === "--short-title") {
+      out.shortTitle = args[++i] || "";
     } else if (a === "--name" || a === "--book-name") {
       out.bookName = args[++i];
     } else if (a === "--bt2") {
@@ -99,6 +105,11 @@ export function parsePublishArgs(subArgv) {
     return { ok: false, error: `未知平台: ${out.platform}` };
   }
   out.platform = pt;
+  if (out.bt2) {
+    if (out.platform === "视频号" && !out.shortTitle) out.shortTitle = out.bt2;
+    if (out.platform !== "视频号" && !out.description)
+      out.description = out.bt2;
+  }
 
   // 视频号链接是平台专属参数；误传给其他平台时直接忽略。
   if (out.platform === "视频号") {
@@ -195,22 +206,20 @@ export function parsePublishArgs(subArgv) {
   }
 
   if (out.platform === "视频号") {
-    const bt2Trim = out.bt2 && String(out.bt2).trim();
-    if (!bt2Trim) {
-      console.warn(
-        "MatrixMedia: 视频号短标未提供 --bt2，将回退为视频标题；平台输入框建议 6-16 字符，且会将 ，。、/,;:!?'\"()[]{}<> 等标点替换为空格。"
-      );
-    } else {
-      const cleaned = bt2Trim.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, "");
-      if (cleaned.length > 16) {
-        console.warn(
-          `MatrixMedia: 视频号短标 --bt2 共 ${cleaned.length} 字（不含标点），建议控制在 6-16 字内，过长可能被平台截断或报错。`
-        );
+    out.shortTitle = String(out.shortTitle || "").trim();
+    if (out.shortTitle) {
+      if (/[，。、\/,;:!?'"()\[\]{}<>]/.test(out.shortTitle)) {
+        return {
+          ok: false,
+          error: "视频号短标题不能包含特殊标点符号",
+        };
       }
-      if (cleaned.length < 6) {
-        console.warn(
-          `MatrixMedia: 视频号短标 --bt2 仅 ${cleaned.length} 字（不含标点），平台提示 6-16 字，过短可能被拒。`
-        );
+      const length = Array.from(out.shortTitle).length;
+      if (length < 6 || length > 16) {
+        return {
+          ok: false,
+          error: "视频号短标题去除首尾空格后长度需为 6～16 字",
+        };
       }
     }
   }
@@ -279,6 +288,8 @@ export function publishBodyToArgv(body) {
   pushPair(["phone"], "--phone");
   pushPair(["partition"], "--partition");
   pushPair(["title", "t"], "-t");
+  pushPair(["description", "desc"], "--description");
+  pushPair(["shortTitle", "short-title"], "--short-title");
   pushPair(["bookName", "name", "book-name"], "--name");
   pushPair(["bt2"], "--bt2");
   const tags = pickBodyValue(body, ["tags", "bq"]);
@@ -329,6 +340,10 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "f",
   "title",
   "t",
+  "description",
+  "desc",
+  "shortTitle",
+  "short-title",
   "phone",
   "partition",
   "bookName",
@@ -561,19 +576,18 @@ export function publishHelpText() {
   -p, --platform <id>   平台：dy|抖音、tt|头条、ks|快手、blbl|哔哩哔哩、bjh|百家号、sph|视频号、xhs|小红书、fqsp|番茄视频
   -f, --file <path>     本地视频文件路径，或 http(s) 远程视频 URL（远程会先下载到临时目录，发布结束后自动删除）
       --dir <path>          [batch] video directory path; must be paired with --config
-      --config <path>       [batch] xlsx declaration file path (columns: 文件名/标题/标签/创作声明)
+      --config <path>       [batch] xlsx 声明文件（列：文件名/标题/简介/标签/视频号短标题/创作声明）
       --cs, --creative-statement <val>  creative statement value for single-file mode.
                             Valid values: none | ai_generated | fiction | marketing | personal_opinion | repost | self_made_no_repost
                             (self_made_no_repost is blbl-only). Default: none.
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000抖音
-  -t, --title <text>    视频标题（必填）→ data.bt1
+  -t, --title <text>    视频标题（必填）→ data.title
+      --description <text> 视频简介或正文 → data.description
+      --short-title <text> 视频号短标题 → data.shortTitle，建议 6～16 字
       --name <n>        名称 / 任务记录名 → bookName；默认与视频文件名（无扩展名）一致
       --book-name <n>   同 --name
-      --bt2 <text>      概括短标 → data.bt2；【视频号必填】目标输入框提示 6-16 字符，代码会把
-                            ，。、/,;:!?'"()[]{}<> 等标点替换为空格；不传则回退为 --title（会触发 warn）。
-                            抖音/小红书也会消费 bt2（抖音拼进描述、小红书回退标题或正文），
-                            哔哩哔哩/百家号/头条/快手当前不使用。
+      --bt2 <text>      旧兼容字段：视频号作为短标题，其他平台作为简介
       --tags <text>     视频标签 → data.bq（同 --bq）。多个标签用【空格】分隔，例如 "减脂 健身 教程"。
                             【上限 4 个话题】：超过 4 个会触发 warn，agent 生成时请按相关性裁到 ≤ 4。
                             • 视频号/抖音/快手：整串拼进描述末尾；未写 # 的标签会自动补上（与 GUI 标签多选一致）。
@@ -596,10 +610,11 @@ export function publishHelpText() {
 示例:
   矩媒.exe cli publish -p dy --phone 13800138000 -f C:\\\\v.mp4 -t "我的视频标题" --tags "#减脂 #健身"
   electron . cli publish -p dy --phone 13800138000 -f ./a.mp4 --name "任务A" -t "标题" --tags "#标签1 #标签2"
-  # 视频号务必带 --bt2 短标 + 空格分隔的 tags：
+  # 视频号用 --short-title，其他平台用 --description：
   matrixmedia cli publish -p sph --phone 13800138000 -f ./v.mp4 \\\\
     -t "新手第一天跑步就坚持 5 公里是什么体验" \\\\
-    --bt2 "5公里新手挑战" \\\\
+    --description "第一次跑步的完整过程" \\\\
+    --short-title "5公里新手挑战" \\\\
     --tags "跑步 新手 减脂" \\
     --sph-product-id 10000591263144 --draft
   # 哔哩哔哩独立标签控件，空格分隔、是否带 # 都可：

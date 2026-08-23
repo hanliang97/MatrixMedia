@@ -12,14 +12,29 @@ fs.mkdirSync(outDir, { recursive: true });
 const bundlePath = path.join(outDir, "puppeteerFile.cjs");
 
 const stubModules = new Map([
-  ["electron", "module.exports = { ipcMain: { on() {} }, app: {}, BrowserWindow: function BrowserWindow() {}, dialog: {} };"],
+  [
+    "electron",
+    "module.exports = { ipcMain: { on() {} }, app: {}, BrowserWindow: function BrowserWindow() {}, dialog: {} };",
+  ],
   ["puppeteer-core", "module.exports = {};"],
-  ["puppeteer-extra", "module.exports = { addExtra() { return { use() {} }; } };"],
+  [
+    "puppeteer-extra",
+    "module.exports = { addExtra() { return { use() {} }; } };",
+  ],
   ["puppeteer-in-electron", "module.exports = {};"],
-  ["puppeteer-extra-plugin-stealth", "module.exports = function StealthPlugin() { return {}; };"],
+  [
+    "puppeteer-extra-plugin-stealth",
+    "module.exports = function StealthPlugin() { return {}; };",
+  ],
   ["./Type", "module.exports = {};"],
-  ["./upLoad/uploadTimeouts.js", "exports.UPLOAD_WINDOW_AUTO_CLOSE_MS = 60000;"],
-  ["./upLoad/closeWindow.js", "exports.skipCloseConfirmation = function skipCloseConfirmation() {};"],
+  [
+    "./upLoad/uploadTimeouts.js",
+    "exports.UPLOAD_WINDOW_AUTO_CLOSE_MS = 60000;",
+  ],
+  [
+    "./upLoad/closeWindow.js",
+    "exports.skipCloseConfirmation = function skipCloseConfirmation() {};",
+  ],
 ]);
 
 async function main() {
@@ -46,7 +61,29 @@ async function main() {
     ],
   });
 
-  const { createPuppeteerTaskRuntime } = require(bundlePath);
+  const {
+    createPuppeteerTaskRuntime,
+    normalizePuppeteerVideoTaskData,
+  } = require(bundlePath);
+
+  const articleData = {
+    textType: "article",
+    pt: "掘金",
+    data: { title: "文章标题", content: "正文", bt2: "文章摘要" },
+  };
+  const originalArticleData = JSON.parse(JSON.stringify(articleData));
+  assert.strictEqual(normalizePuppeteerVideoTaskData(articleData), articleData);
+  assert.deepStrictEqual(articleData, originalArticleData);
+
+  const videoData = {
+    textType: "local",
+    pt: "抖音",
+    data: { bt1: "视频标题", bt2: "视频简介", bq: "#旅行" },
+  };
+  normalizePuppeteerVideoTaskData(videoData);
+  assert.strictEqual(videoData.data.title, "视频标题");
+  assert.strictEqual(videoData.data.description, "视频简介");
+  assert.deepStrictEqual(videoData.data.tags, ["旅行"]);
 
   const started = [];
   const runtime = createPuppeteerTaskRuntime({

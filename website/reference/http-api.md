@@ -119,6 +119,8 @@ description: 矩媒 MatrixMedia 本机 HTTP API：GUI 启动后通过 30088 端�
 
 发布视频到单平台或多平台（本地路径或 `http(s)` 远程 URL）。参数解析与 `cli publish` 共用 `parseMultiPublishRequest`。
 
+视频元数据字段与 GUI / CLI 一致：`title` 为标题，`description` 为简介，`shortTitle` 仅视频号短标题，`tags` 为标签。抖音 / 快手 / 视频号会把简介与标签拼进正文；小红书正文写简介、标签走话题控件；哔哩哔哩简介和标签各自独立填写；头条 / 百家号只写标题。旧字段 `bt2` 仍兼容：视频号当短标题，其他平台当简介。
+
 **请求体（JSON）**：
 
 | 字段                 | 必填   | 说明                                                                                                                                     |
@@ -127,9 +129,11 @@ description: 矩媒 MatrixMedia 本机 HTTP API：GUI 启动后通过 30088 端�
 | `platforms`          | 多平台 | 平台数组，可一次包含全部 8 个平台；如 `["dy","xhs","ks"]` 或对象数组 `[{ "platform": "dy", "phone": "138..." }, ...]`                    |
 | `file`               | 是     | 本地视频绝对路径，或 `http://` / `https://` 远程视频 URL（会先下载到临时目录，全部平台发布结束后自动删除；定时发布则在到点执行时再下载） |
 | `title`              | 是     | 视频标题                                                                                                                                 |
+| `description`        | 否     | 视频简介；抖音、快手、视频号会与标签拼接，小红书写入正文，哔哩哔哩写入简介控件                                                           |
+| `shortTitle`         | 否     | 视频号短标题，建议 6 ～ 16 字；其他平台忽略                                                                                              |
 | `phone`              | 二选一 | 账号手机号（与 GUI 账号树一致）；多平台时可作为默认值，单个平台对象内可覆盖                                                              |
 | `partition`          | 二选一 | 完整 session，如 `persist:13800138000抖音`                                                                                               |
-| `bt2`                | 否     | 视频号短标（含视频号时强烈建议填写）                                                                                                     |
+| `bt2`                | 否     | 旧兼容字段：视频号作为短标题，其他平台作为简介                                                                                           |
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分后再按平台补 `#` 或去 `#`                                                       |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
 | `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
@@ -190,7 +194,8 @@ curl -X POST http://127.0.0.1:30088/publish \
     "phone": "13800138000",
     "file": "/Users/me/video.mp4",
     "title": "视频标题",
-    "bt2": "视频号短标题",
+    "description": "视频简介",
+    "shortTitle": "视频号短标题",
     "draft": true,
     "sphProductId": "10000591263144",
     "creativeStatement": "含AI生成内容"
@@ -249,7 +254,8 @@ curl -X POST http://127.0.0.1:30088/publish \
     "phone": "13800138000",
     "file": "https://example.com/video.mp4",
     "title": "我的视频标题",
-    "bt2": "5公里新手挑战",
+    "description": "记录第一次完成五公里的真实体验",
+    "shortTitle": "5公里新手挑战",
     "tags": "跑步 新手",
     "platforms": ["dy", "sph", "blbl", "bjh", "tt", "ks", "xhs"]
   }'

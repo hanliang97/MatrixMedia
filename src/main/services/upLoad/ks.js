@@ -4,7 +4,12 @@ import {
   isCreativeStatementNone,
   resolveKsCreativeStatementLabel,
 } from "../../../shared/creativeStatement.js";
-import { WAIT_SELECTOR_APPEAR_MS, WAIT_UPLOAD_PROCESSING_MS, pollPageUntil } from "./uploadTimeouts.js";
+import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
+import {
+  WAIT_SELECTOR_APPEAR_MS,
+  WAIT_UPLOAD_PROCESSING_MS,
+  pollPageUntil,
+} from "./uploadTimeouts.js";
 
 async function selectKsCreativeStatement(page, data) {
   const value = data.data && data.data.creativeStatement;
@@ -32,7 +37,9 @@ async function selectKsCreativeStatement(page, data) {
   //    ant-design Select 监听的是 mousedown，必须用真实鼠标事件（page.click 自带）才能打开下拉。
   const triggerInfo = await page.evaluate(() => {
     var norm = function (t) {
-      return String(t || "").replace(/\s+/g, "").trim();
+      return String(t || "")
+        .replace(/\s+/g, "")
+        .trim();
     };
     var LABEL_KEYWORDS = ["作者声明", "作品声明", "创作声明", "声明"];
     var formItems = document.querySelectorAll(
@@ -105,13 +112,15 @@ async function selectKsCreativeStatement(page, data) {
     await page.waitForFunction(
       (text) => {
         var opts = document.querySelectorAll(
-          '.ant-select-dropdown .ant-select-item.ant-select-item-option'
+          ".ant-select-dropdown .ant-select-item.ant-select-item-option"
         );
         for (var i = 0; i < opts.length; i++) {
           var o = opts[i];
           var t =
-            o.getAttribute('title') ||
-            ((o.querySelector('.ant-select-item-option-content') || {}).textContent || '');
+            o.getAttribute("title") ||
+            (o.querySelector(".ant-select-item-option-content") || {})
+              .textContent ||
+            "";
           if (String(t).trim() === text) return true;
         }
         return false;
@@ -127,17 +136,19 @@ async function selectKsCreativeStatement(page, data) {
   // 3. 点选目标选项：点 .ant-select-item-option 本身（ant-design 在它上面绑定 mousedown）
   const pickResult = await page.evaluate((text) => {
     var opts = document.querySelectorAll(
-      '.ant-select-dropdown .ant-select-item.ant-select-item-option'
+      ".ant-select-dropdown .ant-select-item.ant-select-item-option"
     );
     var titles = [];
     for (var ti = 0; ti < opts.length; ti++) {
-      titles.push(opts[ti].getAttribute('title') || '');
+      titles.push(opts[ti].getAttribute("title") || "");
     }
     for (var i = 0; i < opts.length; i++) {
       var o = opts[i];
       var t =
-        o.getAttribute('title') ||
-        ((o.querySelector('.ant-select-item-option-content') || {}).textContent || '');
+        o.getAttribute("title") ||
+        (o.querySelector(".ant-select-item-option-content") || {})
+          .textContent ||
+        "";
       if (String(t).trim() !== text) continue;
       var rect = o.getBoundingClientRect();
       var opts2 = {
@@ -149,12 +160,12 @@ async function selectKsCreativeStatement(page, data) {
         button: 0,
       };
       // ant-design Option 走 mousedown 选中：派发完整事件序列保证生效
-      o.dispatchEvent(new MouseEvent('mousedown', opts2));
-      o.dispatchEvent(new MouseEvent('mouseup', opts2));
-      o.dispatchEvent(new MouseEvent('click', opts2));
-      var inner = o.querySelector('.ant-select-item-option-content');
+      o.dispatchEvent(new MouseEvent("mousedown", opts2));
+      o.dispatchEvent(new MouseEvent("mouseup", opts2));
+      o.dispatchEvent(new MouseEvent("click", opts2));
+      var inner = o.querySelector(".ant-select-item-option-content");
       if (inner) {
-        inner.dispatchEvent(new MouseEvent('click', opts2));
+        inner.dispatchEvent(new MouseEvent("click", opts2));
       }
       return { ok: true, titles: titles };
     }
@@ -173,8 +184,9 @@ async function selectKsCreativeStatement(page, data) {
   console.log("[ks] 已选择声明:", label);
 }
 
-export default async function (page, data, window,event) {
-  const isDraftMode = data.publishMode === "draft" || data.publishToDraft === true;
+export default async function (page, data, window, event) {
+  const isDraftMode =
+    data.publishMode === "draft" || data.publishToDraft === true;
   const submitText = isDraftMode ? "取消" : "发布";
 
   console.log(data);
@@ -188,16 +200,21 @@ export default async function (page, data, window,event) {
   }
 
   try {
+    const text = buildPlatformVideoText("快手", data.data);
     const selector = "#work-description-edit";
     await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
     const input = await page.$(selector);
     await input.click();
-    await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });
+    if (text.description) {
+      await page.keyboard.type(text.description, { delay: 50 });
+    }
   } catch (e) {
     console.error("❌ 输入标题失败", e);
   }
   try {
-    await page.click(".ant-checkbox-group>label:nth-of-type(2)", { delay: 200 });
+    await page.click(".ant-checkbox-group>label:nth-of-type(2)", {
+      delay: 200,
+    });
   } catch (e) {
     console.error("❌ 输入标签失败", e);
   }
@@ -220,7 +237,7 @@ export default async function (page, data, window,event) {
       "等待快手视频上传完成超时"
     );
     await page.waitForFunction(
-      text => {
+      (text) => {
         const bar = document.querySelector("#setting-tours + div");
         if (!bar || bar.offsetParent === null) return false;
         for (const row of bar.querySelectorAll(":scope > div")) {
@@ -237,8 +254,11 @@ export default async function (page, data, window,event) {
     // 在 hidden window 下几何中心常落不到真正的 <button> 上，结果是"看起来点过了但没发"。
     // 改为在 evaluate 内部遍历真实 button / 行 div，直接调 DOM .click()，避开鼠标几何问题。
     // 快手草稿功能和发布一个逻辑一个是 发布 一个是取消两个字
-    const clicked = await page.evaluate(text => {
-      const norm = t => String(t || "").replace(/\s+/g, "").trim();
+    const clicked = await page.evaluate((text) => {
+      const norm = (t) =>
+        String(t || "")
+          .replace(/\s+/g, "")
+          .trim();
       const bar = document.querySelector("#setting-tours + div");
       if (!bar) return { ok: false, reason: "no-bar" };
       for (const btn of bar.querySelectorAll("button")) {
@@ -263,7 +283,11 @@ export default async function (page, data, window,event) {
     if (!clicked || !clicked.ok) {
       throw new Error(`未找到${submitText}按钮(${clicked && clicked.reason})`);
     }
-    console.log(isDraftMode ? `✅ 快手视频已保存草稿，click via=${clicked.via}` : `✅ 快手视频已触发发布，click via=${clicked.via}`);
+    console.log(
+      isDraftMode
+        ? `✅ 快手视频已保存草稿，click via=${clicked.via}`
+        : `✅ 快手视频已触发发布，click via=${clicked.via}`
+    );
     setTimeout(() => {
       event.reply("puppeteerFile-done", {
         ...data,

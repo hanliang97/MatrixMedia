@@ -376,6 +376,16 @@ export default {
         },
         { field: "title", required: "是", desc: "视频标题" },
         {
+          field: "description",
+          required: "否",
+          desc: "视频简介；抖音/快手/视频号与标签拼进正文，小红书写正文，哔哩哔哩写简介控件",
+        },
+        {
+          field: "shortTitle",
+          required: "否",
+          desc: "仅视频号短标题，建议 6～16 字",
+        },
+        {
           field: "phone",
           required: "二选一",
           desc: "账号手机号；多平台时作为默认值，对象数组内可单独覆盖",
@@ -388,7 +398,7 @@ export default {
         {
           field: "bt2",
           required: "否",
-          desc: "视频号短标（含视频号时建议填写）",
+          desc: "旧兼容字段：视频号作为短标题，其他平台作为简介",
         },
         { field: "tags", required: "否", desc: "标签，空格分隔" },
         {
@@ -469,7 +479,8 @@ export default {
     "phone": "13800138000",
     "file": "https://example.com/video.mp4",
     "title": "我的视频标题",
-    "bt2": "5公里新手挑战",
+    "description": "记录第一次完成五公里的真实体验",
+    "shortTitle": "5公里新手挑战",
     "tags": "跑步 新手",
     "platforms": ["dy", "sph", "blbl", "bjh", "tt", "ks", "xhs"]
   }'`,
@@ -503,7 +514,7 @@ matrixmedia cli login -p dy --phone 13800138000
 matrixmedia cli publish -p dy --phone 13800138000 -f /path/to/video.mp4 -t "标题"
 
 # 视频号商品上架并保存草稿
-matrixmedia cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 -t "标题" --bt2 "视频号短标题" --draft --sph-product-id 10000591263144
+matrixmedia cli publish -p sph --phone 13800138000 -f /path/to/video.mp4 -t "标题" --description "视频简介" --short-title "视频号短标题" --draft --sph-product-id 10000591263144
 
 # 发布掘金文章
 matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" --file ./post.md

@@ -13,6 +13,10 @@ import {
   getRandomDelayMs,
   getXhsSecondClickDelayMs,
 } from "../../../shared/xhsPublishPolicy.js";
+import {
+  buildPlatformVideoText,
+  normalizeVideoTags,
+} from "../../../shared/videoMetadata.js";
 
 /**
  * 生成 [min, max] 范围内的随机整数，用于像素偏移、步数等非时间场景。
@@ -250,17 +254,6 @@ async function closeCheckedXhsPkCoverSwitch(page) {
   }
 }
 
-function normalizeTagList(rawTagText = "") {
-  const tagText = String(rawTagText).trim();
-  if (!tagText) return [];
-
-  return tagText
-    .split(/[\s,，;；、]+/)
-    .flatMap((tag) => tag.split(/(?=#)/))
-    .map((tag) => tag.replace(/^#/, "").trim())
-    .filter(Boolean);
-}
-
 function xhsTypeDelay() {
   return getRandomDelayMs(80, 180);
 }
@@ -289,6 +282,7 @@ export default async function (page, data, window, event) {
   }
 
   try {
+    const text = buildPlatformVideoText("小红书", data.data);
     const titleSelector =
       ".publish-page-content-base .edit-container .d-input input.d-text";
     await page.waitForSelector(titleSelector, {
@@ -296,7 +290,7 @@ export default async function (page, data, window, event) {
     });
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
-    const rawTitle = (data.data?.bt1 || data.data?.bt2 || "").trim();
+    const rawTitle = text.title;
     const titleText = rawTitle.slice(0, 20);
     if (rawTitle.length > 20) {
       console.warn(
@@ -325,8 +319,8 @@ export default async function (page, data, window, event) {
     const editor = await page.$(editorSelector);
     if (!editor) throw new Error("未找到正文编辑器");
 
-    const descText = String(data.data?.bt2 || "").trim();
-    const tags = normalizeTagList(data.data?.bq || "");
+    const descText = String(data.data?.description || "").trim();
+    const tags = normalizeVideoTags(data.data?.tags);
 
     // 聚焦编辑器（先 puppeteer click 定位 caret，再字符串 evaluate 调 .focus() 双保险）
     await editor.click({ clickCount: 2 });

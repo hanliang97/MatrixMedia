@@ -11,6 +11,7 @@ import {
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
 } from "./uploadTimeouts.js";
+import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
 
 const SEL_ORIGINAL_CHECKBOX =
   "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
@@ -228,14 +229,17 @@ export default async function (page, data, window, event, onFinish) {
   }
 
   try {
+    const text = buildPlatformVideoText("视频号", data.data);
     const titleInput = await page.waitForSelector(
       "wujie-app.wujie_iframe >>> .post-desc-box .input-editor",
       { timeout: WAIT_SELECTOR_APPEAR_MS }
     );
     // 传统input/textarea的操作
     await titleInput.click();
-    await page.keyboard.type(data.data.bt1 + " " + data.data.bq, { delay: 50 });
-    const shortTitle = (data.data.bt2Filled || "").trim();
+    if (text.description) {
+      await page.keyboard.type(text.description, { delay: 50 });
+    }
+    const shortTitle = text.shortTitle;
     if (shortTitle) {
       const sel2 =
         'wujie-app.wujie_iframe >>> input[placeholder="填写短标题有机会获得更多流量"]';

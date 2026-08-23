@@ -132,6 +132,7 @@ import ptConfig from "@/utils/configUrl";
 import openLoginWindow from "@/utils/openLoginWindow";
 import LocalVideoPublish from "@/components/LocalVideoPublish.vue";
 import LocalArticlePublish from "@/components/LocalArticlePublish.vue";
+import { normalizeVideoRecordMetadata } from "../../../shared/videoMetadata.js";
 
 export default {
   name: "VideoManager",
@@ -428,6 +429,19 @@ export default {
       }
 
       const sample = details[0] || {};
+      const normalizedDetails = details.map((record) => ({
+        record,
+        metadata: normalizeVideoRecordMetadata(record),
+      }));
+      const description =
+        normalizedDetails
+          .map((item) => item.metadata.description)
+          .find(Boolean) || "";
+      const shortTitle =
+        normalizedDetails
+          .filter((item) => item.record.pt === "视频号")
+          .map((item) => item.metadata.shortTitle)
+          .find(Boolean) || "";
       const failedTargets = details.filter(this.isPublishFailed).map((v) => ({
         pt: v.pt,
         phone: String(v.phone || "").split("-")[0],
@@ -439,17 +453,22 @@ export default {
         form: {
           title: sample.bookName || sample.textOtherName || "",
           bt1: sample.bt || "",
-          bt2: sample.bt2 || sample.bt || "",
+          description,
+          shortTitle,
+          tags: sample.tags || sample.bq || "",
           bq: sample.bq || "",
           creativeStatement: sample.creativeStatement,
         },
-        records: details.map((v) => ({
-          id: v.id,
-          date: v.date,
-          pt: v.pt,
-          phone: String(v.phone || "").split("-")[0],
-          publishAttemptCount: Number(v.publishAttemptCount) || 1,
-          republishCount: Number(v.republishCount),
+        records: normalizedDetails.map(({ record, metadata }) => ({
+          id: record.id,
+          date: record.date,
+          pt: record.pt,
+          phone: String(record.phone || "").split("-")[0],
+          description: metadata.description,
+          shortTitle: metadata.shortTitle,
+          tags: metadata.tags,
+          publishAttemptCount: Number(record.publishAttemptCount) || 1,
+          republishCount: Number(record.republishCount),
         })),
         failedTargets,
       });

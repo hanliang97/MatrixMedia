@@ -19,7 +19,16 @@
         <el-form-item label="视频标题">
           <el-input v-model="form.bt1" placeholder="发布时使用的标题" />
         </el-form-item>
-
+        <el-form-item label="视频简介">
+          <el-input
+            v-model="form.description"
+            type="textarea"
+            :rows="4"
+            maxlength="2000"
+            show-word-limit
+            placeholder="选填，将作为各平台正文或简介"
+          />
+        </el-form-item>
         <el-form-item label="视频标签">
           <el-select
             ref="bqSelect"
@@ -37,19 +46,18 @@
             @keydown.native.capture="onBqKeydown"
           ></el-select>
         </el-form-item>
-        <el-form-item label="概括短标题">
+        <el-form-item label="视频号短标题">
           <el-input
             ref="bt2Input"
-            v-model="form.bt2"
-            placeholder="选填，建议 6～16 字"
+            v-model="form.shortTitle"
+            placeholder="仅视频号使用，选填，建议 6～16 字"
             @input="onBt2Input"
             @keydown.native.capture="onBt2Keydown"
           />
           <p class="bt2-tip">
             <strong>微信视频号</strong
-            >会将本项用于「概括视频主要内容」，选择视频号时必填，长度需为 6～16
-            字，且不能包含特殊标点符号；<br /><strong>小红书</strong
-            >会将本项作为正文内容。
+            >会将本项用于「概括视频主要内容」，填写时长度需为 6～16
+            字，且不能包含特殊标点符号。
           </p>
         </el-form-item>
         <el-form-item label="定时发布">
@@ -415,9 +423,21 @@
           show-overflow-tooltip
         />
         <el-table-column
+          prop="description"
+          label="简介"
+          min-width="160"
+          show-overflow-tooltip
+        />
+        <el-table-column
           prop="tags"
           label="标签"
           min-width="120"
+          show-overflow-tooltip
+        />
+        <el-table-column
+          prop="shortTitle"
+          label="视频号短标题"
+          min-width="140"
           show-overflow-tooltip
         />
         <el-table-column label="文件状态" width="80">
@@ -509,6 +529,7 @@ import {
   sanitizeVideohaoBt2Input,
   validateVideohaoBt2 as validateVideohaoBt2Value,
 } from "@/utils/localVideoPublishBt2";
+import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 function fileBaseName(p) {
   if (!p) return "";
@@ -565,7 +586,8 @@ export default {
       form: {
         title: "",
         bt1: "",
-        bt2: "",
+        description: "",
+        shortTitle: "",
       },
       thisShow: false,
       closeWindow: true,
@@ -584,7 +606,7 @@ export default {
       // Directory batch publish state
       dirPublishVisible: false,
       dirPath: "",
-      dirXlsxRows: [], // [{fileName, title, tags}]
+      dirXlsxRows: [], // [{fileName, title, description, tags, shortTitle}]
       dirXlsxError: "",
       dirBatchFiles: [],
       publishing: false,
@@ -733,7 +755,12 @@ export default {
       this.bqComposing = false;
       this.resetPlatformStatementState();
       this.resetPlatformVideoLinks();
-      this.form = { title: defaultTitle, bt1: "", bt2: "" };
+      this.form = {
+        title: defaultTitle,
+        bt1: "",
+        description: "",
+        shortTitle: "",
+      };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -754,9 +781,10 @@ export default {
       this.form = {
         title: (form.title || defaultTitle || "").trim(),
         bt1: (form.bt1 || "").trim(),
-        bt2: (form.bt2 || "").trim(),
+        description: (form.description || form.bdText || "").trim(),
+        shortTitle: (form.shortTitle || form.bt2Filled || "").trim(),
       };
-      this.bqTags = parseBqToTags(form.bq);
+      this.bqTags = parseBqToTags(form.tags || form.bq);
       this.resetPlatformStatementState();
       this.resetPlatformVideoLinks();
       this.thisShow = false;
@@ -832,19 +860,24 @@ export default {
       const bookName =
         (this.form.title && this.form.title.trim()) || this.defaultBookName();
       const bt1 = this.form.bt1.trim();
-      const bt2Raw = (this.form.bt2 && this.form.bt2.trim()) || "";
-      const bt2 = bt2Raw || bt1; // 保留 bt1 回退，供小红书等平台使用
+      const metadata = normalizeVideoMetadata({
+        title: bt1,
+        description: this.form.description,
+        shortTitle: this.form.shortTitle,
+        tags: this.bqTags,
+      });
       return {
         bookName,
         textType: "local",
         data: {
           textOtherName:
             this.republishTextOtherName || fileStem(this.localFilePath),
-          bt1,
-          bt2,
-          bt2Filled: bt2Raw, // 仅用户实际填写时才有值，sph.js 据此决定是否填写短标题
+          title: metadata.title,
+          description: metadata.description,
+          shortTitle: metadata.shortTitle,
+          tags: metadata.tags,
+          ...metadata.legacy,
           bq: formatBqFromTags(this.bqTags),
-          bdText: "",
         },
       };
     },
@@ -1135,7 +1168,7 @@ export default {
     onBt2Input(value) {
       const nextValue = sanitizeVideohaoBt2Input(value);
       if (nextValue === value) return;
-      this.form.bt2 = nextValue;
+      this.form.shortTitle = nextValue;
       this.warnBt2SpecialPunctuation();
     },
     onBt2Keydown(e) {
@@ -1161,9 +1194,9 @@ export default {
         this.$message.warning("请填写标题");
         return;
       }
-      const nextBt2 = sanitizeVideohaoBt2Input(this.form.bt2);
-      if (nextBt2 !== this.form.bt2) {
-        this.form.bt2 = nextBt2;
+      const nextBt2 = sanitizeVideohaoBt2Input(this.form.shortTitle);
+      if (nextBt2 !== this.form.shortTitle) {
+        this.form.shortTitle = nextBt2;
         this.warnBt2SpecialPunctuation();
         return;
       }
@@ -1236,7 +1269,12 @@ export default {
       this.bqComposing = false;
       this.resetPlatformStatementState();
       this.resetPlatformVideoLinks();
-      this.form = { title: "", bt1: "", bt2: "" };
+      this.form = {
+        title: "",
+        bt1: "",
+        description: "",
+        shortTitle: "",
+      };
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
@@ -1415,9 +1453,9 @@ export default {
         return;
       }
       const hasVideohao = platforms.some(this.isVideohaoPlatform);
-      if (hasVideohao && this.form.bt2 && this.form.bt2.trim()) {
+      if (hasVideohao && this.form.shortTitle && this.form.shortTitle.trim()) {
         // 仅当用户填写了短标题时才校验规则（6～16 字、无特殊标点）
-        const bt2Error = this.validateVideohaoBt2(this.form.bt2);
+        const bt2Error = this.validateVideohaoBt2(this.form.shortTitle);
         if (bt2Error) {
           this.$message.warning(bt2Error);
           return;
@@ -1469,8 +1507,13 @@ export default {
                 pt: p.pt,
                 selectedFile,
                 bt: video.data.bt1,
+                title: video.data.title,
+                description: video.data.description,
+                shortTitle: video.data.shortTitle,
+                tags: video.data.tags,
                 bt2: video.data.bt2,
                 bt2Filled: video.data.bt2Filled,
+                bdText: video.data.bdText,
                 bq: video.data.bq,
                 creativeStatement: video.data.creativeStatement,
                 publishOptions: video.publishOptions,
@@ -1541,8 +1584,13 @@ export default {
               textOtherName: video.data.textOtherName,
               selectedFile,
               bt: video.data.bt1,
+              title: video.data.title,
+              description: video.data.description,
+              shortTitle: video.data.shortTitle,
+              tags: video.data.tags,
               bt2: video.data.bt2,
               bt2Filled: video.data.bt2Filled,
+              bdText: video.data.bdText,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
               publishOptions: video.publishOptions,
@@ -1571,8 +1619,13 @@ export default {
               pt: p.pt,
               selectedFile,
               bt: video.data.bt1,
+              title: video.data.title,
+              description: video.data.description,
+              shortTitle: video.data.shortTitle,
+              tags: video.data.tags,
               bt2: video.data.bt2,
               bt2Filled: video.data.bt2Filled,
+              bdText: video.data.bdText,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
               publishOptions: video.publishOptions,
@@ -1800,7 +1853,8 @@ export default {
           fileRow.resolvedPath || path.join(this.dirPath, fileRow.fileName);
         const stem = fileRow.fileName.replace(/\.[^/.]+$/, "");
         const bt1 = (fileRow.title || stem).trim();
-        const bt2 = bt1;
+        const description = String(fileRow.description || "").trim();
+        const shortTitle = String(fileRow.shortTitle || "").trim();
         // tags: comma-separated -> space-separated with # prefix for hashtag platforms
         const rawTags = String(fileRow.tags || "").trim();
         const tagList = rawTags
@@ -1813,17 +1867,17 @@ export default {
         const selectedFile = fileRow.fileName;
         const textOtherName = stem;
 
-        // 视频号短标题非必填：bt2(=bt1) 符合规则才填，不符合则跳过不阻断
+        // 视频号短标题非必填；仅校验 xlsx 中显式填写的值。
         const bt2FilledForVideohao = (() => {
-          if (!hasVideohao) return "";
-          const bt2Error = this.validateVideohaoBt2(bt2);
+          if (!hasVideohao || !shortTitle) return "";
+          const bt2Error = this.validateVideohaoBt2(shortTitle);
           if (bt2Error) {
             console.warn(
               `文件 ${fileRow.fileName}: ${bt2Error}，将跳过视频号短标题`
             );
             return "";
           }
-          return bt2;
+          return shortTitle;
         })();
 
         platforms.sort((a, b) => {
@@ -1852,6 +1906,15 @@ export default {
           } else {
             bq = tagList.map((t) => t.replace(/^#/, "")).join(" ");
           }
+          const metadata = normalizeVideoMetadata(
+            {
+              title: bt1,
+              description,
+              shortTitle: bt2FilledForVideohao,
+              tags: tagList,
+            },
+            p.pt
+          );
 
           if (this.scheduledPublish && !effectiveMode.publishToDraft) {
             scheduledWriteTasks.push(
@@ -1864,9 +1927,12 @@ export default {
                   textType: "local",
                   pt: p.pt,
                   selectedFile,
-                  bt: bt1,
-                  bt2,
-                  bt2Filled: bt2FilledForVideohao,
+                  bt: metadata.title,
+                  title: metadata.title,
+                  description: metadata.description,
+                  shortTitle: metadata.shortTitle,
+                  tags: metadata.tags,
+                  ...metadata.legacy,
                   bq,
                   creativeStatement,
                   filePath,
@@ -1904,11 +1970,12 @@ export default {
             textType: "local",
             data: {
               textOtherName,
-              bt1,
-              bt2,
-              bt2Filled: bt2FilledForVideohao,
+              title: metadata.title,
+              description: metadata.description,
+              shortTitle: metadata.shortTitle,
+              tags: metadata.tags,
+              ...metadata.legacy,
               bq,
-              bdText: "",
               creativeStatement,
             },
             textOtherName,
@@ -1937,9 +2004,12 @@ export default {
               textType: "local",
               pt: p.pt,
               selectedFile,
-              bt: bt1,
-              bt2,
-              bt2Filled: bt2FilledForVideohao,
+              bt: metadata.title,
+              title: metadata.title,
+              description: metadata.description,
+              shortTitle: metadata.shortTitle,
+              tags: metadata.tags,
+              ...metadata.legacy,
               bq,
               creativeStatement,
               filePath,

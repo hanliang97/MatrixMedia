@@ -54,7 +54,8 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/Users/me/videos/demo.mp4" \
   -t "矩媒CLI发布演示" \
-  --bt2 "CLI发布测试" \
+  --description "CLI发布演示简介" \
+  --short-title "CLI发布测试" \
   --tags "#开源 #CLI #自动化 #矩媒"
 ```
 
@@ -124,20 +125,21 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/Users/me/videos/run5km.mp4" \
   -t "新手第一天跑步就坚持 5 公里是什么体验" \
-  --bt2 "5公里新手挑战" \
+  --description "第一次跑步的完整过程" \
+  --short-title "5公里新手挑战" \
   --tags "#跑步 #新手 #减脂 #5公里"
 ```
 
 Why it matters:
-- `--bt2` is 7 chars, within 6–16; no punctuation that would be stripped.
-- 视频号会把 `--tags` 整串拼进描述，**必须带 `#`** 才成话题；缺 `#` 只是普通尾缀文字。
+- `--short-title` is 7 chars, within 6–16; no punctuation that would be stripped.
+- `--description` 写入简介；视频号会把 `--tags` 拼在简介后面，**必须带 `#`** 才成话题。
 - **最多 4 个话题**：这里刚好 4，再多 agent 应该裁掉最弱相关的。
 - Tags use **single space** 分隔。
-- 不传 `--bt2` 会触发 warn 并回退到 `--title`，基本必翻车。
+- 旧 `--bt2` 仍兼容为短标题，但新调用应使用 `--short-title`。
 
 ## Example 9: 抖音 — hashtag 风格标签
 
-抖音把 `bq` 拼在 `bt2` 之后作为描述。想做 hashtag 显式加 `#`：
+抖音把 `--description` 与 `--tags` 拼成正文。想做 hashtag 显式加 `#`：
 
 ```bash
 matrixmedia cli publish \
@@ -145,7 +147,7 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/Users/me/videos/demo.mp4" \
   -t "新手第一天跑步就坚持5公里是什么体验" \
-  --bt2 "5公里新手挑战" \
+  --description "第一次跑步的完整过程" \
   --tags "#跑步 #减脂 #新手"
 ```
 
@@ -214,7 +216,8 @@ matrixmedia cli publish \
   --phone 13800138000 \
   -f "/Users/me/videos/demo.mp4" \
   -t "视频号发布测试" \
-  --bt2 "发布测试" \
+  --description "视频号发布测试简介" \
+  --short-title "发布测试" \
   --tags "#测试 #矩媒"
 
 # 4) 回查最近一条记录

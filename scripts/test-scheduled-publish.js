@@ -18,7 +18,13 @@ buildSync({
   platform: "node",
   format: "cjs",
   outfile: schedulerBundle,
-  external: ["electron", "puppeteer-core", "puppeteer-extra", "puppeteer-in-electron", "puppeteer-extra-plugin-stealth"],
+  external: [
+    "electron",
+    "puppeteer-core",
+    "puppeteer-extra",
+    "puppeteer-in-electron",
+    "puppeteer-extra-plugin-stealth",
+  ],
 });
 
 buildSync({
@@ -133,6 +139,80 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
   assert.strictEqual(payload.pt, "抖音");
   assert.strictEqual(payload.publishOptions.link.value, "10000591263144");
   assert.notStrictEqual(payload.taskId, "old");
+})();
+
+(() => {
+  const payload = buildTaskPayloadFromRecord({
+    textType: "local",
+    pt: "视频号",
+    bt: "标题",
+    description: "简介",
+    shortTitle: "六个字短标题",
+    tags: ["旅行", "日常"],
+    filePath: "/tmp/v.mp4",
+  });
+  assert.strictEqual(payload.data.title, "标题");
+  assert.strictEqual(payload.data.description, "简介");
+  assert.strictEqual(payload.data.shortTitle, "六个字短标题");
+  assert.deepStrictEqual(payload.data.tags, ["旅行", "日常"]);
+  assert.strictEqual(payload.data.bt1, "标题");
+  assert.strictEqual(payload.data.bt2, "简介");
+  assert.strictEqual(payload.data.bt2Filled, "六个字短标题");
+  assert.strictEqual(payload.data.bq, "旅行 日常");
+})();
+
+(() => {
+  const payload = buildTaskPayloadFromRecord({
+    textType: "local",
+    pt: "视频号",
+    bt: "标题",
+    bt2: "旧短标题",
+    filePath: "/tmp/v.mp4",
+  });
+  assert.strictEqual(
+    payload.data.shortTitle,
+    "旧短标题",
+    "旧视频号记录 bt2 与标题不同时应恢复为短标题"
+  );
+})();
+
+(() => {
+  const payload = buildTaskPayloadFromRecord({
+    textType: "local",
+    pt: "视频号",
+    bt: "标题",
+    bt2: "标题",
+    filePath: "/tmp/v.mp4",
+  });
+  assert.strictEqual(
+    payload.data.shortTitle,
+    "",
+    "旧视频号记录 bt2 等于标题时应视为标题回退"
+  );
+})();
+
+(() => {
+  const scheduled = createScheduledRecord(
+    {
+      textType: "local",
+      pt: "视频号",
+      bt: "标题",
+      description: "视频号简介",
+      shortTitle: "",
+      bt2: "视频号简介",
+      bt2Filled: "",
+      filePath: "/tmp/v.mp4",
+    },
+    "2026-05-05 20:30:00",
+    fixedNow
+  );
+  const payload = buildTaskPayloadFromRecord(scheduled);
+  assert.strictEqual(payload.data.description, "视频号简介");
+  assert.strictEqual(
+    payload.data.shortTitle,
+    "",
+    "定时记录往返后应保留显式空短标题"
+  );
 })();
 
 (() => {
