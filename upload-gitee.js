@@ -1,177 +1,177 @@
-const https = require('https')
-const path = require('path')
-const package = require('./package.json')
-const fs = require('fs')
-const FormData = require('form-data')
+const https = require("https");
+const path = require("path");
+const package = require("./package.json");
+const fs = require("fs");
+const FormData = require("form-data");
 const agent = new https.Agent({
-  rejectUnauthorized: false // 仅测试环境使用
-})
+  rejectUnauthorized: false, // 仅测试环境使用
+});
 // 获取命令行参数
-const args = process.argv.slice(2)
-let access_token = args[0]
-let name = args[1]
-const releaseBodyFromEnv = process.env.RELEASE_BODY
-let owner = 'gzlingyi_0'
-let repo = 'pubtw'
-let target_commitish = 'main'
-let baseUrl = 'gitee.com'
+const args = process.argv.slice(2);
+let access_token = args[0];
+let name = args[1];
+const releaseBodyFromEnv = process.env.RELEASE_BODY;
+let owner = "gzlingyi_0";
+let repo = "pubtw";
+let target_commitish = "main";
+let baseUrl = "gitee.com";
 const releaseBody =
-  typeof releaseBodyFromEnv === 'string' && releaseBodyFromEnv.trim()
+  typeof releaseBodyFromEnv === "string" && releaseBodyFromEnv.trim()
     ? releaseBodyFromEnv
-    : 'Release for ' + name
+    : "Release for " + name;
 // 创建仓release post
-let createReleaseApi = `/api/v5/repos/${owner}/${repo}/releases`
+let createReleaseApi = `/api/v5/repos/${owner}/${repo}/releases`;
 let pushBody = {
   access_token,
-  tag_name: 'v' + name,
-  tag: 'v' + name,
-  name: 'v' + name,
+  tag_name: "v" + name,
+  tag: "v" + name,
+  name: "v" + name,
   body: releaseBody,
-  target_commitish
-}
+  target_commitish,
+};
 
-// 如果 Releases 超过五个，删除最旧的 Release
-deleteOldestRelease()
+// 如果 Releases 超过三个，删除最旧的 Release
+deleteOldestRelease();
 // 发布
-createRelease()
+createRelease();
 
 /** 额外文件路径：node upload-gitee.js <token> <version> [file ...]（上传 .exe / .dmg / .AppImage） */
 function resolveUploadPaths() {
-  const extra = args.slice(2).filter(a => a && a !== '--')
+  const extra = args.slice(2).filter((a) => a && a !== "--");
   if (extra.length > 0) {
     return extra
-      .map(f => path.resolve(f))
-      .filter(fp => /\.(exe|dmg|AppImage)$/i.test(fp))
+      .map((f) => path.resolve(f))
+      .filter((fp) => /\.(exe|dmg|AppImage)$/i.test(fp));
   }
-  const buildDir = path.join(__dirname, 'build')
+  const buildDir = path.join(__dirname, "build");
   const raw = path.join(
     buildDir,
-    package.build.productName + ' Setup ' + name + '.exe'
-  )
-  const renamed = path.join(buildDir, 'Setup ' + name + '.exe')
-  fs.renameSync(raw, renamed)
-  return [renamed]
+    package.build.productName + " Setup " + name + ".exe"
+  );
+  const renamed = path.join(buildDir, "Setup " + name + ".exe");
+  fs.renameSync(raw, renamed);
+  return [renamed];
 }
 
 function uploadSingleFile(releaseId, filePath) {
   return new Promise((resolve, reject) => {
-    const formData = new FormData()
-    formData.append('access_token', access_token)
-    formData.append('file', fs.createReadStream(filePath))
+    const formData = new FormData();
+    formData.append("access_token", access_token);
+    formData.append("file", fs.createReadStream(filePath));
 
     const options = {
       hostname: baseUrl,
       path: createReleaseApi + `/${releaseId}/attach_files`,
-      method: 'POST',
+      method: "POST",
       agent,
       headers: {
         ...formData.getHeaders(),
-        'User-Agent': 'Node.js'
-      }
-    }
+        "User-Agent": "Node.js",
+      },
+    };
 
-    const req = https.request(options, res => {
-      let data = ''
-      res.on('data', chunk => {
-        data += chunk
-      })
-      res.on('end', () => {
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => {
+        data += chunk;
+      });
+      res.on("end", () => {
         if (res.statusCode === 201) {
-          console.log('文件上传成功:', filePath)
-          resolve()
+          console.log("文件上传成功:", filePath);
+          resolve();
         } else {
-          reject(new Error(`文件上传失败 ${res.statusCode}: ${data}`))
+          reject(new Error(`文件上传失败 ${res.statusCode}: ${data}`));
         }
-      })
-    })
+      });
+    });
 
-    req.on('error', reject)
+    req.on("error", reject);
     req.setTimeout(1000 * 60 * 20, () => {
-      req.destroy(new Error('Upload timeout: 20 minutes exceeded'))
-      reject(new Error('上传超时'))
-    })
-    formData.pipe(req)
-  })
+      req.destroy(new Error("Upload timeout: 20 minutes exceeded"));
+      reject(new Error("上传超时"));
+    });
+    formData.pipe(req);
+  });
 }
 
 function collectExistingAssetNames(assets) {
-  if (!Array.isArray(assets)) return []
-  return assets.map(a => a && a.name).filter(Boolean)
+  if (!Array.isArray(assets)) return [];
+  return assets.map((a) => a && a.name).filter(Boolean);
 }
 
 function patchReleaseBody(releaseId, done) {
   const fromCi =
-    typeof releaseBodyFromEnv === 'string' && releaseBodyFromEnv.trim()
+    typeof releaseBodyFromEnv === "string" && releaseBodyFromEnv.trim();
   if (!fromCi) {
-    done()
-    return
+    done();
+    return;
   }
   const payload = JSON.stringify({
     access_token,
-    tag_name: 'v' + name,
-    tag: 'v' + name,
-    name: 'v' + name,
+    tag_name: "v" + name,
+    tag: "v" + name,
+    name: "v" + name,
     body: releaseBody,
-    target_commitish
-  })
+    target_commitish,
+  });
   const options = {
     hostname: baseUrl,
     path: `${createReleaseApi}/${releaseId}`,
-    method: 'PATCH',
+    method: "PATCH",
     agent,
     headers: {
-      'Content-Type': 'application/json',
-      'Content-Length': Buffer.byteLength(payload),
-      'User-Agent': 'Node.js'
-    }
-  }
-  const req = https.request(options, res => {
-    let buf = ''
-    res.on('data', chunk => {
-      buf += chunk
-    })
-    res.on('end', () => {
+      "Content-Type": "application/json",
+      "Content-Length": Buffer.byteLength(payload),
+      "User-Agent": "Node.js",
+    },
+  };
+  const req = https.request(options, (res) => {
+    let buf = "";
+    res.on("data", (chunk) => {
+      buf += chunk;
+    });
+    res.on("end", () => {
       if (res.statusCode === 200) {
-        console.log('已更新 Gitee Release 说明文案')
+        console.log("已更新 Gitee Release 说明文案");
       } else {
         console.error(
-          '更新 Release 说明失败:',
+          "更新 Release 说明失败:",
           res.statusCode,
           buf.slice(0, 500)
-        )
+        );
       }
-      done()
-    })
-  })
-  req.on('error', err => {
-    console.error('PATCH release body:', err.message)
-    done()
-  })
-  req.write(payload)
-  req.end()
+      done();
+    });
+  });
+  req.on("error", (err) => {
+    console.error("PATCH release body:", err.message);
+    done();
+  });
+  req.write(payload);
+  req.end();
 }
 
 async function uploadAllFiles(releaseId, existingAssets) {
-  const existingNames = new Set(collectExistingAssetNames(existingAssets))
-  let paths
+  const existingNames = new Set(collectExistingAssetNames(existingAssets));
+  let paths;
   try {
-    paths = resolveUploadPaths()
+    paths = resolveUploadPaths();
   } catch (e) {
-    console.error('准备上传文件失败:', e.message)
-    throw e
+    console.error("准备上传文件失败:", e.message);
+    throw e;
   }
   for (const fp of paths) {
     if (!fs.existsSync(fp)) {
-      console.error('文件不存在，跳过:', fp)
-      continue
+      console.error("文件不存在，跳过:", fp);
+      continue;
     }
-    const fileName = path.basename(fp)
+    const fileName = path.basename(fp);
     if (existingNames.has(fileName)) {
-      console.log('已存在同名附件，跳过上传:', fileName)
-      continue
+      console.log("已存在同名附件，跳过上传:", fileName);
+      continue;
     }
-    console.log('开始上传', fp)
-    await uploadSingleFile(releaseId, fp)
+    console.log("开始上传", fp);
+    await uploadSingleFile(releaseId, fp);
   }
 }
 
@@ -180,49 +180,51 @@ function createRelease() {
   const options = {
     hostname: baseUrl,
     path: createReleaseApi,
-    method: 'POST',
+    method: "POST",
     headers: {
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
       // 可能还需要其他标头，比如授权信息
     },
-    body: JSON.stringify(pushBody)
-  }
-  let data = ''
-  const req = https.request(options, res => {
+    body: JSON.stringify(pushBody),
+  };
+  let data = "";
+  const req = https.request(options, (res) => {
     // 捕获数据流
-    res.on('data', chunk => {
-      data += chunk
-    })
+    res.on("data", (chunk) => {
+      data += chunk;
+    });
     // 在数据流结束时处理数据
-    res.on('end', () => {
+    res.on("end", () => {
       if (res.statusCode === 201) {
-        const rel = JSON.parse(data)
-        console.log('创建仓库成功', rel.id)
-        uploadAllFiles(rel.id, rel.assets).catch(err => {
-          console.error('上传附件失败:', err.message || err)
-          process.exitCode = 1
-        })
+        const rel = JSON.parse(data);
+        console.log("创建仓库成功", rel.id);
+        uploadAllFiles(rel.id, rel.assets).catch((err) => {
+          console.error("上传附件失败:", err.message || err);
+          process.exitCode = 1;
+        });
       } else {
-        console.error('创建失败:', res.statusCode, data, options)
-        if (data.indexOf('该标签已经存在发行版') != -1) {
-          tgaGetRelease(releaseData => {
-            console.log('获取release_id', releaseData.id)
+        console.error("创建失败:", res.statusCode, data, options);
+        if (data.indexOf("该标签已经存在发行版") != -1) {
+          tgaGetRelease((releaseData) => {
+            console.log("获取release_id", releaseData.id);
             patchReleaseBody(releaseData.id, () => {
-              uploadAllFiles(releaseData.id, releaseData.assets).catch(err => {
-                console.error('上传附件失败:', err.message || err)
-                process.exitCode = 1
-              })
-            })
-          })
+              uploadAllFiles(releaseData.id, releaseData.assets).catch(
+                (err) => {
+                  console.error("上传附件失败:", err.message || err);
+                  process.exitCode = 1;
+                }
+              );
+            });
+          });
         }
       }
-    })
-  })
-  req.on('error', error => {
-    console.error('创建失败:', error)
-  })
-  req.write(JSON.stringify(pushBody))
-  req.end()
+    });
+  });
+  req.on("error", (error) => {
+    console.error("创建失败:", error);
+  });
+  req.write(JSON.stringify(pushBody));
+  req.end();
 }
 
 // 标签获取
@@ -231,33 +233,33 @@ function tgaGetRelease(callback) {
     hostname: baseUrl,
     path:
       createReleaseApi +
-      '/tags/' +
+      "/tags/" +
       pushBody.tag +
-      '?access_token=' +
+      "?access_token=" +
       access_token,
-    method: 'GET',
+    method: "GET",
     headers: {
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
       // 可能还需要其他标头，比如授权信息
-    }
-  }
-  const req = https.request(options, res => {
-    let data = ''
+    },
+  };
+  const req = https.request(options, (res) => {
+    let data = "";
 
-    res.on('data', chunk => {
-      data += chunk
-    })
+    res.on("data", (chunk) => {
+      data += chunk;
+    });
 
-    res.on('end', () => {
-      callback(JSON.parse(data))
-    })
-  })
+    res.on("end", () => {
+      callback(JSON.parse(data));
+    });
+  });
 
-  req.on('error', error => {
-    console.error('Error fetching releases:', error)
-  })
+  req.on("error", (error) => {
+    console.error("Error fetching releases:", error);
+  });
 
-  req.end()
+  req.end();
 }
 
 // 获取所有 Releases
@@ -265,64 +267,64 @@ function getAllReleases(callback) {
   const options = {
     hostname: baseUrl,
     path:
-      createReleaseApi + '?page=1&per_page=100&access_token=' + access_token,
-    method: 'GET',
+      createReleaseApi + "?page=1&per_page=100&access_token=" + access_token,
+    method: "GET",
     headers: {
-      'Content-Type': 'application/json'
+      "Content-Type": "application/json",
       // 可能还需要其他标头，比如授权信息
-    }
-  }
+    },
+  };
 
-  const req = https.request(options, res => {
-    let data = ''
+  const req = https.request(options, (res) => {
+    let data = "";
 
-    res.on('data', chunk => {
-      data += chunk
-    })
+    res.on("data", (chunk) => {
+      data += chunk;
+    });
 
-    res.on('end', () => {
-      callback(JSON.parse(data))
-    })
-  })
+    res.on("end", () => {
+      callback(JSON.parse(data));
+    });
+  });
 
-  req.on('error', error => {
-    console.error('Error fetching releases:', error)
-  })
+  req.on("error", (error) => {
+    console.error("Error fetching releases:", error);
+  });
 
-  req.end()
+  req.end();
 }
 // 删除最旧的 Release
 function deleteOldestRelease() {
-  getAllReleases(releases => {
+  getAllReleases((releases) => {
     if (!Array.isArray(releases) || releases.length === 0) {
-      console.log('当前没有任何 Release，跳过删除')
-      return
+      console.log("当前没有任何 Release，跳过删除");
+      return;
     }
-    console.log('已有 Release 数量:', releases.length)
-    if (releases.length >= 5) {
+    console.log("已有 Release 数量:", releases.length);
+    if (releases.length >= 3) {
       // 找到最旧的 Release
-      const oldestRelease = releases[0]
+      const oldestRelease = releases[0];
       // 删除最旧的 Release
       const options = {
         hostname: baseUrl,
         path:
           createReleaseApi +
           `/${oldestRelease.id}?access_token=${access_token}`,
-        method: 'DELETE'
-      }
-      const req = https.request(options, res => {
+        method: "DELETE",
+      };
+      const req = https.request(options, (res) => {
         if (res.statusCode === 204) {
-          console.log('删除成功')
+          console.log("删除成功");
         } else {
-          console.error('Error deleting release:', res.statusCode)
+          console.error("Error deleting release:", res.statusCode);
         }
-      })
-      req.on('error', error => {
-        console.error('Error deleting release:', error)
-      })
-      req.end()
+      });
+      req.on("error", (error) => {
+        console.error("Error deleting release:", error);
+      });
+      req.end();
     } else {
-      console.log('不需要删除')
+      console.log("不需要删除");
     }
-  })
+  });
 }
