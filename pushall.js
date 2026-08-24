@@ -1,7 +1,7 @@
 /**
  * 发布流水线（本地执行）：
- * 1. 在 main 上升版本号并提交、push origin main，同时打 v{version} 本地 tag 并推送
- * 2. 切到 prod 合并 main 后 push origin prod（触发 GitHub Actions 打 GitHub Release）
+ * 1. 在 main 上升版本号并提交、同时 push origin + gitee 的 main，并打 v{version} tag 推两边
+ * 2. 切到 prod 合并 main 后同时 push origin + gitee 的 prod（origin 触发 GitHub Actions）
  * 3. 回到 main，本地生成 release-notes.md（使用 prev tag..HEAD 区间，修复 Gitee 日志为空）
  * 4. 本地执行 electron-builder 打包（win exe / mac dmg x64+arm64 / linux AppImage+tar.gz）
  *    —— deb / rpm / linux arm64 交给 CI（.github/workflows/build.yml）
@@ -154,6 +154,20 @@ function localTagExists(tag) {
   return runOk(`git rev-parse --verify -q refs/tags/${tag}`);
 }
 
+function hasRemote(name) {
+  return runSilent("git remote").split(/\r?\n/).includes(name);
+}
+
+function pushOriginAndGitee(ref) {
+  if (!hasRemote("gitee")) {
+    throw new Error(
+      "未配置 gitee remote（期望 git remote add gitee git@gitee.com:gzlingyi_0/pubtw.git）"
+    );
+  }
+  run(`git push origin ${ref}`);
+  run(`git push gitee ${ref}`);
+}
+
 // -------- 主步骤 --------
 function generateReleaseNotes(version) {
   console.log("生成 release notes...");
@@ -286,15 +300,15 @@ function main() {
     }
 
     if (!SKIP_GIT) {
-      run("git push origin main");
-      run(`git push origin ${tagName}`);
+      pushOriginAndGitee("main");
+      pushOriginAndGitee(tagName);
 
       // 合并 main 到 prod，触发 GitHub Actions 走 GitHub Release（保留原行为）
       run("git checkout prod");
       run("git fetch origin prod");
       run("git merge --ff-only origin/prod");
       run(`git merge main -m "chore: merge main for release v${nextVersion}"`);
-      run("git push origin prod");
+      pushOriginAndGitee("prod");
       run("git checkout main");
     }
   }
@@ -309,7 +323,7 @@ function main() {
     console.log("跳过本地打包");
   }
 
-  // 上传 Gitee
+  // 上传 Gitee Release 附件
   if (!SKIP_UPLOAD) {
     const files = collectArtifacts();
     uploadToGitee(giteeToken, nextVersion, files, releaseBody);
