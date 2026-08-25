@@ -47,7 +47,7 @@
 便于脚本与智能体编排。GUI 打开后默认进入「**项目详情**」页，可查看 HTTP / MCP / CLI 接入说明。
 
 <!-- openclaw-integrable: id=matrixmedia-cli version=1 platform=electron argv-marker=cli -->
-<!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（抖音 / 视频号）、`publish`、`publish-article` 等详见 [docs/cli.md](./docs/cli.md)。 -->
+<!-- 说明：本仓库以 argv 含 `cli` 作为统一入口，可被 OpenClaw / Hermes / Claude Code / OpenAI Codex / WorkBuddy / Cursor / Dify / n8n 等 AI 工具与智能体编排框架发现与调用；子命令 `login`（抖音 / 视频号）、`publish`、`publish-article` 等详见 [docs/cli.md](./docs/cli.md)。 -->
 
 ## AI 工具 / 智能体联动
 
@@ -55,7 +55,8 @@
 
 - [OpenClaw](https://github.com/openclaw/openclaw)
 - [Hermes](https://github.com/NousResearch/hermes-agent)
-- Claude Code、Cursor、Cline、Aider 等编程智能体
+- Claude Code、OpenAI Codex（Codex CLI / Codex Cloud）、WorkBuddy 等 AI 办公 / 编程智能体
+- Cursor、Cline、Aider 等 IDE 编程助手
 - Dify、n8n、LangChain、CrewAI、AutoGen 等工作流 / 多智能体编排框架
 - 任何支持「外部命令 + argv + 退出码」约定的自动化平台（含自研调度器）
 
@@ -439,7 +440,7 @@ curl -X POST http://127.0.0.1:30088/publish \
 
 - **核心维护**：[@hanliang97](https://github.com/hanliang97)
 - **集成协作**：[OpenClaw](https://github.com/openclaw/openclaw)、[Hermes](https://github.com/NousResearch/hermes-agent) 等智能体 / 编排生态 — 本仓库顶部以 `openclaw-integrable` 注释示例地显式声明 CLI 入口；`cli login` / `cli publish` / `cli accounts` / `cli history` 的参数与退出码约定面向所有「外部命令型」AI 工具设计，任何遵循同样契约的平台（含自研调度器）都可直接接入，欢迎围绕 CLI 契约反馈与共建。
-- **AI 协作声明**：部分 CLI 子命令（`cli accounts` / `cli history`）、skills 文档（`.cursor/skills/matrixmedia-cli-publish/`）以及 README 的 CLI 章节由 Anthropic Claude（通过 [Claude Code](https://claude.com/claude-code)）、DeepSeek、OpenAI Codex、GPT 等 AI 工具辅助设计、实现与撰写；人类维护者负责需求决策、代码评审与合入。所有产出遵循本仓库的 [GPL-2.0-only](./LICENSE) 授权条款，不因 AI 参与而改变许可。
+- **AI 协作声明**：部分 CLI 子命令（`cli accounts` / `cli history`）、skills 文档（`.cursor/skills/matrixmedia-cli-publish/`）以及 README 的 CLI 章节由 Anthropic Claude（通过 [Claude Code](https://claude.com/claude-code)）、OpenAI Codex（Codex CLI / Codex Cloud）、WorkBuddy、DeepSeek、GPT 等 AI 办公与编程工具辅助设计、实现与撰写；人类维护者负责需求决策、代码评审与合入。所有产出遵循本仓库的 [GPL-2.0-only](./LICENSE) 授权条款，不因 AI 参与而改变许可。
 
 欢迎通过 Issue / PR 参与共建。
 
