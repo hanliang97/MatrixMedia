@@ -53,7 +53,10 @@ router.get("/creative-statements", async function (req, res) {
 
 router.post("/changeData", function (req, res) {
   const origin = req.headers.origin || req.headers.referer || "";
-  if (origin && !/^(file:|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(origin)) {
+  // Require a matching Origin/Referer for every request; previously a
+  // missing header skipped validation entirely, letting any local process
+  // (curl, scripts, etc. that omit these headers) bypass the check.
+  if (!/^(file:|http:\/\/localhost|http:\/\/127\.0\.0\.1)/.test(origin)) {
     return res.status(403).json({ success: false, message: "Forbidden" });
   }
   res.json(changeData({ ...req.body }));
