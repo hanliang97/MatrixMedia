@@ -12,6 +12,7 @@ import {
   pollPageUntil,
 } from "./uploadTimeouts.js";
 import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 
 const SEL_ORIGINAL_CHECKBOX =
   "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
@@ -295,19 +296,21 @@ export default async function (page, data, window, event, onFinish) {
     await waitSphUploadProcessing(page);
 
     // 所有表单项（包括商品）完成后，草稿和发布只能二选一执行。
+    const urlBefore = readPageUrl(page);
     if (isDraftMode) await clickSphDraftButton(page);
     else await clickSphPublishButton(page);
     console.log(
       isDraftMode ? "✅ 视频号视频已保存草稿" : "✅ 视频号视频上传成功"
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
+    });
   } catch (err) {
     const detail =
       (err && err.message) || (typeof err === "string" ? err : String(err));

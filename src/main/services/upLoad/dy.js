@@ -1,6 +1,6 @@
 import path from "path";
-import maybeClosePublishWindow from "./closeWindow.js";
 import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -232,16 +232,18 @@ export default async function (page, data, window, event) {
     // 自主声明入口在视频转码完成后才出现，必须在点击发布前完成
     await selectDyCreativeStatementWithRetry(page, data);
 
+    const urlBefore = readPageUrl(page);
     await clickDyPublish(page, isDraftMode);
     console.log(isDraftMode ? "✅ 抖音视频已保存草稿" : "✅ 抖音视频上传成功");
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
+    });
   } catch (e) {
     const detail = (e && e.message) || String(e);
     event.reply("puppeteerFile-done", {

@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import {
   getCreativeStatementOption,
   resolveBlblCreativeStatementLabel,
@@ -269,6 +270,7 @@ export default async function (page, data, window, event) {
     await page.waitForSelector(".submit-draft", {
       timeout: WAIT_SELECTOR_APPEAR_MS,
     });
+    const urlBefore = readPageUrl(page);
     if (isDraftMode) {
       await page.click(".submit-draft", { delay: 200 });
     } else {
@@ -279,14 +281,15 @@ export default async function (page, data, window, event) {
     console.log(
       isDraftMode ? "✅ 哔哩哔哩视频已保存草稿" : "✅ 哔哩哔哩视频上传成功"
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
+    });
   } catch (e) {
     event.reply("puppeteerFile-done", {
       ...data,

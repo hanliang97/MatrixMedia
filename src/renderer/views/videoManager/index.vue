@@ -70,6 +70,12 @@
                     <span class="progress-count fail"
                       >失败 {{ normalizeCount(sub.publishFailCount) }}</span
                     >
+                    <span
+                      v-if="normalizeCount(sub.publishAbnormalCount) > 0"
+                      class="progress-count fail"
+                      >异常
+                      {{ normalizeCount(sub.publishAbnormalCount) }}</span
+                    >
                     <el-tag
                       size="mini"
                       :type="publishStatusType(sub.publishStatus)"
@@ -275,7 +281,12 @@ export default {
     },
     publishStatusType(status) {
       if (status === "success") return "success";
-      if (status === "fail" || status === "failed" || status === "expired")
+      if (
+        status === "fail" ||
+        status === "failed" ||
+        status === "expired" ||
+        status === "abnormal"
+      )
         return "danger";
       if (status === "scheduled" || status === "skipped") return "info";
       if (status === "draft") return "info";
@@ -284,6 +295,7 @@ export default {
     publishStatusText(status) {
       if (status === "success") return "成功";
       if (status === "fail" || status === "failed") return "失败";
+      if (status === "abnormal") return "发布异常";
       if (status === "scheduled") return "等待定时发布";
       if (status === "skipped") return "已跳过";
       if (status === "expired") return "任务过期";
@@ -294,7 +306,9 @@ export default {
     isPublishFailed(row) {
       if (!row) return false;
       if (
-        ["fail", "failed", "expired"].includes(String(row.publishStatus || ""))
+        ["fail", "failed", "expired", "abnormal"].includes(
+          String(row.publishStatus || "")
+        )
       )
         return true;
       if (
@@ -500,6 +514,9 @@ export default {
         copyRow.publishSuccessCount
       );
       copyRow.publishFailCount = this.normalizeCount(copyRow.publishFailCount);
+      copyRow.publishAbnormalCount = this.normalizeCount(
+        copyRow.publishAbnormalCount
+      );
       copyRow.publishStatus = copyRow.publishStatus || "publishing";
       return copyRow;
     },
@@ -615,6 +632,36 @@ export default {
       const isDraftMode =
         donePayload.publishMode === "draft" ||
         donePayload.publishToDraft === true;
+      // 发布成功后平台会自动跳成功页；5 秒后地址没变说明疑似没发出去，
+      // 主进程用 publishAbnormal 标记，这里单独记为「发布异常」而不是成功。
+      const abnormal = success && donePayload.publishAbnormal === true;
+      if (abnormal) {
+        await dataRequest({
+          type: "update",
+          fileName: "pushData",
+          item: {
+            id: row.id,
+            date: target.date,
+            publishAbnormalCount:
+              this.normalizeCount(row.publishAbnormalCount) + 1,
+            publishStatus: "abnormal",
+            lastPublishMessage:
+              donePayload.message ||
+              "发布异常：点击发布后 5 秒页面地址未变化，请到平台确认",
+            lastPublishAt: Date.now(),
+          },
+        });
+        this.$notify({
+          title: "发布异常",
+          message:
+            donePayload.message ||
+            `${donePayload.pt || ""} 发布后页面未跳转，请到平台确认是否已发布`,
+          type: "error",
+          duration: 0,
+        });
+        this.loadRecords();
+        return;
+      }
       await dataRequest({
         type: "update",
         fileName: "pushData",

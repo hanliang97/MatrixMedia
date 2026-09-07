@@ -1,5 +1,5 @@
 import path from "path";
-import maybeClosePublishWindow from "./closeWindow.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveKsCreativeStatementLabel,
@@ -254,6 +254,7 @@ export default async function (page, data, window, event) {
     // 在 hidden window 下几何中心常落不到真正的 <button> 上，结果是"看起来点过了但没发"。
     // 改为在 evaluate 内部遍历真实 button / 行 div，直接调 DOM .click()，避开鼠标几何问题。
     // 快手草稿功能和发布一个逻辑一个是 发布 一个是取消两个字
+    const urlBefore = readPageUrl(page);
     const clicked = await page.evaluate((text) => {
       const norm = (t) =>
         String(t || "")
@@ -288,14 +289,15 @@ export default async function (page, data, window, event) {
         ? `✅ 快手视频已保存草稿，click via=${clicked.via}`
         : `✅ 快手视频已触发发布，click via=${clicked.via}`
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
+    });
   } catch (e) {
     event.reply("puppeteerFile-done", {
       ...data,

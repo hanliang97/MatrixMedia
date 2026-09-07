@@ -1,5 +1,5 @@
 import path from "path";
-import maybeClosePublishWindow from "./closeWindow.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import { resolveBjhCreativeStatementLabel } from "../../../shared/creativeStatement.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
@@ -541,6 +541,7 @@ export default async function (page, data, window, event) {
     //   aria-label="close-circle" → 失败提示，重试
     //   10s 内不出现任何提示      → 也视为成功
     let clickSuccess = false;
+    const urlBefore = readPageUrl(page);
     for (let attempt = 1; attempt <= 10; attempt++) {
       await page.mouse.click(cx, cy, { delay: 80 });
       console.log(
@@ -597,14 +598,15 @@ export default async function (page, data, window, event) {
     console.log(
       isDraftMode ? "✅ 百家号视频已保存草稿" : "✅ 百家号视频上传成功"
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
+    });
   } catch (err) {
     const failMessage = err?.message || "上传失败";
     event.reply("puppeteerFile-done", {

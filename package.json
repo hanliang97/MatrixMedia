@@ -36,7 +36,8 @@
     "test:article-republish": "node scripts/test-article-republish.js",
     "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
     "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js",
-    "test:pick-release-installer": "node scripts/test-pick-release-installer.js"
+    "test:pick-release-installer": "node scripts/test-pick-release-installer.js",
+    "test:publish-abnormal": "node scripts/test-publish-abnormal.js"
   },
   "build": {
     "forceCodeSigning": false,

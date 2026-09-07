@@ -205,10 +205,12 @@ function finishScheduledRecord(record, payload) {
     return;
   }
   const ok = payload && payload.status === true;
+  const abnormal = ok && payload.publishAbnormal === true;
   updateRecord(record, {
-    publishStatus: ok ? "success" : "failed",
-    publishSuccessCount: ok ? 1 : 0,
+    publishStatus: abnormal ? "abnormal" : ok ? "success" : "failed",
+    publishSuccessCount: ok && !abnormal ? 1 : 0,
     publishFailCount: ok ? 0 : 1,
+    publishAbnormalCount: abnormal ? 1 : 0,
     lastPublishMessage:
       (payload && payload.message) || (ok ? "发布成功" : "发布失败"),
     lastPublishAt: Date.now(),

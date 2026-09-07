@@ -386,6 +386,7 @@ async function runBatchDirPublish(v, cfg) {
             publishStatus: status,
             publishSuccessCount: status === "success" ? 1 : 0,
             publishFailCount: status === "failed" ? 1 : 0,
+            publishAbnormalCount: status === "abnormal" ? 1 : 0,
             lastPublishMessage: message || "",
             lastPublishAt: Date.now(),
           },
@@ -440,10 +441,14 @@ async function runBatchDirPublish(v, cfg) {
               return;
             }
             const ok = payload && payload.status === true;
+            const abnormal = ok && payload.publishAbnormal === true;
             const msg =
               (payload && payload.message) || (ok ? "上传成功" : "上传失败");
-            updateRecord(ok ? "success" : "failed", msg);
-            finish(ok, msg);
+            updateRecord(
+              abnormal ? "abnormal" : ok ? "success" : "failed",
+              msg
+            );
+            finish(ok && !abnormal, msg);
           } else if (channel === "puppeteer-noLogin") {
             if (payload && payload.taskId != null && payload.taskId !== taskId)
               return;
@@ -773,6 +778,7 @@ export async function runCliMain(argv = process.argv) {
             publishStatus: status,
             publishSuccessCount: status === "success" ? 1 : 0,
             publishFailCount: status === "failed" ? 1 : 0,
+            publishAbnormalCount: status === "abnormal" ? 1 : 0,
             lastPublishMessage: message || "",
             lastPublishAt: Date.now(),
           },

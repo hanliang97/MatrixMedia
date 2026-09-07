@@ -274,6 +274,7 @@ async function runSingleFilePublishInner(
           publishSuccessCount:
             status === "success" || status === "draft" ? 1 : 0,
           publishFailCount: status === "failed" ? 1 : 0,
+          publishAbnormalCount: status === "abnormal" ? 1 : 0,
           lastPublishMessage: message || "",
           lastPublishAt: Date.now(),
         },

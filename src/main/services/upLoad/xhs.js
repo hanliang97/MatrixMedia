@@ -1,5 +1,6 @@
 import path from "path";
 import maybeClosePublishWindow from "./closeWindow.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveXhsCreativeStatementLabel,
@@ -479,6 +480,7 @@ export default async function (page, data, window, event) {
     const cy = box.y + baseY + jitterY;
 
     const targetText = isDraftMode ? "暂存离开" : "发布";
+    const urlBefore = readPageUrl(page);
     let clickedOk = false;
     for (let attempt = 1; attempt <= 2; attempt++) {
       // 模拟鼠标移动轨迹：先移到附近位置，再点击，避免从 (0,0) 直接跳变
@@ -526,19 +528,20 @@ export default async function (page, data, window, event) {
     console.log(
       isDraftMode ? "✅ 小红书视频已保存草稿" : "✅ 小红书视频上传成功"
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
-        message: isDraftMode ? "保存草稿成功" : "上传成功",
-      });
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode,
+      successMessage: isDraftMode ? "保存草稿成功" : "上传成功",
       // 草稿保存成功后用户需回到矩媒手动发布，web 窗口已无用，强制关闭；
       // 直接发布仍保留保守模式（closeWindowAfterPublish=false）让用户核对。
-      maybeClosePublishWindow(
-        isDraftMode ? { ...data, closeWindowAfterPublish: true } : data,
-        window
-      );
-    }, 5000);
+      closeWindowData: isDraftMode
+        ? { ...data, closeWindowAfterPublish: true }
+        : data,
+    });
   } catch (err) {
     event.reply("puppeteerFile-done", {
       ...data,

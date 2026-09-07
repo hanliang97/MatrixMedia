@@ -1,5 +1,5 @@
 import path from "path";
-import maybeClosePublishWindow from "./closeWindow.js";
+import { readPageUrl, replyPublishOutcome } from "./publishOutcome.js";
 import {
   isCreativeStatementNone,
   resolveTtCreativeStatementLabel,
@@ -755,6 +755,7 @@ export default async function (page, data, window, event) {
     });
     // 草稿：竖屏无标签时不支持保存草稿，直接走发布。
     await page.waitForTimeout(1000);
+    const urlBefore = readPageUrl(page);
     if (shouldSaveDraft) {
       publishStage = "点击保存草稿";
       await clickToutiaoFooterAction(page, { draft: true });
@@ -766,16 +767,19 @@ export default async function (page, data, window, event) {
     console.log(
       shouldSaveDraft ? "✅ 头条号视频已保存草稿" : "✅ 头条号视频上传成功"
     );
-    setTimeout(() => {
-      event.reply("puppeteerFile-done", {
-        ...data,
-        status: true,
+    await replyPublishOutcome({
+      page,
+      data,
+      window,
+      event,
+      urlBefore,
+      isDraftMode: shouldSaveDraft,
+      successMessage: shouldSaveDraft ? "保存草稿成功" : "上传成功",
+      extraPayload: {
         publishMode: shouldSaveDraft ? "draft" : "publish",
         publishToDraft: shouldSaveDraft,
-        message: shouldSaveDraft ? "保存草稿成功" : "上传成功",
-      });
-      maybeClosePublishWindow(data, window);
-    }, 5000);
+      },
+    });
   } catch (e) {
     const detail = getErrorMessage(e);
     console.error(`❌ 头条发布失败，阶段：${publishStage}`, e);
