@@ -1,4 +1,6 @@
 import { ipcMain, session } from "electron";
+import { evaluateLoginCookies } from "../../shared/loginState.js";
+import { probeSphSession } from "./sphAuthProbe.js";
 
 export default function () {
   ipcMain.on("getCookie", async (event, args) => {
@@ -7,58 +9,45 @@ export default function () {
       const cookies = await ses.cookies.get({ url: args.url });
       let result = "";
       let loginExpiresAtMs = null;
-      const xhsLoginCookieNames = [
-        "access-token-creator.xiaohongshu.com",
-        "customer-sso-sid",
-        "galaxy_creator_session_id",
-        "x-user-id-creator.xiaohongshu.com",
-      ];
-      const xhsLoginCookies = new Map();
 
-      cookies.forEach(cookie => {
+      // 统一登录判定：除了 cookie 存在，还要排除「已过期但仍留在 jar 里」的凭据，
+      // 否则 cookie 被服务端提前失效后界面仍显示已登录，用户发布时才失败。
+      const verdict = evaluateLoginCookies(args.pt, cookies);
+
+      // 视频号额外做一次真实探测：sessionid 不按时间过期，服务端可随时作废，
+      // 此时 cookie 仍在、expires 也没到，只看 cookie 必然误判为已登录。
+      if (verdict.loggedIn && args.pt === "视频号") {
+        const probed = await probeSphSession(args.partition);
+        if (probed.ok && probed.loggedIn === false) {
+          console.log(
+            `[getCookie] 视频号真实探测判定未登录: ${probed.reason}`
+          );
+          verdict.loggedIn = false;
+          verdict.reason = probed.reason || "会话已失效";
+        } else if (!probed.ok) {
+          // 网络异常 / 未知错误码：保留 cookie 判定结果，避免断网误判
+          console.log(
+            `[getCookie] 视频号真实探测未得出结论，沿用 cookie 判定: ${probed.reason}`
+          );
+        }
+      }
+
+      if (verdict.loggedIn) {
+        // 命中登录 cookie 但拿不到 expires（会话 cookie，如掘金 / 小红书）时给兜底有效期：
+        // 旧实现只对掘金兜底，其它平台会写出 `expires=Invalid Date`，反而更坏。
+        // 这里统一兜底，并明确语义为「假定 90 天内有效」，不是服务端承诺。
         const expMs =
-          cookie.expirationDate != null && !Number.isNaN(cookie.expirationDate)
-            ? Math.floor(cookie.expirationDate * 1000)
-            : null;
-
-        if (cookie.name === "passport_assist_user" && args.pt == "抖音" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "BDUSS" && args.pt == "百家号" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "odin_tt" && args.pt == "头条" && cookie.value.length > 65) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "sessionid" && args.pt == "视频号" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "sessionid" && args.pt == "番茄视频" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "SESSDATA" && args.pt == "哔哩哔哩" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "userId" && args.pt == "快手" && cookie.value) {
-          result = `${args.name}=true; expires=${new Date(cookie.expirationDate * 1000).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        } else if (cookie.name === "passport_csrf_token" && args.pt == "掘金" && cookie.value && cookie.value.length > 10) {
-          const fallbackExpMs = Date.now() + 90 * 24 * 60 * 60 * 1000;
-          const expMs = (cookie.expirationDate != null && !Number.isNaN(cookie.expirationDate))
-            ? Math.floor(cookie.expirationDate * 1000)
-            : fallbackExpMs;
-          result = `${args.name}=true; expires=${new Date(expMs).toUTCString()}; path=/`;
-          loginExpiresAtMs = expMs;
-        }
-
-        if (args.pt == "小红书" && xhsLoginCookieNames.includes(cookie.name) && cookie.value && expMs) {
-          xhsLoginCookies.set(cookie.name, expMs);
-        }
-      });
-
-      if (args.pt == "小红书" && xhsLoginCookieNames.every(name => xhsLoginCookies.has(name))) {
-        loginExpiresAtMs = Math.min(...xhsLoginCookies.values());
-        result = `${args.name}=true; expires=${new Date(loginExpiresAtMs).toUTCString()}; path=/`;
+          verdict.expireMs || Date.now() + 90 * 24 * 60 * 60 * 1000;
+        result = `${args.name}=true; expires=${new Date(expMs).toUTCString()}; path=/`;
+        loginExpiresAtMs = expMs;
+      } else if (verdict.reason && verdict.reason !== "未知平台") {
+        console.log(
+          `[getCookie] ${args.pt} 未登录: ${verdict.reason}${
+            verdict.expireMs
+              ? ` (过期于 ${new Date(verdict.expireMs).toLocaleString()})`
+              : ""
+          }`
+        );
       }
 
       event.reply("getCookie-done", {
@@ -68,6 +57,7 @@ export default function () {
         flagName: args.name,
         loginExpiresAtMs,
         pt: args.pt,
+        reason: verdict.reason,
         cookies,
       });
     } catch (err) {

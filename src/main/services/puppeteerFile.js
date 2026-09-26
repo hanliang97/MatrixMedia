@@ -957,6 +957,14 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
                 currentUrl,
                 message,
               });
+              // 必须成对补发 puppeteerFile-done：GUI 发布记录只由该事件驱动，
+              // 只发 noLogin 会让记录永远停在初始的「保存草稿中 / 发布中」。
+              safeReply("puppeteerFile-done", {
+                ...data,
+                status: false,
+                currentUrl,
+                message,
+              });
               finishOnce();
               if (win && !win.isDestroyed()) {
                 closePublishWinProgrammatically(win);

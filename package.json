@@ -42,7 +42,9 @@
     "test:publish-draft-args": "node scripts/test-publish-draft-args.js",
     "test:sph-video-product": "node scripts/test-sph-video-product.js",
     "test:sph-video-drama": "node scripts/test-sph-video-drama.js",
-    "test:sph-video-series": "node scripts/test-sph-video-series.js"
+    "test:sph-video-series": "node scripts/test-sph-video-series.js",
+    "test:login-state": "node scripts/test-login-state.js",
+    "test:puppeteer-nologin-pairing": "node scripts/test-puppeteer-nologin-pairing.js"
   },
   "build": {
     "forceCodeSigning": false,
