@@ -20,6 +20,9 @@
           >
         </div>
         <div class="toolbar-right">
+          <el-button plain :loading="exportingHistory" @click="exportHistory"
+            >导出当前记录</el-button
+          >
           <span class="toolbar-label">帮助</span>
           <el-button type="warning" plain @click="openFeedback"
             >问题反馈</el-button
@@ -196,6 +199,7 @@ import openLoginWindow from "@/utils/openLoginWindow";
 import LocalVideoPublish from "@/components/LocalVideoPublish.vue";
 import LocalArticlePublish from "@/components/LocalArticlePublish.vue";
 import { normalizeVideoRecordMetadata } from "../../../shared/videoMetadata.js";
+import { buildPublishHistoryCsv } from "../../../shared/publishHistoryCsv.js";
 
 export default {
   name: "VideoManager",
@@ -209,6 +213,7 @@ export default {
       statusCalss: ".video-card-zQ02ng",
       ptConfig,
       dataList: {},
+      exportingHistory: false,
       taskHandlers: new Map(),
       statusLoadingMap: {},
       loginData: {},
@@ -241,6 +246,27 @@ export default {
     this.loadRecords();
   },
   methods: {
+    async exportHistory() {
+      if (this.exportingHistory) return;
+      const { csv, recordCount } = buildPublishHistoryCsv(this.dataList);
+      if (!recordCount) {
+        this.$message.info("当前没有可导出的发布记录");
+        return;
+      }
+      this.exportingHistory = true;
+      try {
+        const result = await ipcRenderer.invoke("publish:export-history", { csv });
+        if (result && result.ok) {
+          this.$message.success(`已导出 ${recordCount} 条平台发布记录`);
+        } else if (!result || !result.canceled) {
+          this.$message.error((result && result.message) || "导出失败");
+        }
+      } catch (error) {
+        this.$message.error("导出失败：" + error.message);
+      } finally {
+        this.exportingHistory = false;
+      }
+    },
     copy: copyToClipboard,
     getStatusRowKey(row) {
       if (!row) return "";

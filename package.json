@@ -34,6 +34,8 @@
     "test:cli-login": "node scripts/test-cli-login.js",
     "test:publish-article-args": "node scripts/test-publish-article-args.js",
     "test:article-republish": "node scripts/test-article-republish.js",
+    "test:publish-history-csv": "node scripts/test-publish-history-csv.js",
+    "test:publish-history-export": "node scripts/test-publish-history-export.js",
     "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
     "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js",
     "test:pick-release-installer": "node scripts/test-pick-release-installer.js",

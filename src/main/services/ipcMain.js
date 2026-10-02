@@ -10,6 +10,7 @@ import Server from "../server/index";
 
 import { winURL } from "../config/StaticPath";
 import downloadFile from "./downloadFile";
+import { createPublishHistoryExportHandler } from "./publishHistoryExport.js";
 import { registerPuppeteerIpc } from "./puppeteerFile";
 import { registerScheduledPublishIpc } from "./scheduledPublish";
 import { registerSphWindowProductsIpc } from "./sphWindowProducts";
@@ -212,6 +213,10 @@ export default {
         electronApp,
       })
     );
+
+    ipcMain.handle("publish:export-history", createPublishHistoryExportHandler({
+      dialog, BrowserWindow, app: electronApp,
+    }));
 
     // puppeteerFile 上传文件发布，获取登录状态
     registerPuppeteerIpc();
