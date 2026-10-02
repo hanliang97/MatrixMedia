@@ -133,6 +133,8 @@ export async function replyPublishFailure({
       ...(shot ? { failScreenshot: shot } : {}),
     });
   } catch (e) {
+    // 队列 transport 用带 payload 的异常通知外层重试；不能当作 IPC 发送失败吞掉。
+    if (e && e._mmUploadFailurePayload) throw e;
     console.error("发布失败回执发送失败:", e && e.message ? e.message : e);
   }
   if (closeWindow) maybeClosePublishWindow(data, window);

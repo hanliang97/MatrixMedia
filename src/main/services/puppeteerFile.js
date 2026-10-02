@@ -258,6 +258,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   let finished = false;
   let activeBrowser = null;
   let activeWin = null;
+  let activePage = null;
   let autoCloseTimer = null;
   let actionCheckTimer = null;
   const retryDelay = 1000;
@@ -289,6 +290,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       }
     }
     activeBrowser = null;
+    activePage = null;
   };
 
   const finishOnce = () => {
@@ -342,7 +344,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
    */
   const snapshotForFailure = async () => {
     try {
-      const fromPage = await capturePublishFailureScreenshot(page, data);
+      const fromPage = await capturePublishFailureScreenshot(activePage, data);
       if (fromPage) return fromPage;
       if (!activeWin || activeWin.isDestroyed()) return "";
       const image = await activeWin.webContents.capturePage();
@@ -629,6 +631,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       activeWin = win;
       openPublishWindows.add(win);
       page = await pie.getPage(browser, win);
+      activePage = page;
 
       // 注入反自动化检测脚本（在页面 JS 执行前生效）
       // 解决小红书等平台判定 Electron 为 "AI 自动化" 的问题
@@ -873,7 +876,10 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         } catch (_) {
           // 忽略
         }
-        if (activeWin === win) activeWin = null;
+        if (activeWin === win) {
+          activeWin = null;
+          activePage = null;
+        }
         if (activeBrowser === browser) activeBrowser = null;
         if (finished) return;
         const retry =
@@ -996,9 +1002,10 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               status: false,
               message: (failurePayload && failurePayload.message) || "执行失败",
             });
+            // 先结束任务，再关窗，避免 closed 再补发一次失败回执并重复计数。
+            finishOnce();
             if (!isXhsTask && win && !win.isDestroyed())
               closePublishWinProgrammatically(win);
-            finishOnce();
             return;
           }
           if (win && !win.isDestroyed()) {
