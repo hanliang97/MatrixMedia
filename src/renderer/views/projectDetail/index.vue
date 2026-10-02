@@ -24,6 +24,19 @@
     <!-- Tab: 项目文档 -->
     <div v-if="activeTab === 'docs'">
       <el-card class="section-card" shadow="never">
+        <div slot="header" class="card-header"><span>隐私设置</span></div>
+        <p class="section-tip">
+          匿名启动统计会将启动时间、版本、操作系统、CPU 架构、语言和 GUI/CLI
+          启动方式发送到公开 GitHub Gist。统计事件不包含账号、Cookie、视频和发布记录；
+          GitHub 仍可看到网络请求来源 IP。
+        </p>
+        <el-switch :value="telemetryEnabled" :disabled="telemetryBusy || telemetryEnforced || !telemetryLoaded"
+          active-text="允许匿名启动统计" inactive-text="关闭匿名启动统计"
+          @change="saveTelemetryPreference" />
+        <p class="section-tip" v-if="telemetryEnforced">环境变量已禁用统计，界面无法覆盖。</p>
+        <p class="section-tip">设置供 GUI 和 CLI 共用，下次启动生效。</p>
+      </el-card>
+      <el-card class="section-card" shadow="never">
         <div slot="header" class="card-header">
           <span>项目概览</span>
         </div>
@@ -324,6 +337,7 @@ export default {
 
 <script>
 import packageInfo from "../../../../package.json";
+import { ipcRenderer } from "electron";
 import { VIDEO_PUBLISH_PLATFORM_DOCS } from "../../../shared/publishPlatforms.js";
 
 export default {
@@ -339,6 +353,10 @@ export default {
       appVersion: packageInfo.version,
       httpPort: 30088,
       activeTab: "docs",
+      telemetryEnabled: false,
+      telemetryEnforced: false,
+      telemetryBusy: false,
+      telemetryLoaded: false,
       videoPlatforms,
       httpRoutes: [
         { method: "GET", path: "/", desc: "返回 MatrixMedia API 欢迎页" },
@@ -763,7 +781,35 @@ export default async function (page, data, window, event) {
 }`,
     };
   },
+  mounted() {
+    this.loadTelemetryPreference();
+  },
   methods: {
+    async loadTelemetryPreference() {
+      try {
+        const result = await ipcRenderer.invoke("telemetry:get-preference");
+        if (!result || !result.ok) throw new Error((result && result.message) || "读取隐私设置失败");
+        this.telemetryEnabled = result.enabled;
+        this.telemetryEnforced = result.enforcedByEnvironment;
+        this.telemetryLoaded = true;
+      } catch (error) {
+        this.$message.error(error.message);
+      }
+    },
+    async saveTelemetryPreference(enabled) {
+      this.telemetryBusy = true;
+      try {
+        const result = await ipcRenderer.invoke("telemetry:set-enabled", enabled);
+        if (!result || !result.ok) throw new Error((result && result.message) || "保存隐私设置失败");
+        this.telemetryEnabled = result.enabled;
+        this.telemetryEnforced = result.enforcedByEnvironment;
+        this.$message.success("隐私设置已保存，下次启动生效");
+      } catch (error) {
+        this.$message.error(error.message);
+      } finally {
+        this.telemetryBusy = false;
+      }
+    },
     openGitHubRepo() {
       window.open("https://github.com/hanliang97/MatrixMedia", "_blank");
     },

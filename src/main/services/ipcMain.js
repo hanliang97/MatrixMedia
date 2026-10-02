@@ -17,6 +17,7 @@ import { createLaunchInstallerHandler } from "./launchInstaller";
 import { pickReleaseInstaller } from "./pickReleaseInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
 import { SERVER_REQUEST_TOKEN } from "../server/requestGuard";
+import { registerTelemetryPreferenceIpc } from "./telemetryPreferenceIpc.js";
 import {
   closeOtherAccountLoginWindows,
   getAccountLoginWindowByPartition,
@@ -147,6 +148,8 @@ export default {
       }
       return "";
     });
+
+    registerTelemetryPreferenceIpc(ipcMain);
 
     // 检查更新：只做「是否有新版本」的检测并返回版本信息，
     // 不再自动开始下载 —— 是否下载由用户点击「立即更新」后

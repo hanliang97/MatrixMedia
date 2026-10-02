@@ -15,6 +15,7 @@ import fs from "fs";
 import path from "path";
 import os from "os";
 import https from "https";
+import { getTelemetryPreference } from "./telemetryPreference.js";
 // 构建期由 scripts/gen-telemetry-secret.js 生成（gitignored，不进仓库）
 // 导出 GIST_ID / GIST_TOKEN 两个常量；缺失时为空字符串
 import {
@@ -25,7 +26,6 @@ import {
 const GITHUB_API = "https://api.github.com";
 const GIST_FILENAME = "events.json";
 const MAX_EVENTS = 5000; // 最多保留最近 5000 条，避免无限增长
-const NO_TELEMETRY_FILE = "no-telemetry";
 const TOKEN_FILE = "gist-token";
 const CONFIG_DIR = ".matrixmedia";
 
@@ -63,12 +63,12 @@ export function getGistToken() {
 }
 
 export function isTelemetryDisabled() {
-  if (readEnv("MATRIXMEDIA_DISABLE_TELEMETRY")) return true;
   try {
-    if (fs.existsSync(path.join(configDirPath(), NO_TELEMETRY_FILE)))
-      return true;
-  } catch (_) {}
-  return false;
+    return !getTelemetryPreference().enabled;
+  } catch (_) {
+    // 无法读取用户隐私设置时不发送统计。
+    return true;
+  }
 }
 
 function collectEvent(mode) {

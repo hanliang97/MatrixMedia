@@ -37,6 +37,7 @@ MatrixMedia 在应用启动时会向一个公开 GitHub Gist 追加一条**匿�
 
 - 设置环境变量 `MATRIXMEDIA_DISABLE_TELEMETRY=1`
 - 在用户主目录创建文件 `~/.matrixmedia/no-telemetry`（内容任意）
+- 在应用「项目详情 → 隐私设置」中关闭匿名启动统计。界面使用同一个 `no-telemetry` 文件，GUI 与 CLI 共用，下次启动生效；环境变量禁用时，界面不能重新启用。
 
 ## 自建后端（维护者）
 
