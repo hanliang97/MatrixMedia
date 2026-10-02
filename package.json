@@ -39,6 +39,7 @@
     "test:pick-release-installer": "node scripts/test-pick-release-installer.js",
     "test:publish-abnormal": "node scripts/test-publish-abnormal.js",
     "test:fail-screenshot": "node scripts/test-fail-screenshot.js",
+    "test:fail-screenshot-timeout": "node scripts/test-fail-screenshot-timeout.js",
     "test:publish-draft-args": "node scripts/test-publish-draft-args.js",
     "test:sph-video-product": "node scripts/test-sph-video-product.js",
     "test:sph-video-drama": "node scripts/test-sph-video-drama.js",

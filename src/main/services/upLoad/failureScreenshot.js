@@ -17,6 +17,23 @@ import path from "path";
 /** 截图保留天数，超期自动清理，避免长期发布把磁盘撑满 */
 export const FAIL_SCREENSHOT_RETENTION_DAYS = 14;
 
+/** 截图只用于诊断，不能让失败回执等待 CDP 默认的数分钟超时。 */
+export const FAIL_SCREENSHOT_TIMEOUT_MS = 10000;
+
+export async function withScreenshotTimeout(operation, timeoutMs = FAIL_SCREENSHOT_TIMEOUT_MS) {
+  let timer;
+  try {
+    return await Promise.race([
+      Promise.resolve().then(operation),
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error("发布失败截图超时")), timeoutMs);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** 单次清理最多删除的文件数，避免目录极大时阻塞发布流程 */
 const PRUNE_LIMIT_PER_RUN = 200;
 
@@ -140,7 +157,10 @@ export async function capturePublishFailureScreenshot(page, data = {}, deps = {}
     const file = path.join(dir, buildFailScreenshotName(data, deps.now));
     // fullPage 在长页面 / 懒加载站点上容易超时或产出巨图，这里只截可视区，
     // 弹窗、报错提示都在首屏，足够定位问题。
-    const buffer = await page.screenshot({ type: "png" });
+    const buffer = await withScreenshotTimeout(
+      () => page.screenshot({ type: "png" }),
+      deps.timeoutMs === undefined ? FAIL_SCREENSHOT_TIMEOUT_MS : deps.timeoutMs
+    );
     if (!buffer || !buffer.length) return "";
     fileSystem.writeFileSync(file, buffer);
     console.log(`[fail-shot] 已保存发布失败截图: ${file}`);

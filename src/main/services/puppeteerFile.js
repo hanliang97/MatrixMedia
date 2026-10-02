@@ -25,6 +25,7 @@ import {
   capturePublishFailureScreenshot,
   getFailScreenshotDir,
   pruneFailScreenshots,
+  withScreenshotTimeout,
 } from "./upLoad/failureScreenshot.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
@@ -345,7 +346,7 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       const fromPage = await capturePublishFailureScreenshot(page, data);
       if (fromPage) return fromPage;
       if (!activeWin || activeWin.isDestroyed()) return "";
-      const image = await activeWin.webContents.capturePage();
+      const image = await withScreenshotTimeout(() => activeWin.webContents.capturePage());
       if (!image || image.isEmpty()) return "";
       const dir = getFailScreenshotDir();
       await fs.promises.mkdir(dir, { recursive: true });
