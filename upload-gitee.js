@@ -41,7 +41,9 @@ function resolveUploadPaths() {
   if (extra.length > 0) {
     return extra
       .map((f) => path.resolve(f))
-      .filter((fp) => /\.(exe|dmg|AppImage)$/i.test(fp));
+      // 与 pushall.js collectArtifacts 的口径一致：.exe / .dmg / .tar.gz
+      // （tar.gz 走 linux 便携包；AppImage 因常超 100MB 由 pushall 侧过滤，不进这里）
+      .filter((fp) => /\.(exe|dmg|AppImage|tar\.gz)$/i.test(fp));
   }
   const buildDir = path.join(__dirname, "build");
   const raw = path.join(
