@@ -75,7 +75,7 @@
                           ? '点击查看发布失败时的页面截图'
                           : ''
                       "
-                      @click="hasFailScreenshot(sub) && openFailScreenshot(row, sub)"
+                      @click="hasFailScreenshot(sub) && openFailScreenshot(scope.row, sub)"
                       >失败 {{ normalizeCount(sub.publishFailCount) }}</span
                     >
                     <span
@@ -87,7 +87,7 @@
                           ? '点击查看发布异常时的页面截图'
                           : ''
                       "
-                      @click="hasFailScreenshot(sub) && openFailScreenshot(row, sub)"
+                      @click="hasFailScreenshot(sub) && openFailScreenshot(scope.row, sub)"
                       >异常
                       {{ normalizeCount(sub.publishAbnormalCount) }}</span
                     >
