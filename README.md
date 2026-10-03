@@ -271,14 +271,15 @@ alias mm='/Applications/matrixmedia.app/Contents/MacOS/matrixmedia'
 
 ### macOS：提示“已损坏，无法打开”
 
-macOS 分发 `x64` 与 `arm64` 两套安装包。Apple Silicon 请用 `MatrixMedia-<version>-mac-arm64.dmg`。若提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。
+macOS 分发 `x64` 与 `arm64` 两套安装包。**Apple Silicon（M1/M2/M3/M4 芯片）请用 `MatrixMedia-<version>-mac-arm64.dmg`**。若提示“已损坏，无法打开”，通常不是安装包真的损坏，而是 macOS Gatekeeper 对未签名 / 未公证应用的拦截。
 
-临时处理方式：
+临时处理方式（拖进「应用程序」后执行一次即可，之后双击正常打开）：
 
 ```bash
-sudo xattr -rd com.apple.quarantine /Applications/matrixmedia.app
-open /Applications/matrixmedia.app
+xattr -dr com.apple.quarantine /Applications/matrixmedia.app
 ```
+
+> 如果 app 装在别的位置，把路径换成实际路径；系统级目录（如 `/Applications` 属主为 root）时才需要前面加 `sudo`。
 
 正式分发给普通用户时，建议使用 Apple Developer 的 Developer ID 证书对 macOS 包进行签名和公证。
 
