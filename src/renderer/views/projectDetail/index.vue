@@ -375,6 +375,21 @@ export default {
           path: "/publish",
           desc: "发布视频到任意已支持平台；单平台传 platform，多平台传 platforms 数组",
         },
+        {
+          method: "GET",
+          path: "/stats",
+          desc: "读账号粉丝数据快照：?phone=<分组>&pt=<平台>（支持短码 dy/sph/blbl/bjh/tt/ks/xhs）",
+        },
+        {
+          method: "POST",
+          path: "/stats/sync",
+          desc: '主动采集该账号最新数据并写库；body: {"phone":"123","pt":"blbl"}',
+        },
+        {
+          method: "GET",
+          path: "/stats/work",
+          desc: "按完整标题查视频发布数据（含发布时间）：?phone=<分组>&pt=<平台>&title=<标题>",
+        },
       ],
       httpPublishParams: [
         {
@@ -471,6 +486,21 @@ export default {
           desc: "发布掘金文章（需已登录掘金账号）",
           cli: "cli publish-article ...",
         },
+        {
+          name: "get_account_stats",
+          desc: "读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）",
+          cli: "cli stats ...",
+        },
+        {
+          name: "sync_account_stats",
+          desc: "主动采集该账号最新数据并写入快照",
+          cli: "cli stats-sync ...",
+        },
+        {
+          name: "get_work_stats",
+          desc: "按完整标题查某个视频的发布数据（含发布时间）",
+          cli: "cli stats-work ...",
+        },
       ],
       cliCommands: [
         { cmd: "login", desc: "扫码登录，当前支持抖音、视频号" },
@@ -484,6 +514,18 @@ export default {
         },
         { cmd: "accounts", desc: "查看本机账号与登录态，--json 输出稳定 JSON" },
         { cmd: "history", desc: "查看发布历史，--json 输出稳定 JSON" },
+        {
+          cmd: "stats",
+          desc: "读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）：-p <平台> --phone <分组>",
+        },
+        {
+          cmd: "stats-sync",
+          desc: "主动采集该账号最新数据并写入快照（需 GUI 已登录）：-p <平台> --phone <分组>",
+        },
+        {
+          cmd: "stats-work",
+          desc: "按完整标题查某个视频的发布数据（含发布时间）：-p <平台> --phone <分组> --title <标题>",
+        },
       ],
       exitCodes: [
         { code: "0", desc: "成功" },

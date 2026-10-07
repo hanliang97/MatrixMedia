@@ -1,6 +1,6 @@
 <template>
   <div class="sidebar-panel">
-    <div v-if="!isCollapse" class="sidebar-head">
+    <div v-if="!isCollapse && showGroupHead" class="sidebar-head">
       <span class="sidebar-head-title">分组列表</span>
       <span class="sidebar-head-tip">拖动分组排序</span>
     </div>
@@ -68,13 +68,47 @@ const sorting = ref(false);
 
 const isCollapse = computed(() => !sidebarStatus.opened);
 
+// 「分组列表 / 拖动排序」头部只在媒体平台管理模块显示，账号数据模块不显示
+const showGroupHead = computed(
+  () => useAppStore().isRoute === "accountManager"
+);
+
+// 拖拽排序后同步重排数据统计模块的分组路由，保持两个模块侧边栏顺序一致
+function reorderStatsGroupRoutes(routers, orderedPhones) {
+  const prefix = "/data-stats/group/";
+  const statsMap = {};
+  const rest = [];
+  (routers || []).forEach((route) => {
+    const p = route && route.path ? String(route.path) : "";
+    if (p.startsWith(prefix)) {
+      const key = (route.meta && route.meta.phone) || p.slice(prefix.length);
+      statsMap[key] = route;
+    } else {
+      rest.push(route);
+    }
+  });
+  const sorted = orderedPhones.map((key) => statsMap[key]).filter(Boolean);
+  Object.keys(statsMap).forEach((key) => {
+    if (!orderedPhones.includes(key)) sorted.push(statsMap[key]);
+  });
+  return [...rest, ...sorted];
+}
+
 const syncVisibleRoutes = () => {
-  visibleRoutes.value = routes_list.value.filter((item) => !item.hidden);
+  // affix 项（如「所有账号」）固定在列表最前，不参与拖拽排序
+  visibleRoutes.value = routes_list.value
+    .filter((item) => !item.hidden)
+    .sort((a, b) => affixWeight(b) - affixWeight(a));
 };
+
+const affixWeight = (route) => (route.meta && route.meta.affix ? 1 : 0);
+
+const routeModuleKey = (item) =>
+  item.redirect || (item.meta && item.meta.navModule);
 
 const updateRoutes = () => {
   routes_list.value = permissionStore.routers.map((item) => {
-    if (item.redirect != useAppStore().isRoute) {
+    if (routeModuleKey(item) != useAppStore().isRoute) {
       return { ...item, hidden: true };
     }
     return { ...item, hidden: false };
@@ -116,6 +150,7 @@ function onGroupSortStart() {
 
 async function onGroupSortEnd() {
   const orderedPhones = visibleRoutes.value
+    .filter((route) => !(route.meta && route.meta.affix))
     .map((route) => extractGroupKey(route))
     .filter(Boolean);
   if (orderedPhones.length === 0) {
@@ -124,6 +159,10 @@ async function onGroupSortEnd() {
   }
 
   permissionStore.routers = reorderPermissionStoreRouters(
+    permissionStore.routers,
+    orderedPhones
+  );
+  permissionStore.routers = reorderStatsGroupRoutes(
     permissionStore.routers,
     orderedPhones
   );

@@ -8,6 +8,14 @@ import { listAccountsTool, handleListAccounts } from './tools/accounts.js';
 import { listHistoryTool, handleListHistory } from './tools/history.js';
 import { publishArticleTool, handlePublishArticle } from './tools/publishArticle.js';
 import { publishVideoTool, handlePublishVideo } from './tools/publish.js';
+import {
+  getAccountStatsTool,
+  handleGetAccountStats,
+  syncAccountStatsTool,
+  handleSyncAccountStats,
+  getWorkStatsTool,
+  handleGetWorkStats,
+} from './tools/stats.js';
 
 const server = new Server(
   { name: 'matrixmedia', version: '0.1.0' },
@@ -15,7 +23,17 @@ const server = new Server(
 );
 
 server.setRequestHandler(ListToolsRequestSchema, async () => {
-  return { tools: [listAccountsTool, listHistoryTool, publishVideoTool, publishArticleTool] };
+  return {
+    tools: [
+      listAccountsTool,
+      listHistoryTool,
+      publishVideoTool,
+      publishArticleTool,
+      getAccountStatsTool,
+      syncAccountStatsTool,
+      getWorkStatsTool,
+    ],
+  };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -46,6 +64,15 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       }
       case 'publish_article':
         result = await handlePublishArticle(args);
+        break;
+      case 'get_account_stats':
+        result = await handleGetAccountStats(args);
+        break;
+      case 'sync_account_stats':
+        result = await handleSyncAccountStats(args);
+        break;
+      case 'get_work_stats':
+        result = await handleGetWorkStats(args);
         break;
       default:
         throw new Error('Unknown tool: ' + name);

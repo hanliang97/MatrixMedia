@@ -3,12 +3,35 @@ import Layout from "@/layout";
 export const constantRouterMap = [
   {
     path: "/",
+    redirect: "/data-stats",
+    hidden: true,
+  },
+  {
+    path: "/data-stats",
     component: Layout,
-    redirect: "/",
+    meta: {
+      navModule: "dataStats",
+      title: "所有账号",
+      sidebarLeaf: true,
+      affix: true,
+    },
+    children: [
+      {
+        path: "",
+        name: "账号数据",
+        component: () => import("@/views/dataStats/index"),
+        meta: { title: "所有账号" },
+      },
+    ],
+  },
+  {
+    path: "/project-detail",
+    component: Layout,
+    redirect: "/project-detail",
     hidden: true,
     children: [
       {
-        path: "/",
+        path: "",
         name: "项目详情",
         component: () => import("@/views/projectDetail/index"),
         meta: { noSlide: true, title: "项目详情" },
@@ -35,7 +58,6 @@ export const constantRouterMap = [
     hidden: true,
   },
 ];
-
 
 const createRouter = () =>
   new Router({

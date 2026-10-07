@@ -51,7 +51,13 @@
     "test:sph-video-series": "node scripts/test-sph-video-series.js",
     "test:login-state": "node scripts/test-login-state.js",
     "test:history-screenshot-click": "node scripts/test-history-screenshot-click.js",
-    "test:puppeteer-nologin-pairing": "node scripts/test-puppeteer-nologin-pairing.js"
+    "test:puppeteer-nologin-pairing": "node scripts/test-puppeteer-nologin-pairing.js",
+    "test:douyin-stats": "node scripts/test-douyin-stats.js",
+    "test:sph-stats": "node scripts/test-sph-stats.js",
+    "test:bilibili-stats": "node scripts/test-bilibili-stats.js",
+    "test:bjh-stats": "node scripts/test-bjh-stats.js",
+    "test:data-stats": "node scripts/test-data-stats.js",
+    "import-capture": "node scripts/import-ps-capture.js"
   },
   "build": {
     "forceCodeSigning": false,

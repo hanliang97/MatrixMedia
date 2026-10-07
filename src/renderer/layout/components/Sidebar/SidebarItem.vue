@@ -1,6 +1,18 @@
 <template>
   <div
-    v-if="!item.hidden && item.children && item.children.length"
+    v-if="!item.hidden && isSidebarLeaf"
+    class="menu-wrapper leaf-menu-wrapper"
+  >
+    <router-link :to="item.path">
+      <el-menu-item class="leaf-menu-entry" :index="item.path">
+        <span v-if="item.meta && item.meta.title" class="leaf-title">{{
+          item.meta.title
+        }}</span>
+      </el-menu-item>
+    </router-link>
+  </div>
+  <div
+    v-else-if="!item.hidden && item.children && item.children.length"
     class="menu-wrapper"
     :class="collapse ? '' : 'active-menu-wrapper'"
   >
@@ -90,6 +102,12 @@ export default {
     collapse: {
       type: Boolean,
       required: true,
+    },
+  },
+  computed: {
+    // 顶层叶子项（无二级菜单，点击直达），如数据统计模块的「所有账号」与分组项
+    isSidebarLeaf() {
+      return Boolean(this.item.meta && this.item.meta.sidebarLeaf);
     },
   },
   created() {
@@ -197,6 +215,34 @@ export default {
 .platform-menu-item {
   display: flex;
   align-items: center;
+}
+
+.leaf-menu-wrapper {
+  ::v-deep .el-menu-item {
+    height: 40px;
+    line-height: 40px;
+    padding: 0 16px !important;
+    color: $menuText;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+
+    &:hover {
+      background-color: $menuHover;
+    }
+
+    &.is-active {
+      background-color: $menuActiveBg;
+      color: $primaryColor;
+    }
+  }
+}
+
+.leaf-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .pt-icon {

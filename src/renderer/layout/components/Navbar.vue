@@ -7,9 +7,10 @@
         mode="horizontal"
         @select="selectFn"
       >
-        <el-menu-item index="/">项目详情</el-menu-item>
+        <el-menu-item index="/data-stats">账号数据</el-menu-item>
         <el-menu-item index="/video-manager">视频管理</el-menu-item>
         <el-menu-item :index="mediaMenuItemIndex">媒体平台管理</el-menu-item>
+        <el-menu-item index="/project-detail">项目详情</el-menu-item>
       </el-menu>
       <div class="account-actions">
         <el-button type="primary" size="small" @click="showDialog = true">
@@ -55,7 +56,16 @@
               :value="item.key"
               :label="item.key"
               :disabled="item.disabled"
-            />
+            >
+              <el-tooltip
+                :disabled="!item.disabled"
+                effect="dark"
+                placement="right"
+                content="一个分组只能设置一个同类型平台，如需添加多个相同平台，请创建多个分组"
+              >
+                <span class="platform-option-label">{{ item.key }}</span>
+              </el-tooltip>
+            </el-option>
           </el-select>
         </el-form-item>
         <el-form-item label="说明">
@@ -172,12 +182,18 @@ export default {
         useAppStore().setData("isRoute", "accountManager");
         return;
       }
+      if (parts[0] === "data-stats") {
+        useAppStore().setData("isRoute", "dataStats");
+        return;
+      }
       useAppStore().setData("isRoute", "/");
     },
     syncActiveIndexToCurrentRoute() {
       const p = this.$route.path;
       if (p === "/") {
         this.activeIndex = "/";
+      } else if (p.startsWith("/data-stats")) {
+        this.activeIndex = "/data-stats";
       } else if (p.startsWith("/accountManager") && this.getAccoutIndex) {
         this.activeIndex = this.getAccoutIndex;
       } else {
@@ -328,5 +344,10 @@ export default {
   padding: 10px 12px;
   background-color: #f4f4f5;
   border-radius: 4px;
+}
+
+// 平台下拉选项内容铺满整行，保证禁用项整行悬停都能触发 tooltip
+.platform-option-label {
+  display: block;
 }
 </style>

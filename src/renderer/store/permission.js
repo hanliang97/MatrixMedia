@@ -140,6 +140,35 @@ function addFetchRoute(routes) {
         sortedRoutes.forEach((route) => {
           routes.push(route);
         });
+        // 数据统计模块：与媒体平台管理同源的「分组 → 平台」二级导航（顺序一致）
+        sortedRoutes.forEach((route) => {
+          const phone = route.meta && route.meta.phone;
+          if (!phone) return;
+          const statsChildren = (route.children || [])
+            .map((child) => {
+              const pt = child.meta && child.meta.pt;
+              if (!pt) return null;
+              return {
+                path: pt,
+                name: `dataStats-${phone}-${pt}`,
+                component: () => import("@/views/dataStats/group"),
+                meta: { title: pt, phone, pt },
+              };
+            })
+            .filter(Boolean);
+          routes.push({
+            path: "/data-stats/group/" + phone,
+            name: `dataStats-${phone}`,
+            component: Layout,
+            meta: {
+              navModule: "dataStats",
+              title: phone,
+              phone,
+              groupOrder: route.meta.groupOrder,
+            },
+            children: statsChildren,
+          });
+        });
         localStorage.setItem("accountTree", JSON.stringify(endData));
 
         resolve(routes);

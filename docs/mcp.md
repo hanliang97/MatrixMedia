@@ -168,3 +168,15 @@ cd mcp && npm install && npm run build
 
 - [CLI 说明](./cli.md)
 - [HTTP API 说明](./http-api.md)
+
+## 数据统计工具（Stats Tools）
+
+| 工具 | 说明 |
+| --- | --- |
+| `get_account_stats` | 读账号粉丝数据（本地快照）：`{phone, platform}` |
+| `sync_account_stats` | 主动采集该账号最新数据：`{phone, platform}` |
+| `get_work_stats` | 按完整标题查视频发布数据（含发布时间、互动数据）：`{phone, platform, title}` |
+
+- `platform` 取值：`dy` `sph` `blbl` `bjh` `tt` `ks` `xhs`
+- `phone` 为分组名（GUI「媒体平台管理」中的分组）
+- 数据来自本地快照；没有数据时先调 `sync_account_stats`

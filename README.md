@@ -124,14 +124,17 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 }
 ```
 
-重启 AI 工具后，以下 4 个 tool 即可在对话中直接调用（完整说明见 [docs/mcp.md](./docs/mcp.md)）：
+重启 AI 工具后，以下 7 个 tool 即可在对话中直接调用（完整说明见 [docs/mcp.md](./docs/mcp.md)）：
 
-| Tool              | 说明                                             |
-| ----------------- | ------------------------------------------------ |
-| `list_accounts`   | 列出本机已登录账号，支持按平台过滤               |
-| `list_history`    | 查询本机发布记录，支持按平台 / 状态 / 天数过滤   |
-| `publish_video`   | 发布视频到指定平台（最长 35 分钟，支持定时发布） |
-| `publish_article` | 发布掘金文章（需已登录掘金账号）                 |
+| Tool                 | 说明                                                        |
+| -------------------- | ----------------------------------------------------------- |
+| `list_accounts`      | 列出本机已登录账号，支持按平台过滤                          |
+| `list_history`       | 查询本机发布记录，支持按平台 / 状态 / 天数过滤              |
+| `publish_video`      | 发布视频到指定平台（最长 35 分钟，支持定时发布）            |
+| `publish_article`    | 发布掘金文章（需已登录掘金账号）                            |
+| `get_account_stats`  | 读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）            |
+| `sync_account_stats` | 主动采集该账号最新数据并写入快照                            |
+| `get_work_stats`     | 按完整标题查某个视频的发布数据（含发布时间、互动数据）      |
 
 > **登录说明**：所有平台均需在 GUI 中完成登录后再通过 MCP 发布。MCP 运行在无头 stdio 环境，无法弹出扫码窗口。
 
@@ -205,6 +208,9 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | `cli publish-article` | **掘金**（`juejin`）                                                          | 发布文章（`--content` 或 `--file`）                            |
 | `cli accounts`        | 全平台（含 `fqsp` 番茄视频）                                                  | 列出所有账号并实时检测 cookie 登录态                           |
 | `cli history`         | 全平台（含 `fqsp` 番茄视频）                                                  | 读取本机发布记录（`pushData`），支持平台/手机号/状态/时间过滤  |
+| `cli stats`           | 7 个统计平台（`dy \| sph \| blbl \| bjh \| tt \| ks \| xhs`）                 | 读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）               |
+| `cli stats-sync`      | 同上                                                                          | 主动采集该账号最新数据并写入快照（需 GUI 已登录）              |
+| `cli stats-work`      | 同上                                                                          | 按完整标题查某个视频的发布数据（含发布时间）                   |
 
 > **非 CLI 登录平台的登录怎么办？** 当前 CLI 登录已实现抖音与视频号；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
@@ -226,6 +232,11 @@ matrixmedia cli publish-article -p juejin --phone 13800138000 -t "文章标题" 
 # 查看账号 / 历史（JSON）
 matrixmedia cli accounts --json
 matrixmedia cli history --json --days 7
+
+# 数据统计：先采集，再读快照 / 查单个视频
+matrixmedia cli stats-sync -p sph --phone 123
+matrixmedia cli stats -p sph --phone 123
+matrixmedia cli stats-work -p ks --phone 123 --title "视频完整标题"
 ```
 
 开发环境调用示例：
@@ -297,10 +308,13 @@ xattr -dr com.apple.quarantine /Applications/matrixmedia.app
 
 ### 数据接口
 
-| 方法 | 路径                   | 说明                                     |
-| ---- | ---------------------- | ---------------------------------------- |
-| POST | `/changeData`          | 读写本地 JSON 数据（账号树、发布历史等） |
-| GET  | `/creative-statements` | 各平台创作声明选项（对齐 GUI 批量设置）  |
+| 方法 | 路径                   | 说明                                                              |
+| ---- | ---------------------- | ----------------------------------------------------------------- |
+| POST | `/changeData`          | 读写本地 JSON 数据（账号树、发布历史等）                          |
+| GET  | `/creative-statements` | 各平台创作声明选项（对齐 GUI 批量设置）                           |
+| GET  | `/stats`               | 读账号粉丝数据快照：`?phone=<分组>&pt=<平台>`（支持短码与中文名） |
+| POST | `/stats/sync`          | 主动采集该账号最新数据并写库：`{"phone":"123","pt":"blbl"}`       |
+| GET  | `/stats/work`          | 按完整标题查视频发布数据（含发布时间）：`?phone&pt&title`         |
 
 ### 发布视频
 

@@ -282,20 +282,83 @@ export default {
     },
     async handleGetStatus(row) {
       if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
-      const canContinue = await this.confirmAndInterruptUploadingTasks();
-      if (!canContinue) return;
+      const isJuejinArticle = (item) =>
+        item && item.textType === "article" && item.pt === "掘金";
+      // 只处理还没有拿到作品链接的记录：拉取该平台作品列表，按标题匹配命中即发布成功
+      const targets = (row.showAlltype || []).filter(
+        (item) =>
+          item &&
+          !item.videoLink &&
+          (item.textType !== "article" || isJuejinArticle(item))
+      );
+      if (!targets.length) {
+        this.$message.info("没有需要获取状态的记录");
+        return;
+      }
       const key = this.getStatusRowKey(row);
       this.$set(this.statusLoadingMap, key, true);
-      this.getStatus(row.showAlltype).catch((err) => {
-        console.error("获取状态失败:", err);
-      });
-      setTimeout(() => {
+      try {
+        const tasks = targets.map((item, idx) => ({
+          key: String(idx),
+          group: String(item.phone || "").split("-")[0],
+          platform: item.pt,
+          partition:
+            "persist:" + String(item.phone || "").split("-")[0] + item.pt,
+          title: item.title || item.bt || item.textOtherName || "",
+        }));
+        const res = await ipcRenderer.invoke("stats:match-works", { tasks });
+        const matches = (res && res.matches) || {};
+        let okCount = 0;
+        for (const [idx, m] of Object.entries(matches)) {
+          if (!m || !m.found) continue;
+          const item = targets[Number(idx)];
+          if (!item) continue;
+          const payload = JSON.parse(JSON.stringify(item));
+          delete payload.showAlltype;
+          // 视频号等平台无法构造作品直链时，用作品管理页兜底（与掘金逻辑一致）
+          const fallbackUrl =
+            this.ptConfig[item.pt] && this.ptConfig[item.pt].listIndex
+              ? this.ptConfig[item.pt].listIndex
+              : "";
+          await dataRequest({
+            type: "update",
+            fileName: "pushData",
+            item: {
+              ...payload,
+              status: true,
+              videoLink: m.url || fallbackUrl,
+            },
+          });
+          okCount++;
+        }
+        const failCount = targets.length - okCount;
+        const errors = (res && res.errors) || [];
+        if (okCount > 0 && failCount === 0) {
+          this.$message.success(`全部 ${okCount} 条记录已确认发布成功`);
+        } else if (okCount > 0) {
+          this.$message.warning(
+            `${okCount} 条已确认发布成功，${failCount} 条未在作品列表中找到`
+          );
+        } else if (errors.length) {
+          this.$message.error(
+            "获取失败：" +
+              errors.map((e) => `${e.group}·${e.platform} ${e.error}`).join("；")
+          );
+        } else {
+          this.$message.warning(
+            "作品列表中未找到对应视频，可能尚未发布成功或被平台删除"
+          );
+        }
+        // 刷新发布记录
+        const r = await dataRequest({ type: "get", fileName: "pushData" });
+        this.initDataFiltered(r.data || {});
+      } catch (err) {
+        this.$message.error(
+          "获取状态失败：" + (err && err.message ? err.message : err)
+        );
+      } finally {
         this.$set(this.statusLoadingMap, key, false);
-        this.$alert("状态获取处理中，请等待 1-2 分钟后再查看结果。", "声明", {
-          confirmButtonText: "知道了",
-          type: "warning",
-        });
-      }, 10000);
+      }
     },
     canGetStatus(row) {
       if (!row) return false;
@@ -303,66 +366,6 @@ export default {
       return (row.showAlltype || [row]).some(
         (item) => item && item.textType === "article" && item.pt === "掘金"
       );
-    },
-    isUploadingPublishStatus(status) {
-      return ["publishing", "drafting"].includes(String(status || ""));
-    },
-    getUploadingPublishRecords() {
-      const recordMap = new Map();
-      Object.values(this.dataList || {}).forEach((rows) => {
-        (rows || []).forEach((row) => {
-          (row.showAlltype || []).forEach((sub) => {
-            if (
-              sub &&
-              sub.id &&
-              sub.date &&
-              this.isUploadingPublishStatus(sub.publishStatus)
-            ) {
-              recordMap.set(`${sub.date}-${sub.id}`, sub);
-            }
-          });
-        });
-      });
-      return Array.from(recordMap.values());
-    },
-    async confirmAndInterruptUploadingTasks() {
-      const records = this.getUploadingPublishRecords();
-      if (records.length === 0) return true;
-      try {
-        await this.$confirm(
-          `当前存在 ${records.length} 个发布中任务。获取状态会中断上传，确认后会将全部上传中任务标记为失败，并主动打断上传任务。是否继续？`,
-          "获取状态",
-          {
-            confirmButtonText: "确认中断并获取状态",
-            cancelButtonText: "取消",
-            type: "warning",
-          }
-        );
-      } catch (_) {
-        return false;
-      }
-      ipcRenderer.send("puppeteerFile:cancelAll", {
-        reason: "获取状态已中断上传",
-      });
-      await Promise.all(
-        records.map((item) =>
-          dataRequest({
-            type: "update",
-            fileName: "pushData",
-            item: {
-              id: item.id,
-              date: item.date,
-              publishStatus: "failed",
-              publishFailCount: this.normalizeCount(item.publishFailCount) + 1,
-              lastPublishMessage: "获取状态已中断上传",
-              lastPublishAt: Date.now(),
-            },
-          })
-        )
-      );
-      this.loadRecords();
-      this.$message.warning("已中断上传任务，并将上传中记录标记为失败。");
-      return true;
     },
     normalizeCount(v) {
       const n = Number(v);
@@ -942,85 +945,6 @@ export default {
           "打开登录窗口失败：" + (e && e.message ? e.message : e)
         );
       }
-    },
-
-    getStatus(arr) {
-      const isJuejinArticle = (item) =>
-        item && item.textType === "article" && item.pt === "掘金";
-      const targets = (arr || []).filter(
-        (item) => item && (item.textType !== "article" || isJuejinArticle(item))
-      );
-      const arrAll = new Promise((resolve) => {
-        let acLen = 0;
-        let acLen2 = 0;
-        const total = targets.length;
-        if (total === 0) {
-          resolve();
-          return;
-        }
-        targets.forEach((item) => {
-          if (!item.videoLink) {
-            const taskId = Date.now() + Math.random();
-            // JSON 兜底序列化，避免 Vue 响应式代理 / 不可克隆对象触发 IPC 错误
-            ipcRenderer.send(
-              "puppeteerFile",
-              JSON.parse(
-                JSON.stringify({
-                  show: false,
-                  taskId,
-                  ...item,
-                  title: item.title || item.bt || item.textOtherName || "",
-                  pt: item.pt + "状态",
-                  statusCalss: (this.statusCalss || "").trim(),
-                })
-              )
-            );
-            this.taskHandlers.set(taskId, (data) => {
-              acLen++;
-              const statusUrl =
-                data.url ||
-                (isJuejinArticle(item) && this.ptConfig[item.pt]
-                  ? this.ptConfig[item.pt].listIndex
-                  : "");
-              if (statusUrl && data.status) {
-                acLen2++;
-                const payload = JSON.parse(JSON.stringify(item));
-                delete payload.showAlltype;
-                dataRequest({
-                  type: "update",
-                  fileName: "pushData",
-                  item: {
-                    ...payload,
-                    status: true,
-                    videoLink: statusUrl,
-                  },
-                });
-              } else {
-                console.log("获取视频链接失败:", item);
-              }
-              if (acLen === total) {
-                resolve();
-              }
-            });
-          } else {
-            acLen++;
-            if (acLen === total) {
-              resolve();
-            }
-          }
-        });
-      });
-      return new Promise((resolve) => {
-        arrAll.then(() => {
-          dataRequest({
-            type: "get",
-            fileName: "pushData",
-          }).then((r) => {
-            this.initDataFiltered(r.data || {});
-            resolve();
-          });
-        });
-      });
     },
 
     handleDelete(item, dateKey, idx) {

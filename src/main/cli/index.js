@@ -13,8 +13,10 @@ import {
 import { parseLoginArgs, loginHelpText } from "./parseLoginArgs";
 import { parseAccountsArgs, accountsHelpText } from "./parseAccountsArgs";
 import { parseHistoryArgs, historyHelpText } from "./parseHistoryArgs";
+import { parseStatsArgs, statsHelpText } from "./parseStatsArgs";
 import { runAccountsCli } from "./runAccountsCli";
 import { runHistoryCli } from "./runHistoryCli";
+import { runStatsCli } from "./runStatsCli";
 import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
@@ -905,9 +907,29 @@ export async function runCliMain(argv = process.argv) {
     }
   }
 
+  // 数据统计：stats 读本地快照 / stats-sync 主动采集 / stats-work 查单视频
+  const STATS_CMDS = { stats: "get", "stats-sync": "sync", "stats-work": "work" };
+  if (STATS_CMDS[cmd]) {
+    const parsed = parseStatsArgs(sub.slice(1), STATS_CMDS[cmd]);
+    if (!parsed.ok) {
+      console.error(parsed.error);
+      return 2;
+    }
+    if (parsed.value.help) {
+      console.log(statsHelpText(cmd));
+      return 0;
+    }
+    try {
+      return await runStatsCli(parsed.value);
+    } catch (e) {
+      console.error(e);
+      return 1;
+    }
+  }
+
   if (cmd === "--help" || cmd === "-h") {
     console.log(
-      "可用子命令: publish | publish-article | login | accounts | history"
+      "可用子命令: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work"
     );
     console.log("各自 --help 查看详细参数。");
     return 0;

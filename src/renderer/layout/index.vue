@@ -42,6 +42,7 @@ const classObj = computed(() => {
 
 <style rel="stylesheet/scss" lang="scss" scoped>
 @import "@/styles/mixin.scss";
+@import "@/styles/variables.scss";
 
 .app-wrapper {
   @include clearfix;
@@ -73,6 +74,11 @@ const classObj = computed(() => {
 }
 
 .NoUseSysTitle {
-  top: 30px;
+  top: $titleBarHeight;
+  // 标题栏 fixed 定位不占布局，下移多少就要从高度里减去多少，否则内容区底部被裁。
+  // 注意：本元素同时是 .app-body 的 flex 子项（App.vue 里 flex:1 会撑满高度，
+  // 单写 height 无效），必须用 flex-grow:0 + flex-basis 才能真正收缩。
+  flex: 0 1 calc(100% - #{$titleBarHeight});
+  max-height: calc(100% - #{$titleBarHeight});
 }
 </style>

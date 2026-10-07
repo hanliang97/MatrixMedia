@@ -327,3 +327,23 @@ curl -X POST http://127.0.0.1:30088/publish \
   ]
 }
 ```
+
+## 数据统计接口（Stats API）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/stats?phone=<分组>&pt=<平台>` | 读本地快照中的账号粉丝数据 |
+| POST | `/stats/sync` | 主动采集：`{"phone":"123","pt":"blbl"}` |
+| GET | `/stats/work?phone=<分组>&pt=<平台>&title=<标题>` | 按完整标题查视频发布数据 |
+
+- 平台支持短码（`dy` `sph` `blbl` `bjh` `tt` `ks` `xhs`）或中文名
+- 与 `/changeData` 相同守卫：需 `X-Matrix-Token` 头或 localhost/file Origin
+- `POST /stats/sync` 复用 GUI 登录态采集，返回 `overview`（fans/plays/likes/comments/shares/favorites）与 `workCount`
+
+示例：
+
+```bash
+curl -H "Origin: http://localhost:30088" "http://localhost:30088/stats?phone=123&pt=blbl"
+curl -X POST -H "Content-Type: application/json" -H "Origin: http://localhost:30088" \
+  -d '{"phone":"123","pt":"sph"}' http://localhost:30088/stats/sync
+```

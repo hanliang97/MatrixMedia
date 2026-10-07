@@ -19,6 +19,7 @@ import { pickReleaseInstaller } from "./pickReleaseInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
 import { SERVER_REQUEST_TOKEN } from "../server/requestGuard";
 import { registerTelemetryPreferenceIpc } from "./telemetryPreferenceIpc.js";
+import { registerDataStatsIpc } from "./dataStats/index.js";
 import {
   closeOtherAccountLoginWindows,
   getAccountLoginWindowByPartition,
@@ -225,6 +226,8 @@ export default {
     registerPuppeteerIpc();
     registerScheduledPublishIpc();
     registerSphWindowProductsIpc(ipcMain);
+    // 数据统计：采集（页面上下文 fetch）+ 本地快照读取
+    registerDataStatsIpc();
 
     // 通用的渲染进程 → 主进程日志透传通道，方便把 webview / Vue 里
     // 不开 DevTools 就看不到的输出，直接打到「主程序日志」那个终端面板。
