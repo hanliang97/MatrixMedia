@@ -147,3 +147,6 @@ dist
 # Python
 __pycache__/
 *.py[cod]
+
+# 平台调试凭据与接口快照（scripts/test-*-stats.js 生成，含登录态，禁止提交）
+.mm-*
