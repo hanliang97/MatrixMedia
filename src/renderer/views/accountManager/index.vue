@@ -10,8 +10,11 @@
           分组：{{ partition.split("-")[0] }}
         </el-tag>
         <el-tag size="medium">平台：{{ title }}</el-tag>
-        <el-button type="primary" :loading="opening" @click="openLoginWindow">
+        <el-button type="primary" :loading="opening" :disabled="openingChrome" @click="openLoginWindow">
           打开登录窗口
+        </el-button>
+        <el-button v-if="title === '视频号'" :loading="openingChrome" :disabled="opening" @click="openSphChromeLogin">
+          使用 Chrome 登录
         </el-button>
         <el-button type="danger" plain @click="deleteData">删除账号</el-button>
       </div>
@@ -24,6 +27,9 @@
       </div>
       <p class="section-muted">
         登录页：<code>{{ ptConfig[title] && ptConfig[title].index }}</code>
+      </p>
+      <p v-if="title === '视频号'" class="section-muted">
+        若内置窗口扫码后提示「没有可登录的视频号」，可尝试「使用 Chrome 登录」。鉴权通过后会自动同步到该账号；无需重复添加账号。
       </p>
     </el-card>
 
@@ -205,6 +211,7 @@ export default {
       title: "",
       urldata: {},
       opening: false,
+      openingChrome: false,
       proxyList: [],
       savingProxy: false,
       defaultPublishToDraft: false,
@@ -456,7 +463,24 @@ export default {
     removeProxy(index) {
       this.proxyList.splice(index, 1);
     },
+    async openSphChromeLogin() {
+      if (this.opening || this.openingChrome || this.title !== "视频号") return;
+      if (this._autoOpenTimer) clearTimeout(this._autoOpenTimer);
+      this.openingChrome = true;
+      try {
+        const result = await ipcRenderer.invoke("open-sph-chrome-login", {
+          partition: this.partition, phone: this.urldata.phone,
+        });
+        if (result && result.ok) this.$message.success(result.message);
+        else this.$message.error((result && result.message) || "Chrome 登录未完成");
+      } catch (_) {
+        this.$message.error("Chrome 登录未完成，请重试");
+      } finally {
+        this.openingChrome = false;
+      }
+    },
     async openLoginWindow() {
+      if (this.openingChrome) return;
       if (!this.ptConfig[this.title]) {
         this.$message.error("未找到平台配置：" + this.title);
         return;

@@ -32,7 +32,7 @@ const DEFAULT_TIMEOUT_MS = 12000;
  * @param {number} [timeoutMs]
  * @returns {Promise<{ok:boolean, loggedIn?:boolean, errCode?:number, reason?:string}>}
  */
-export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
+function probeRequest(partition, timeoutMs, cookieHeader = null) {
   return new Promise((resolve) => {
     let settled = false;
     const done = (value) => {
@@ -48,7 +48,7 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
         method: SPH_AUTH_PROBE.method,
         url: SPH_AUTH_PROBE.url,
         session: ses,
-        useSessionCookies: true,
+        useSessionCookies: cookieHeader === null,
         // 用 manual 自己跟随：失效会话若被 302 到 login.html，能立刻判定未登录，
         // 而不是拿到一坨 HTML 后 JSON 解析失败、退回 cookie 判定继续显示「已登录」。
         redirect: "manual",
@@ -57,10 +57,11 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
           Accept: "application/json, text/plain, */*",
           Origin: "https://channels.weixin.qq.com",
           Referer: SPH_AUTH_PROBE.referer,
+          ...(cookieHeader === null ? {} : { Cookie: cookieHeader }),
         },
       });
     } catch (e) {
-      return done({ ok: false, reason: `创建请求失败: ${e.message || e}` });
+      return done({ ok: false, reason: cookieHeader === null ? `创建请求失败: ${e.message || e}` : "创建候选会话请求失败" });
     }
 
     const timer = setTimeout(() => {
@@ -144,10 +145,31 @@ export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
 
     request.on("error", (e) => {
       clearTimeout(timer);
-      done({ ok: false, reason: `请求失败: ${(e && e.message) || e}` });
+      done({ ok: false, reason: cookieHeader === null ? `请求失败: ${(e && e.message) || e}` : "候选会话请求失败" });
     });
 
     request.write(SPH_AUTH_PROBE.body);
     request.end();
   });
+}
+
+/** 普通状态检查只读 Cookie，不自动修改会话。 */
+export function probeSphSession(partition, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  return probeRequest(partition, timeoutMs);
+}
+
+/** 在原分区/代理下验证候选 Cookie 头，不先改写 Cookie jar，也不打印凭据。 */
+export function probeSphCookieSet(partition, cookies, timeoutMs = DEFAULT_TIMEOUT_MS) {
+  const target = new URL(SPH_AUTH_PROBE.url);
+  const matching = cookies.filter(cookie => {
+    const domain = String(cookie.domain || "").replace(/^\./, "");
+    const hostMatches = cookie.hostOnly ? target.hostname === domain :
+      target.hostname === domain || target.hostname.endsWith("." + domain);
+    const p = cookie.path || "/";
+    const pathMatches = target.pathname === p || (target.pathname.startsWith(p) && (p.endsWith("/") || target.pathname[p.length] === "/"));
+    const exp = cookie.expirationDate == null ? cookie.expires : cookie.expirationDate;
+    return hostMatches && pathMatches && (!(exp > 0) || exp * 1000 > Date.now());
+  });
+  const header = matching.map(cookie => cookie.name + "=" + cookie.value).join("; ");
+  return probeRequest(partition, timeoutMs, header);
 }

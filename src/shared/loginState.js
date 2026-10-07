@@ -110,6 +110,8 @@ export function isSphSessionInvalid(payload) {
 export function isSphSessionValid(payload) {
   if (!payload) return false;
   const code = payload.errCode != null ? payload.errCode : payload.errcode;
+  if (typeof code !== "number" && typeof code !== "string") return false;
+  if (typeof code === "string" && code.trim() === "") return false;
   return Number(code) === 0;
 }
 

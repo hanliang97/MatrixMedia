@@ -177,6 +177,10 @@ assert.strictEqual(isSphSessionInvalid({}), false);
 // 只有 errCode=0 才算明确「有效」
 assert.strictEqual(isSphSessionValid({ errCode: 0 }), true);
 assert.strictEqual(isSphSessionValid({ errcode: 0 }), true);
+assert.strictEqual(isSphSessionValid({ errCode: "0" }), true);
+for (const errcode of [null, false, "", " "]) {
+  assert.strictEqual(isSphSessionValid({ errcode }), false);
+}
 assert.strictEqual(isSphSessionValid({ errCode: 300330 }), false);
 assert.strictEqual(isSphSessionValid({ errCode: 300334 }), false);
 assert.strictEqual(isSphSessionValid(null), false);

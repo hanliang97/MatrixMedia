@@ -21,6 +21,7 @@ import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
+import { runSphChromeLogin } from "../services/cliLogin/sphChromeLogin";
 import { runSingleFilePublish } from "../services/publishVideo";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
@@ -544,6 +545,11 @@ export async function runCliMain(argv = process.argv) {
         force: v.force || false,
       };
       if (v.platform === "视频号") {
+        if (v.browser === "chrome") {
+          const result = await runSphChromeLogin({ partition: v.partition, phone: v.phone, timeoutMs: v.timeoutSec * 1000 });
+          console.log(result.message);
+          return result.exitCode;
+        }
         return await runSphCliLogin(loginOpts);
       }
       return await runDouyinCliLogin(loginOpts);
