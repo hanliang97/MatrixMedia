@@ -1,3 +1,8 @@
+---
+name: ui-ux-pro-max
+description: Comprehensive UI/UX design guide for web and mobile apps — 67 styles, 96 color palettes, 57 font pairings, 99 UX guidelines, 25 chart types across 13 stacks (html-tailwind, React, Next.js, Vue, Svelte, shadcn, SwiftUI, React Native, Flutter, Jetpack Compose). Use when designing, building, reviewing or improving interfaces, generating a design system, choosing colors/fonts, or creating landing pages and dashboards. 支持 UI设计、界面设计、配色方案、字体搭配、设计系统、落地页、仪表盘、设计规范、界面走查等场景。
+---
+
 # ui-ux-pro-max
 
 Comprehensive design guide for web and mobile applications. Contains 67 styles, 96 color palettes, 57 font pairings, 99 UX guidelines, and 25 chart types across 13 technology stacks. Searchable database with priority-based recommendations.
