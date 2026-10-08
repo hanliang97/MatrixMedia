@@ -301,7 +301,7 @@ assert.strictEqual(
   const makeEntityVm = () => ({
     platformEntityOptions: {},
     platformEntitySearched: {},
-    platformEntityQuery: {},
+    platformEntitySeq: {},
     platformEntityLoading: {},
     platformVideoLinks: {},
     $set(obj, k, v) {
@@ -323,11 +323,18 @@ assert.strictEqual(
     getPlatformVideoLinkValue(nodeId) {
       return (this.platformVideoLinks[nodeId] || {}).value || "";
     },
+    nextPlatformEntitySeq(key) {
+      const seq = (Number(this.platformEntitySeq[key]) || 0) + 1;
+      this.$set(this.platformEntitySeq, key, seq);
+      return seq;
+    },
     clearPlatformEntityOptions(row) {
       if (!row) return;
       const key = this.entityOptionsKey(row);
+      this.nextPlatformEntitySeq(key);
       this.$set(this.platformEntityOptions, key, []);
       this.$set(this.platformEntitySearched, key, false);
+      this.$set(this.platformEntityLoading, key, false);
     },
     onEntityValueChange(row, value) {
       const text = String(value == null ? "" : value);
@@ -343,14 +350,14 @@ assert.strictEqual(
         this.clearPlatformEntityOptions(row);
         return;
       }
+      const seq = this.nextPlatformEntitySeq(key);
       this.$set(this.platformEntityLoading, key, true);
-      this.$set(this.platformEntityQuery, key, keyword);
       this.$set(this.platformEntityOptions, key, []);
       const result = await fetchImpl(keyword);
-      if (this.platformEntityQuery[key] !== keyword) return;
+      if (this.platformEntitySeq[key] !== seq) return;
       this.$set(this.platformEntityOptions, key, (result && result.entities) || []);
       this.$set(this.platformEntitySearched, key, true);
-      if (this.platformEntityQuery[key] === keyword) {
+      if (this.platformEntitySeq[key] === seq) {
         this.$set(this.platformEntityLoading, key, false);
       }
     },
@@ -425,6 +432,46 @@ assert.strictEqual(
   evm.platformEntityOptions[KEY] = [{ name: "旧结果" }];
   await evm.searchPlatformEntityOptions(ROW, "新词", async () => ({ ok: false, error: "失败" }));
   assert.strictEqual(evm.platformEntityOptions[KEY].length, 0, "失败时下拉应为空");
+
+  // 清空后在途响应不得复活下拉（review 反馈的竞态）
+  evm = makeEntityVm();
+  let releaseInFlight;
+  const inFlight = evm.searchPlatformEntityOptions(
+    ROW,
+    "泳陷",
+    () => new Promise((r) => { releaseInFlight = () => r({ ok: true, entities: [{ name: "泳陷错恋" }] }); })
+  );
+  await Promise.resolve(); // 让请求进入在途状态
+  evm.clearPlatformEntityOptions(ROW); // 用户点 ×
+  assert.strictEqual(evm.platformEntityOptions[KEY].length, 0, "清空后下拉应为空");
+  releaseInFlight(); // 在途响应此刻才返回
+  await inFlight;
+  assert.strictEqual(
+    evm.platformEntityOptions[KEY].length,
+    0,
+    "清空后到达的在途响应不得复活下拉"
+  );
+  assert.strictEqual(evm.platformEntitySearched[KEY], false, "searched 不应被在途响应置回 true");
+
+  // 清空后重新输入同一个关键词：旧的在途响应仍不得覆盖
+  evm = makeEntityVm();
+  let releaseStale;
+  const stale = evm.searchPlatformEntityOptions(
+    ROW,
+    "泳陷",
+    () => new Promise((r) => { releaseStale = () => r({ ok: true, entities: [{ name: "旧响应" }] }); })
+  );
+  await Promise.resolve();
+  evm.clearPlatformEntityOptions(ROW);
+  const fresh = evm.searchPlatformEntityOptions(ROW, "泳陷", okFetch(["新响应"]));
+  await fresh;
+  releaseStale();
+  await stale;
+  assert.deepStrictEqual(
+    evm.platformEntityOptions[KEY].map((item) => item.name),
+    ["新响应"],
+    "清空后重输同一关键词，旧响应仍须被序号令牌拦下"
+  );
 
   console.log("test-sph-entity-options passed");
 })().catch((error) => {

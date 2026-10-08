@@ -639,10 +639,11 @@ export default {
       // 短剧/剧集搜索下拉：key 为 `${nodeId}:${linkType}`
       // options  —— 服务端返回的搜索结果（下拉渲染内容，随每次搜索整体替换）
       // searched —— 是否已搜过（用于区分「还没搜」和「搜了没结果」的提示文案）
-      // query    —— 最近一次请求的关键词（用于丢弃乱序返回的过期结果）
+      // seq      —— 请求序号令牌（自增；用于丢弃乱序返回的过期结果，
+      //              清空时也自增以作废在途请求）
       platformEntityOptions: {},
       platformEntitySearched: {},
-      platformEntityQuery: {},
+      platformEntitySeq: {},
       platformEntityLoading: {},
       checkedPlatformIds: [],
       checkAllPlatforms: false,
@@ -984,7 +985,7 @@ export default {
       this.platformProductLoading = {};
       this.platformEntitySearched = {};
       this.platformEntityOptions = {};
-      this.platformEntityQuery = {};
+      this.platformEntitySeq = {};
       this.platformEntityLoading = {};
     },
     getPlatformVideoLinkOptions(platform) {
@@ -1083,19 +1084,19 @@ export default {
         this.clearPlatformEntityOptions(row);
         return;
       }
-      // 不拦并发：输入过程中会有多次搜索，靠下面的关键词令牌丢弃过期结果，
+      // 不拦并发：输入过程中会有多次搜索，靠自增序号丢弃过期结果，
       // 否则慢请求会卡住后续输入（「输入即搜」会变成「打字没反应」）
+      const seq = this.nextPlatformEntitySeq(key);
       const { channel, label, partition } = this.platformEntityRequestInfo(row);
       this.$set(this.platformEntityLoading, key, true);
-      this.$set(this.platformEntityQuery, key, keyword);
       this.$set(this.platformEntityOptions, key, []);
       try {
         const result = await ipcRenderer.invoke(channel, {
           partition,
           queryString: keyword,
         });
-        // 期间用户又改了输入：本次结果已过期，丢弃（防乱序覆盖）
-        if (this.platformEntityQuery[key] !== keyword) return;
+        // 期间用户又改了输入或点了清空：本次结果已过期，丢弃
+        if (this.platformEntitySeq[key] !== seq) return;
         if (!result || result.ok !== true) {
           this.$message.warning((result && result.error) || `搜索${label}失败`);
           return;
@@ -1103,16 +1104,26 @@ export default {
         this.$set(this.platformEntityOptions, key, result.entities || []);
         this.$set(this.platformEntitySearched, key, true);
       } catch (e) {
-        if (this.platformEntityQuery[key] !== keyword) return;
+        if (this.platformEntitySeq[key] !== seq) return;
         this.$message.error(
           `搜索${label}失败：` + (e && e.message ? e.message : e)
         );
       } finally {
         // 只有仍是最新请求时才收掉 loading
-        if (this.platformEntityQuery[key] === keyword) {
+        if (this.platformEntitySeq[key] === seq) {
           this.$set(this.platformEntityLoading, key, false);
         }
       }
+    },
+    /**
+     * 取下一个请求序号（同时作废该 key 上所有在途请求）。
+     * 用自增序号而不是关键词做令牌：清空后再输入同一个词时，
+     * 关键词会相同、序号不会，过期响应才不会被误认成最新结果。
+     */
+    nextPlatformEntitySeq(key) {
+      const seq = (Number(this.platformEntitySeq[key]) || 0) + 1;
+      this.$set(this.platformEntitySeq, key, seq);
+      return seq;
     },
     /** 回车：立即触发搜索（不选中；选中只能由用户点选完成） */
     onEntitySearchEnter(row, event) {
@@ -1122,12 +1133,15 @@ export default {
     /**
      * 清掉某行的搜索下拉结果与「已搜过」标记。
      * 用于：点 clearable 的 ×、切换挂载类型、以及输入被删空。
+     * 必须同时作废在途请求（自增序号），否则清空后旧响应返回会把下拉复活。
      */
     clearPlatformEntityOptions(row) {
       if (!row) return;
       const key = this.entityOptionsKey(row);
+      this.nextPlatformEntitySeq(key);
       this.$set(this.platformEntityOptions, key, []);
       this.$set(this.platformEntitySearched, key, false);
+      this.$set(this.platformEntityLoading, key, false);
     },
     /**
      * el-select 的 value 变化。
@@ -1151,14 +1165,13 @@ export default {
      */
     clearPlatformEntityCache(row, type) {
       const key = `${row.id}:${type}`;
+      // 先自增序号作废在途请求，再清数据；与 clearPlatformEntityOptions 行为一致
+      this.nextPlatformEntitySeq(key);
       if (this.platformEntityOptions[key] !== undefined) {
         this.$delete(this.platformEntityOptions, key);
       }
       if (this.platformEntitySearched[key] !== undefined) {
         this.$delete(this.platformEntitySearched, key);
-      }
-      if (this.platformEntityQuery[key] !== undefined) {
-        this.$delete(this.platformEntityQuery, key);
       }
       if (this.platformEntityLoading[key] !== undefined) {
         this.$delete(this.platformEntityLoading, key);
