@@ -323,35 +323,44 @@
                   />
                 </template>
                 <template v-else-if="platformVideoLinkHasEntityList(row)">
+                  <!-- 服务端关键词搜索下拉：
+                       · 打开时下拉为空、不请求（没有「首开加载中」）
+                       · 输入即带 queryString 请求平台搜索接口（element-ui remote 模式
+                         每次输入防抖后调用 remote-method）
+                       · 下拉只渲染服务端返回的结果，整体替换不累加
+                       · 点选某一项才写入值；回车只触发搜索不选中
+                       · 清空（点 × 或删空输入）必须同时清掉下拉结果，
+                         否则会残留上一次的候选
+                       刻意不设 default-first-option：它的回车会自动选中第一项。
+                       刻意不加 allow-create：它会把输入文本变成可选项（下拉里出现输入框）。 -->
                   <el-select
                     :value="getPlatformVideoLinkValue(row.id)"
                     size="mini"
                     filterable
+                    remote
                     clearable
-                    allow-create
-                    default-first-option
+                    :remote-method="(q) => searchPlatformEntityOptions(row, q)"
+                    :no-data-text="platformEntityNoDataText(row)"
                     class="attrs-product-select"
-                    :placeholder="platformVideoLinkPlaceholder(row)"
+                    :placeholder="platformVideoLinkSearchPlaceholder(row)"
                     :loading="!!platformEntityLoading[entityOptionsKey(row)]"
-                    @visible-change="
-                      (open) => open && loadPlatformEntityOptions(row)
-                    "
-                    @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
+                    @visible-change="(open) => handleEntityDropdownToggle(row, open)"
+                    @input="onEntityValueChange(row, $event)"
+                    @clear="clearPlatformEntityOptions(row)"
+                    @keydown.native.enter.prevent="onEntitySearchEnter(row, $event)"
                   >
                     <el-option
                       v-for="item in getPlatformEntityOptions(row)"
                       :key="item.name"
-                      :label="entityOptionLabel(item)"
+                      :label="item.name"
                       :value="item.name"
-                    />
+                    >
+                      <span>{{ item.name }}</span>
+                      <span v-if="item.subTitle" class="attrs-entity-sub">{{
+                        item.subTitle
+                      }}</span>
+                    </el-option>
                   </el-select>
-                  <el-button
-                    type="text"
-                    size="mini"
-                    :loading="!!platformEntityLoading[entityOptionsKey(row)]"
-                    @click="loadPlatformEntityOptions(row, true)"
-                    >刷新</el-button
-                  >
                 </template>
                 <el-input
                   v-else
@@ -627,8 +636,14 @@ export default {
       platformVideoLinks: {},
       platformProductOptions: {},
       platformProductLoading: {},
-      // 短剧/剧集可选实体列表：key 为 `${nodeId}:${linkType}`，按账号+类型缓存
+      // 短剧/剧集搜索下拉：key 为 `${nodeId}:${linkType}`
+      // options  —— 服务端返回的搜索结果（下拉渲染内容，随每次搜索整体替换）
+      // searched —— 是否已搜过（用于区分「还没搜」和「搜了没结果」的提示文案）
+      // seq      —— 请求序号令牌（自增；用于丢弃乱序返回的过期结果，
+      //              清空时也自增以作废在途请求）
       platformEntityOptions: {},
+      platformEntitySearched: {},
+      platformEntitySeq: {},
       platformEntityLoading: {},
       checkedPlatformIds: [],
       checkAllPlatforms: false,
@@ -968,7 +983,9 @@ export default {
       this.platformVideoLinks = {};
       this.platformProductOptions = {};
       this.platformProductLoading = {};
+      this.platformEntitySearched = {};
       this.platformEntityOptions = {};
+      this.platformEntitySeq = {};
       this.platformEntityLoading = {};
     },
     getPlatformVideoLinkOptions(platform) {
@@ -998,16 +1015,17 @@ export default {
       });
     },
     onAttrsLinkTypeChange(row, type) {
+      this.clearPlatformEntityCache(row, type);
       this.setPlatformVideoLinkType(row.id, row.pt, type);
       if (String(type) === "product") {
         this.loadPlatformWindowProducts(row);
-      } else if (this.platformVideoLinkHasEntityList(row)) {
-        this.loadPlatformEntityOptions(row);
       }
+      // 短剧/剧集：切换后下拉回到空，等用户重新输入回车搜索
     },
     /**
-     * 短剧/剧集走「列表选择 + 可手输」入口：平台接口空关键词即返回全量分页列表，
-     * el-select filterable 本地过滤即搜索，allow-create 兜底手动输入（平台按名称匹配）。
+     * 短剧/剧集走「输入即搜 + 列表选择」入口：
+     * 打开下拉先铺全量目录，输入即时本地过滤，下拉只渲染返回的剧名；
+     * 不提供手输兜底（平台按名称匹配，选中项即名称）。
      */
     platformVideoLinkHasEntityList(data) {
       const type = this.getPlatformVideoLinkType(data.id, data.pt);
@@ -1022,46 +1040,141 @@ export default {
     getPlatformEntityOptions(data) {
       return this.platformEntityOptions[this.entityOptionsKey(data)] || [];
     },
-    entityOptionLabel(item) {
-      const title = String((item && item.title) || (item && item.name) || "");
-      const sub = String((item && item.subTitle) || "");
-      return sub ? `${title}（${sub}）` : title;
+    platformVideoLinkSearchPlaceholder(data) {
+      const type = this.getPlatformVideoLinkType(data.id, data.pt);
+      const label = type === VIDEO_LINK_TYPES.SPH_SERIES ? "剧集" : "短剧";
+      return `输入${label}名称搜索`;
     },
-    async loadPlatformEntityOptions(row, force = false) {
+    platformEntityNoDataText(data) {
+      const type = this.getPlatformVideoLinkType(data.id, data.pt);
+      const label = type === VIDEO_LINK_TYPES.SPH_SERIES ? "剧集" : "短剧";
+      const key = this.entityOptionsKey(data);
+      if (this.platformEntityLoading[key]) return "搜索中…";
+      if (!this.platformEntitySearched[key]) return `输入${label}名称搜索`;
+      return "无匹配结果";
+    },
+    /**
+     * 打开下拉：不做任何请求。
+     * 刻意不预热——用户没输入关键词时不该看到加载态，
+     * 首开空下拉 + 「输入名称搜索」提示才是正确状态。
+     */
+    handleEntityDropdownToggle(row, open) {
+      if (open) return;
+    },
+    platformEntityRequestInfo(row) {
+      const type = this.getPlatformVideoLinkType(row.id, row.pt);
+      const isSeries = type === VIDEO_LINK_TYPES.SPH_SERIES;
+      return {
+        channel: isSeries ? "sph:list-series" : "sph:list-dramas",
+        label: isSeries ? "剧集" : "短剧",
+        partition: "persist:" + row.phone.split("-")[0] + row.pt,
+      };
+    },
+    /**
+     * 服务端关键词搜索：输入原样作为 queryString 交给平台接口，
+     * 下拉只渲染服务端返回的结果（整体替换，不累加）。
+     * 输入为空则清空下拉且不发请求。
+     */
+    async searchPlatformEntityOptions(row, query) {
       if (!row || !platformSupportsVideoLink(row.pt)) return;
       if (!this.platformVideoLinkHasEntityList(row)) return;
       const key = this.entityOptionsKey(row);
-      if (
-        !force &&
-        Array.isArray(this.platformEntityOptions[key]) &&
-        this.platformEntityOptions[key].length
-      ) {
+      const keyword = String(query == null ? "" : query).trim();
+      if (!keyword) {
+        this.clearPlatformEntityOptions(row);
         return;
       }
-      if (this.platformEntityLoading[key]) return;
-      const type = this.getPlatformVideoLinkType(row.id, row.pt);
-      const isSeries = type === VIDEO_LINK_TYPES.SPH_SERIES;
-      const channel = isSeries ? "sph:list-series" : "sph:list-dramas";
-      const label = isSeries ? "剧集" : "短剧";
-      const partition = "persist:" + row.phone.split("-")[0] + row.pt;
+      // 不拦并发：输入过程中会有多次搜索，靠自增序号丢弃过期结果，
+      // 否则慢请求会卡住后续输入（「输入即搜」会变成「打字没反应」）
+      const seq = this.nextPlatformEntitySeq(key);
+      const { channel, label, partition } = this.platformEntityRequestInfo(row);
       this.$set(this.platformEntityLoading, key, true);
+      this.$set(this.platformEntityOptions, key, []);
       try {
-        const result = await ipcRenderer.invoke(channel, { partition });
+        const result = await ipcRenderer.invoke(channel, {
+          partition,
+          queryString: keyword,
+        });
+        // 期间用户又改了输入或点了清空：本次结果已过期，丢弃
+        if (this.platformEntitySeq[key] !== seq) return;
         if (!result || result.ok !== true) {
-          this.$message.warning((result && result.error) || `拉取${label}列表失败`);
-          this.$set(this.platformEntityOptions, key, []);
+          this.$message.warning((result && result.error) || `搜索${label}失败`);
           return;
         }
         this.$set(this.platformEntityOptions, key, result.entities || []);
-        if (!(result.entities || []).length) {
-          this.$message.info(`暂无可挂载${label}，可直接输入${label}名称`);
-        }
+        this.$set(this.platformEntitySearched, key, true);
       } catch (e) {
+        if (this.platformEntitySeq[key] !== seq) return;
         this.$message.error(
-          `拉取${label}列表失败：` + (e && e.message ? e.message : e)
+          `搜索${label}失败：` + (e && e.message ? e.message : e)
         );
       } finally {
-        this.$set(this.platformEntityLoading, key, false);
+        // 只有仍是最新请求时才收掉 loading
+        if (this.platformEntitySeq[key] === seq) {
+          this.$set(this.platformEntityLoading, key, false);
+        }
+      }
+    },
+    /**
+     * 取下一个请求序号（同时作废该 key 上所有在途请求）。
+     * 用自增序号而不是关键词做令牌：清空后再输入同一个词时，
+     * 关键词会相同、序号不会，过期响应才不会被误认成最新结果。
+     */
+    nextPlatformEntitySeq(key) {
+      const seq = (Number(this.platformEntitySeq[key]) || 0) + 1;
+      this.$set(this.platformEntitySeq, key, seq);
+      return seq;
+    },
+    /** 回车：立即触发搜索（不选中；选中只能由用户点选完成） */
+    onEntitySearchEnter(row, event) {
+      const q = (event && event.target && event.target.value) || "";
+      this.searchPlatformEntityOptions(row, q);
+    },
+    /**
+     * 清掉某行的搜索下拉结果与「已搜过」标记。
+     * 用于：点 clearable 的 ×、切换挂载类型、以及输入被删空。
+     * 必须同时作废在途请求（自增序号），否则清空后旧响应返回会把下拉复活。
+     */
+    clearPlatformEntityOptions(row) {
+      if (!row) return;
+      const key = this.entityOptionsKey(row);
+      this.nextPlatformEntitySeq(key);
+      this.$set(this.platformEntityOptions, key, []);
+      this.$set(this.platformEntitySearched, key, false);
+      this.$set(this.platformEntityLoading, key, false);
+    },
+    /**
+     * el-select 的 value 变化。
+     *
+     * @input 有两条来源，必须区分：
+     *   1) 用户点选候选项 → 值是剧名，此时**要保留**下拉（便于确认选中的是哪一条）
+     *   2) clearable 的 × / 输入被删空 → 值为空，此时**要清掉**下拉，
+     *      否则会残留上一次搜索的候选
+     * 只按「值为空」判断即可覆盖两种清空路径。
+     */
+    onEntityValueChange(row, value) {
+      const text = String(value == null ? "" : value);
+      this.setPlatformVideoLinkValue(row.id, row.pt, text);
+      if (!text.trim()) {
+        this.clearPlatformEntityOptions(row);
+      }
+    },
+    /**
+     * 切换挂载类型时清掉目标类型的缓存，避免沿用上一次（可能是别的账号/别的类型）
+     * 的旧列表；短剧与剧集共用同一下拉，不清会串数据。
+     */
+    clearPlatformEntityCache(row, type) {
+      const key = `${row.id}:${type}`;
+      // 先自增序号作废在途请求，再清数据；与 clearPlatformEntityOptions 行为一致
+      this.nextPlatformEntitySeq(key);
+      if (this.platformEntityOptions[key] !== undefined) {
+        this.$delete(this.platformEntityOptions, key);
+      }
+      if (this.platformEntitySearched[key] !== undefined) {
+        this.$delete(this.platformEntitySearched, key);
+      }
+      if (this.platformEntityLoading[key] !== undefined) {
+        this.$delete(this.platformEntityLoading, key);
       }
     },
     getPlatformVideoLinkTypeInfo(data) {
@@ -1370,6 +1483,7 @@ export default {
             if (this.getPlatformVideoLinkType(node.id, node.pt) === "product") {
               this.loadPlatformWindowProducts(node);
             }
+            // 短剧/剧集不预取：初始下拉为空，等用户输入回车再搜索
           });
       });
     },
@@ -2290,6 +2404,11 @@ export default {
 }
 .attrs-product-select {
   width: 220px;
+}
+.attrs-entity-sub {
+  margin-left: 8px;
+  color: #909399;
+  font-size: 12px;
 }
 .attrs-product-id {
   width: 160px;

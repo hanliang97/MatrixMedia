@@ -25,24 +25,49 @@
 
 ## 列表接口（GUI 下拉数据源）
 
-GUI 的短剧/剧集录入是「下拉列表 + 可手输」：打开下拉即拉取**全量**可选实体并默认展开，输入即本地过滤搜索；列表里没有的（或拉取失败时）可直接键入名称，`allow-create` 兜底（平台本来就按名称匹配，与 CLI/HTTP 直传名称行为一致）。
+GUI 的短剧/剧集录入是**服务端关键词搜索下拉**：下拉初始为空且不发请求；用户输入时（element-ui `remote` 模式防抖 300ms）把输入原样作为 `queryString` 交给平台接口，下拉只渲染服务端返回的结果，整体替换不累加；点选某项才写入值。刻意不加 `allow-create`（它会让下拉出现输入框）与 `default-first-option`（它会让回车直接选中第一项）。
 
 - 主进程服务：`src/main/services/sphEntityOptions.js`（会话校验 + cookie + axios 直调，同 `sphWindowProducts.js` 模式）
 - 归一化与分页编排：`src/shared/sphEntityOptions.js`（无 electron 依赖，可单测）
-- IPC：`sph:list-dramas` / `sph:list-series`（入参 `{ partition }`，返回 `{ ok, entities: [{ name, title, subTitle, cover, raw }] }`）
-- GUI：`LocalVideoPublish.vue` 的 `loadPlatformEntityOptions`，按 `nodeId:linkType` 缓存，「刷新」按钮强制重拉
+- IPC：`sph:list-dramas` / `sph:list-series`（入参 `{ partition, queryString }`，返回 `{ ok, entities: [{ name, title, subTitle, cover, raw }] }`）
+- GUI：`LocalVideoPublish.vue` 的 `searchPlatformEntityOptions`，按 `nodeId:linkType` 缓存结果，切换挂载类型时清缓存
 
-| 实体 | 接口 | 状态 |
-| ---- | ---- | ---- |
-| 小程序短剧 | `POST /micro/content/cgi-bin/mmfinderassistant-bin/post/search_drama_component` | ✅ 已抓包验证 |
-| 视频号剧集 | `POST /micro/content/cgi-bin/mmfinderassistant-bin/post/search_series_component` | ⚠️ 按短剧同族路径**推测**，未实测；报错时抓包修正 `ENTITY_LIST_CONFIG.series.path` 一个常量即可 |
+| 实体 | 接口 | 关键参数 | 状态 |
+| ---- | ---- | -------- | ---- |
+| 小程序短剧 | `POST .../post/search_drama_component` | 不带 `sceneType` | ✅ 实测 totalCount=289 |
+| 视频号剧集 | `POST .../post/search_drama_component`（**同一接口**） | `sceneType=3` | ✅ 实测 totalCount=281 |
+
+> **剧集没有独立接口**：早先按同族路径推测的 `search_series_component` **不存在**（实测返回 `Cannot POST`）。
+> 发布页 JS 的 `loadList` 逻辑为
+> `searchKey ? searchDramaComponent({queryString: searchKey, currentPage, pageSize, sceneType}) : searchDramaComponent({currentPage, pageSize, sceneType})`，
+> 其中 `sceneType` 取 `kSceneType_SelfOperatedNativeDrama = 3`（仅 `linkType === nativeDrama` 时带）。
+> 同页 `linkType` 枚举与中文标签：`drama=12 → "短剧"`、`finderDrama=8 → "剧集"`、`nativeDrama=13 → "视频号剧集"`。
 
 接口行为要点：
 
-- **空关键词即返回默认列表**（发布页弹窗必须输入才出候选是页面交互，不是接口限制）；
-- `currentPage` / `pageSize` 分页，服务端循环拉全（默认 20/页、上限 10 页，满页无新增即停，防平台忽略页码死循环）；
+- **`queryString` 是服务端搜索关键词**（从发布页 JS 挖出并实测）：无关键词返回默认列表（totalCount=289），带关键词则精确收窄（`queryString=全家中毒` → totalCount=1）。传空串等价于不带关键词。
+- `rawKeyBuff` 是**游标**（响应 `data.lastBuff` 回填），**不是关键词**，保持空串。
+- `currentPage` / `pageSize` 分页；搜索态命中通常个位数，默认 20/页、上限 3 页。
+- 发布页自身用 `pageSize=5`；实测 `pageSize` 不影响搜索结果集，与 `sceneType` 无关。
+- **部分关键词平台不返回**：实测短剧搜「我」「的」返回 0 条，但目录里含这些字的条目有 147 / 69 条；同一关键词在剧集（`sceneType=3`）下正常返回（145 条）。属平台侧对高频字的处理，非本地缺陷，代码按「服务端返回什么就显示什么」处理即可。
 - 请求体 `_log_finder_id` 置空即可（同族 `post_list` 已验证 bare cookie 可行，无需 `X-WECHAT-UIN` / `_aid`）；
 - 信封 `errCode != 0` 视为失败并透传 `errMsg`；返回了行但字段认不出时，主进程日志会打印 `[sph][entity-list] ... 首行键: ...` 便于对齐候选表。
+
+下拉交互契约（`LocalVideoPublish.vue`，改动时勿破坏）：
+
+| 场景 | 期望行为 |
+| ---- | -------- |
+| 打开下拉 | 不发请求、不显示加载态，下拉为空 |
+| 输入关键词 | 防抖后带 `queryString` 请求，结果**整体替换**（不累加） |
+| 点候选项 | 写入值，**保留下拉**（便于确认选中项） |
+| 点 clearable 的 × / 删空输入 | 值置空、清掉下拉结果，**并作废在途请求** |
+| 切换挂载类型 | 清掉该类型的下拉结果、searched 标记，并作废在途请求 |
+| 连续输入（乱序返回） | 以最后一次输入为准，过期结果丢弃 |
+
+> **在途请求用自增序号令牌（`platformEntitySeq`）作废**，不要退回用关键词比较：
+> 清空后若用户重新输入同一个词，关键词相同而序号不同，只有序号能正确拦下旧响应。
+> 清空路径（`clearPlatformEntityOptions`）与切换类型路径（`clearPlatformEntityCache`）
+> 都必须先自增序号再清数据，否则「清空后旧响应返回」会把下拉复活。
 
 ## 平台页面行为
 
