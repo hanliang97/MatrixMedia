@@ -15,25 +15,47 @@
  * 下面的候选表（每项保留 raw，便于对照真实响应排查）。
  */
 
-/** 两类实体的接口配置：平台改版 / 路径修正只需改这里 */
+/**
+ * 两类实体的接口配置。
+ *
+ * 抓包结论（读发布页 JS + 实测）：短剧与剧集**共用同一接口**
+ *   /micro/content/cgi-bin/mmfinderassistant-bin/post/search_drama_component
+ * 靠 sceneType 区分：
+ *   短剧（小程序短剧）  → 不带 sceneType（实测 totalCount=289，首页「落落判决/泳陷错恋」）
+ *   剧集（视频号剧集）  → sceneType=3（kSceneType_SelfOperatedNativeDrama）
+ *                        实测 totalCount=281，首页「我赚千万没敢说…/八零俏媳妇…」
+ * 原先推测的 search_series_component 路径**不存在**（实测 Cannot POST）。
+ *
+ * 发布页 JS 里的 linkType 枚举与中文标签对应关系：
+ *   drama=12 → "短剧"、finderDrama=8 → "剧集"、nativeDrama=13 → "视频号剧集"
+ */
 export const ENTITY_LIST_CONFIG = {
   drama: {
-    // 已抓包验证（发布页「选择需要关联的短剧」弹窗数据源）
     path: "/micro/content/cgi-bin/mmfinderassistant-bin/post/search_drama_component",
     label: "短剧",
     ipcChannel: "sph:list-dramas",
+    // 小程序短剧：发布页不带 sceneType
+    sceneType: undefined,
   },
   series: {
-    // 按短剧同族路径推测，未实测；若报错按 docs/sph-links.md 排查清单抓包后改这里
-    path: "/micro/content/cgi-bin/mmfinderassistant-bin/post/search_series_component",
+    path: "/micro/content/cgi-bin/mmfinderassistant-bin/post/search_drama_component",
     label: "剧集",
     ipcChannel: "sph:list-series",
+    // 视频号剧集：kSceneType_SelfOperatedNativeDrama = 3
+    sceneType: 3,
   },
 };
 
+/**
+ * 单次请求条数。真实发布页短剧弹窗用的就是小页长（5~12），
+ * 搜索态下服务端返回的是匹配结果数，页长不需要大。
+ */
 export const ENTITY_LIST_DEFAULT_PAGE_SIZE = 20;
-/** 分页上限保护：20 × 10 = 200 条，覆盖绝大多数账号 */
-export const ENTITY_LIST_DEFAULT_MAX_PAGES = 10;
+/**
+ * 搜索态只取首页即可：queryString 由服务端匹配，命中通常个位数。
+ * 保留少量翻页能力以防关键词过宽（如「我」命中几十条）。
+ */
+export const ENTITY_LIST_DEFAULT_MAX_PAGES = 3;
 
 /** 从响应里挑出实体行数组（兼容 data 包裹与根级平铺） */
 export function pickEntityRows(payload) {
@@ -139,22 +161,44 @@ export function normalizeSphEntityOptions(payload) {
 
 /**
  * 是否继续拉下一页（纯函数）。
- * 停止条件：显式 continueFlag 为假 / 本页为空 / 本页不满页。
+ *
+ * 停止条件只有两条：本页为空 / 显式 continueFlag 为假。
+ * **不再**用「本页不满 pageSize」判定到底——平台分页长度参差不齐，
+ * 实测 100/98/86/19/7 条混排，用不满页判定会漏掉后面的内容
+ * （真实目录 289 条时曾只拉到 179 条）。
  */
 export function shouldFetchNextEntityPage(payload, pageRowCount, pageSize) {
   if (!Number.isFinite(pageRowCount) || pageRowCount <= 0) return false;
-  if (pageRowCount < pageSize) return false;
   const root = payload && typeof payload === "object" ? payload : {};
   const data = root.data && typeof root.data === "object" ? root.data : root;
   const flag = data.continueFlag != null ? data.continueFlag : root.continueFlag;
   if (flag === false || flag === 0 || flag === "0") return false;
-  if (flag === true || flag === 1 || flag === "1") return true;
-  // 无显式标记且满页：按还有下一页处理（另有 maxPages 与"无新增"双保险）
   return true;
 }
 
-/** 请求体构造（与发布页抓包一致；_log_finder_id 置空，同族 post_list 已验证可行） */
-export function buildSphEntityPageBody(currentPage, pageSize, now) {
+/** 平台自报的目录总数（无此字段时返回 0），用于精确收口 */
+export function pickEntityTotalCount(payload) {
+  const root = payload && typeof payload === "object" ? payload : {};
+  const data = root.data && typeof root.data === "object" ? root.data : {};
+  const raw = data.totalCount != null ? data.totalCount : root.totalCount;
+  const total = Number(raw);
+  return Number.isFinite(total) && total > 0 ? total : 0;
+}
+
+/**
+ * 请求体构造。
+ *
+ * queryString 是**服务端搜索关键词**（从发布页 JS 的 loadList 挖出并实测验证）：
+ * 真实页面逻辑为
+ *   searchKey ? searchDramaComponent({ queryString: searchKey, currentPage, pageSize, sceneType })
+ *             : searchDramaComponent({ currentPage, pageSize, sceneType })
+ * 实测 queryString="全家中毒" → totalCount=1 且精确命中；传空串等价于不带关键词。
+ *
+ * rawKeyBuff 是**游标**（响应 data.lastBuff 回填），不是关键词，保持空串。
+ */
+export function buildSphEntityPageBody(currentPage, pageSize, now, queryString, sceneType) {
+  const keyword = String(queryString == null ? "" : queryString).trim();
+  const scene = Number(sceneType);
   return {
     currentPage,
     pageSize,
@@ -165,6 +209,8 @@ export function buildSphEntityPageBody(currentPage, pageSize, now) {
     pluginSessionId: null,
     scene: 7,
     reqScene: 7,
+    ...(keyword ? { queryString: keyword } : {}),
+    ...(Number.isFinite(scene) && scene >= 0 ? { sceneType: scene } : {}),
   };
 }
 
@@ -197,13 +243,16 @@ export async function collectSphEntityOptions(
   const seen = new Set();
   let unknownRowKeys = [];
   let pages = 0;
+  let totalCount = 0;
 
   for (let currentPage = 1; currentPage <= cap; currentPage++) {
     const payload = await fetchPage(currentPage, size);
     pages += 1;
 
     const envelopeError = sphEntityEnvelopeError(payload);
-    if (envelopeError) return { entities, pages, envelopeError, unknownRowKeys };
+    if (envelopeError) return { entities, pages, totalCount, envelopeError, unknownRowKeys };
+
+    if (!totalCount) totalCount = pickEntityTotalCount(payload);
 
     const pageOptions = normalizeSphEntityOptions(payload);
     const pageRowCount = pickEntityRows(payload).length;
@@ -222,8 +271,11 @@ export async function collectSphEntityOptions(
     }
 
     if (!shouldFetchNextEntityPage(payload, pageRowCount, size)) break;
-    if (added === 0) break; // 满页但无新增：平台忽略页码循环返回，防死循环
+    // 已收满平台自报总数：精确收口
+    if (totalCount > 0 && entities.length >= totalCount) break;
+    // 满页但无新增：平台忽略页码循环返回，防死循环
+    if (added === 0 && entities.length > 0) break;
   }
 
-  return { entities, pages, envelopeError: "", unknownRowKeys };
+  return { entities, pages, totalCount, envelopeError: "", unknownRowKeys };
 }

@@ -75,16 +75,17 @@ async function requestEntityPage(partition, url, body, sessionFactory) {
 }
 
 /**
- * 拉取可挂载实体全量列表（自动翻页）。
+ * 搜索可挂载实体（服务端关键词搜索）。
  *
  * @param {string} partition 视频号账号 partition
  * @param {"drama"|"series"} kind
+ * @param {{queryString?: string}} options 关键词（空则不筛，返回默认列表）
  * @returns {Promise<{ok: boolean, entities?: Array, error?: string}>}
  */
 export async function listSphEntityOptions(
   partition,
   kind,
-  { fetchPageImpl, sessionFactory, hasSessionImpl, pageSize, maxPages } = {}
+  { fetchPageImpl, sessionFactory, hasSessionImpl, pageSize, maxPages, queryString } = {}
 ) {
   const config = ENTITY_LIST_CONFIG[kind];
   if (!config) {
@@ -116,7 +117,13 @@ export async function listSphEntityOptions(
           requestEntityPage(
             part,
             url,
-            buildSphEntityPageBody(currentPage, size),
+            buildSphEntityPageBody(
+              currentPage,
+              size,
+              undefined,
+              queryString,
+              config.sceneType
+            ),
             sessionFactory
           );
 
@@ -139,7 +146,11 @@ export async function listSphEntityOptions(
       );
     }
     console.log(
-      `[sph][entity-list] ${config.label}列表拉取完成，共 ${result.entities.length} 条（${result.pages} 页）`
+      `[sph][entity-list] ${config.label}搜索完成，关键词「${
+        String(queryString == null ? "" : queryString).trim() || "(空)"
+      }」共 ${result.entities.length} 条（${result.pages} 页，平台自报总数 ${
+        result.totalCount || "未知"
+      }）`
     );
     return { ok: true, entities: result.entities };
   } catch (error) {
@@ -159,7 +170,9 @@ export function registerSphEntityOptionsIpc(ipcMain) {
   for (const kind of Object.keys(ENTITY_LIST_CONFIG)) {
     const config = ENTITY_LIST_CONFIG[kind];
     ipcMain.handle(config.ipcChannel, async (_event, args = {}) =>
-      listSphEntityOptions(args.partition || args.part || "", kind)
+      listSphEntityOptions(args.partition || args.part || "", kind, {
+        queryString: args.queryString || args.query || "",
+      })
     );
   }
 }
