@@ -511,13 +511,14 @@ export async function runCliMain(argv = process.argv) {
   const sub = getCliSubArgv(argv);
   if (!sub || sub.length === 0) {
     console.error(
-      "用法: <应用> cli <publish|publish-article|login|accounts|history> ..."
+      "用法: <应用> cli <publish|publish-article|login|accounts|history|stats|stats-sync|stats-work> ..."
     );
     console.error("  cli publish --help");
     console.error("  cli publish-article --help");
     console.error("  cli login --help");
     console.error("  cli accounts --help");
     console.error("  cli history --help");
+    console.error("  cli stats --help");
     return 2;
   }
 
@@ -942,6 +943,8 @@ export async function runCliMain(argv = process.argv) {
   }
 
   console.error("未知子命令:", cmd);
-  console.error("支持: publish | publish-article | login | accounts | history");
+  console.error(
+    "支持: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work"
+  );
   return 2;
 }
