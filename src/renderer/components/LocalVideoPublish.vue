@@ -322,6 +322,37 @@
                     @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
                   />
                 </template>
+                <template v-else-if="platformVideoLinkHasEntityList(row)">
+                  <el-select
+                    :value="getPlatformVideoLinkValue(row.id)"
+                    size="mini"
+                    filterable
+                    clearable
+                    allow-create
+                    default-first-option
+                    class="attrs-product-select"
+                    :placeholder="platformVideoLinkPlaceholder(row)"
+                    :loading="!!platformEntityLoading[entityOptionsKey(row)]"
+                    @visible-change="
+                      (open) => open && loadPlatformEntityOptions(row)
+                    "
+                    @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
+                  >
+                    <el-option
+                      v-for="item in getPlatformEntityOptions(row)"
+                      :key="item.name"
+                      :label="entityOptionLabel(item)"
+                      :value="item.name"
+                    />
+                  </el-select>
+                  <el-button
+                    type="text"
+                    size="mini"
+                    :loading="!!platformEntityLoading[entityOptionsKey(row)]"
+                    @click="loadPlatformEntityOptions(row, true)"
+                    >刷新</el-button
+                  >
+                </template>
                 <el-input
                   v-else
                   :value="getPlatformVideoLinkValue(row.id)"
@@ -538,6 +569,7 @@ import {
   platformSupportsVideoLink,
   resolveVideoLinkOption,
   validateVideoLinkValue,
+  VIDEO_LINK_TYPES,
 } from "../../shared/videoLink.js";
 import {
   isBt2SelectAllShortcut,
@@ -595,6 +627,9 @@ export default {
       platformVideoLinks: {},
       platformProductOptions: {},
       platformProductLoading: {},
+      // 短剧/剧集可选实体列表：key 为 `${nodeId}:${linkType}`，按账号+类型缓存
+      platformEntityOptions: {},
+      platformEntityLoading: {},
       checkedPlatformIds: [],
       checkAllPlatforms: false,
       checkAllIndeterminate: false,
@@ -933,6 +968,8 @@ export default {
       this.platformVideoLinks = {};
       this.platformProductOptions = {};
       this.platformProductLoading = {};
+      this.platformEntityOptions = {};
+      this.platformEntityLoading = {};
     },
     getPlatformVideoLinkOptions(platform) {
       return getDisplayableVideoLinkTypes(platform);
@@ -964,6 +1001,67 @@ export default {
       this.setPlatformVideoLinkType(row.id, row.pt, type);
       if (String(type) === "product") {
         this.loadPlatformWindowProducts(row);
+      } else if (this.platformVideoLinkHasEntityList(row)) {
+        this.loadPlatformEntityOptions(row);
+      }
+    },
+    /**
+     * 短剧/剧集走「列表选择 + 可手输」入口：平台接口空关键词即返回全量分页列表，
+     * el-select filterable 本地过滤即搜索，allow-create 兜底手动输入（平台按名称匹配）。
+     */
+    platformVideoLinkHasEntityList(data) {
+      const type = this.getPlatformVideoLinkType(data.id, data.pt);
+      return (
+        type === VIDEO_LINK_TYPES.MINI_DRAMA ||
+        type === VIDEO_LINK_TYPES.SPH_SERIES
+      );
+    },
+    entityOptionsKey(data) {
+      return `${data.id}:${this.getPlatformVideoLinkType(data.id, data.pt)}`;
+    },
+    getPlatformEntityOptions(data) {
+      return this.platformEntityOptions[this.entityOptionsKey(data)] || [];
+    },
+    entityOptionLabel(item) {
+      const title = String((item && item.title) || (item && item.name) || "");
+      const sub = String((item && item.subTitle) || "");
+      return sub ? `${title}（${sub}）` : title;
+    },
+    async loadPlatformEntityOptions(row, force = false) {
+      if (!row || !platformSupportsVideoLink(row.pt)) return;
+      if (!this.platformVideoLinkHasEntityList(row)) return;
+      const key = this.entityOptionsKey(row);
+      if (
+        !force &&
+        Array.isArray(this.platformEntityOptions[key]) &&
+        this.platformEntityOptions[key].length
+      ) {
+        return;
+      }
+      if (this.platformEntityLoading[key]) return;
+      const type = this.getPlatformVideoLinkType(row.id, row.pt);
+      const isSeries = type === VIDEO_LINK_TYPES.SPH_SERIES;
+      const channel = isSeries ? "sph:list-series" : "sph:list-dramas";
+      const label = isSeries ? "剧集" : "短剧";
+      const partition = "persist:" + row.phone.split("-")[0] + row.pt;
+      this.$set(this.platformEntityLoading, key, true);
+      try {
+        const result = await ipcRenderer.invoke(channel, { partition });
+        if (!result || result.ok !== true) {
+          this.$message.warning((result && result.error) || `拉取${label}列表失败`);
+          this.$set(this.platformEntityOptions, key, []);
+          return;
+        }
+        this.$set(this.platformEntityOptions, key, result.entities || []);
+        if (!(result.entities || []).length) {
+          this.$message.info(`暂无可挂载${label}，可直接输入${label}名称`);
+        }
+      } catch (e) {
+        this.$message.error(
+          `拉取${label}列表失败：` + (e && e.message ? e.message : e)
+        );
+      } finally {
+        this.$set(this.platformEntityLoading, key, false);
       }
     },
     getPlatformVideoLinkTypeInfo(data) {

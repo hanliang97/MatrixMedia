@@ -23,6 +23,27 @@
 
 前提：该视频号账号本身要有对应挂载权限（后台能选到「小程序短剧」或「视频号剧集」），否则平台页面不出现该选项。短剧与剧集互斥，一次发布只挂一种。
 
+## 列表接口（GUI 下拉数据源）
+
+GUI 的短剧/剧集录入是「下拉列表 + 可手输」：打开下拉即拉取**全量**可选实体并默认展开，输入即本地过滤搜索；列表里没有的（或拉取失败时）可直接键入名称，`allow-create` 兜底（平台本来就按名称匹配，与 CLI/HTTP 直传名称行为一致）。
+
+- 主进程服务：`src/main/services/sphEntityOptions.js`（会话校验 + cookie + axios 直调，同 `sphWindowProducts.js` 模式）
+- 归一化与分页编排：`src/shared/sphEntityOptions.js`（无 electron 依赖，可单测）
+- IPC：`sph:list-dramas` / `sph:list-series`（入参 `{ partition }`，返回 `{ ok, entities: [{ name, title, subTitle, cover, raw }] }`）
+- GUI：`LocalVideoPublish.vue` 的 `loadPlatformEntityOptions`，按 `nodeId:linkType` 缓存，「刷新」按钮强制重拉
+
+| 实体 | 接口 | 状态 |
+| ---- | ---- | ---- |
+| 小程序短剧 | `POST /micro/content/cgi-bin/mmfinderassistant-bin/post/search_drama_component` | ✅ 已抓包验证 |
+| 视频号剧集 | `POST /micro/content/cgi-bin/mmfinderassistant-bin/post/search_series_component` | ⚠️ 按短剧同族路径**推测**，未实测；报错时抓包修正 `ENTITY_LIST_CONFIG.series.path` 一个常量即可 |
+
+接口行为要点：
+
+- **空关键词即返回默认列表**（发布页弹窗必须输入才出候选是页面交互，不是接口限制）；
+- `currentPage` / `pageSize` 分页，服务端循环拉全（默认 20/页、上限 10 页，满页无新增即停，防平台忽略页码死循环）；
+- 请求体 `_log_finder_id` 置空即可（同族 `post_list` 已验证 bare cookie 可行，无需 `X-WECHAT-UIN` / `_aid`）；
+- 信封 `errCode != 0` 视为失败并透传 `errMsg`；返回了行但字段认不出时，主进程日志会打印 `[sph][entity-list] ... 首行键: ...` 便于对齐候选表。
+
 ## 平台页面行为
 
 以下行为直接决定实现方式，修改相关代码前请先了解：
@@ -64,7 +85,7 @@ HTTP（GUI 启动后）：`sphDramaId` / `sphSeriesId` 两个快捷字段，或 
 
 MCP `publish_video`：`sphDramaId` / `sphSeriesId`，或 `sphLink` 对象同上。
 
-GUI：`视频管理 → 选择视频发布 → 下一步 → 第三方属性`，把下拉从「无」切到「小程序短剧」或「视频号剧集」，填入对应的**剧名**。
+GUI：`视频管理 → 选择视频发布 → 下一步 → 第三方属性`，把下拉从「无」切到「小程序短剧」或「视频号剧集」，从下拉列表选择（默认展开全量、可输入过滤），或直接键入**剧名**。
 
 ## 失败语义
 
@@ -111,6 +132,7 @@ GUI：`视频管理 → 选择视频发布 → 下一步 → 第三方属性`，
 yarn test:sph-video-drama        # 短剧：能力表 / 校验 / CLI / HTTP / MCP 参数 / 路由
 yarn test:sph-video-series       # 剧集：同上
 yarn test:sph-video-product      # 商品路径不回归
+yarn test:sph-entity-options     # 短剧/剧集列表接口：归一化 / 分页合并 / 防死循环
 yarn test:publish-draft-args     # 链接参数、转存草稿语义
 yarn test:sph-creative-statement # 视频标注 + 链接能力表快照
 ```

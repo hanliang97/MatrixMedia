@@ -49,6 +49,7 @@
     "test:sph-video-product": "node scripts/test-sph-video-product.js",
     "test:sph-video-drama": "node scripts/test-sph-video-drama.js",
     "test:sph-video-series": "node scripts/test-sph-video-series.js",
+    "test:sph-entity-options": "node scripts/test-sph-entity-options.js",
     "test:login-state": "node scripts/test-login-state.js",
     "test:history-screenshot-click": "node scripts/test-history-screenshot-click.js",
     "test:puppeteer-nologin-pairing": "node scripts/test-puppeteer-nologin-pairing.js",

@@ -14,6 +14,7 @@ import { createPublishHistoryExportHandler } from "./publishHistoryExport.js";
 import { registerPuppeteerIpc } from "./puppeteerFile";
 import { registerScheduledPublishIpc } from "./scheduledPublish";
 import { registerSphWindowProductsIpc } from "./sphWindowProducts";
+import { registerSphEntityOptionsIpc } from "./sphEntityOptions";
 import { createLaunchInstallerHandler } from "./launchInstaller";
 import { pickReleaseInstaller } from "./pickReleaseInstaller";
 import { applyAccountProxyForTask } from "./proxyConfig";
@@ -226,6 +227,7 @@ export default {
     registerPuppeteerIpc();
     registerScheduledPublishIpc();
     registerSphWindowProductsIpc(ipcMain);
+    registerSphEntityOptionsIpc(ipcMain);
     // 数据统计：采集（页面上下文 fetch）+ 本地快照读取
     registerDataStatsIpc();
 
