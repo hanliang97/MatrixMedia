@@ -207,3 +207,26 @@ electron . cli publish-article -p juejin --phone 13800138000 -t "文章标题" -
 - `yarn build:mac`：macOS dmg（x64 + arm64）
 - `yarn build:linux`：Linux AppImage
 - `yarn build:all`：Windows + Linux + macOS
+
+## 数据统计命令（stats / stats-sync / stats-work）
+
+基于平台页面登录态采集账号数据（粉丝/播放/点赞/评论/收藏 + 单作品明细），支持平台：抖音、视频号、哔哩哔哩、百家号、头条、快手、小红书（番茄视频、掘金无数据接口）。
+
+| 命令 | 说明 |
+| --- | --- |
+| `cli stats -p <平台> --phone <分组>` | 读取本地快照中的账号粉丝数据 |
+| `cli stats-sync -p <平台> --phone <分组>` | 主动采集该账号最新数据并写入本地快照 |
+| `cli stats-work -p <平台> --phone <分组> --title <标题>` | 按完整标题查询某个视频的发布数据（含发布时间） |
+
+- 平台参数支持短码：`dy` `sph` `blbl` `bjh` `tt` `ks` `xhs` 或中文名
+- `--phone` 为分组名（与 GUI「媒体平台管理」中的分组一致）
+- 输出 JSON（含 `success` 字段）；`stats-sync` 需该分组此平台已在 GUI 登录
+- 数据存于 `<userData>/data-stats/<分组>/<平台>/`，与 GUI「账号数据」页共享
+
+示例：
+
+```bash
+matrixmedia cli stats -p sph --phone 123
+matrixmedia cli stats-sync -p dy --phone 123
+matrixmedia cli stats-work -p ks --phone 123 --title "你家猫也这样睡？倒挂笼子都不醒"
+```

@@ -20,6 +20,9 @@ description: 矩媒 MatrixMedia 本机 HTTP API：GUI 启动后通过 30088 端�
 | GET  | `/creative-statements` | 返回各平台支持的创作声明选项（对齐 GUI 批量设置） |
 | POST | `/changeData`          | 读写本地 JSON 数据（账号树、发布历史等）          |
 | POST | `/publish`             | 发布视频到单平台或多平台                          |
+| GET  | `/stats`               | 读本地快照中的账号粉丝数据                        |
+| POST | `/stats/sync`          | 主动采集账号最新数据并写入快照                    |
+| GET  | `/stats/work`          | 按完整标题查询单视频发布数据                      |
 
 静态资源：`/public/*` 映射到 `server/public`。
 
@@ -338,4 +341,25 @@ curl -X POST http://127.0.0.1:30088/publish \
     }
   ]
 }
+```
+
+## 数据统计接口（Stats API）
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| GET | `/stats?phone=<分组>&pt=<平台>` | 读本地快照中的账号粉丝数据 |
+| POST | `/stats/sync` | 主动采集：`{"phone":"123","pt":"blbl"}` |
+| GET | `/stats/work?phone=<分组>&pt=<平台>&title=<标题>` | 按完整标题查视频发布数据（含发布时间、互动数据） |
+
+- 平台支持短码（`dy` `sph` `blbl` `bjh` `tt` `ks` `xhs`）或中文名
+- 与 `/changeData` 相同守卫：需 `X-Matrix-Token` 头或 localhost/file Origin
+- `POST /stats/sync` 复用 GUI 登录态采集，返回 `overview`（fans/plays/likes/comments/shares/favorites）与 `workCount`
+- 数据存于本地快照（`<userData>/data-stats/<分组>/<平台>/`）；没有数据时先调 `/stats/sync`
+
+示例：
+
+```bash
+curl -H "Origin: http://localhost:30088" "http://localhost:30088/stats?phone=123&pt=blbl"
+curl -X POST -H "Content-Type: application/json" -H "Origin: http://localhost:30088" \
+  -d '{"phone":"123","pt":"sph"}' http://localhost:30088/stats/sync
 ```

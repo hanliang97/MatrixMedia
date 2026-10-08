@@ -63,6 +63,9 @@ cd mcp && npm install && npm run build
 | `list_history`    | `cli history --json`      | 查询本机发布记录，支持按平台/状态/天数过滤     |
 | `publish_video`   | `cli publish ...`         | 发布视频（最长约 35 分钟，支持草稿和定时发布） |
 | `publish_article` | `cli publish-article ...` | 发布掘金文章（需已登录掘金账号）               |
+| `get_account_stats`  | `cli stats`          | 读账号粉丝数据（本地快照）                     |
+| `sync_account_stats` | `cli stats-sync`     | 主动采集该账号最新数据                         |
+| `get_work_stats`     | `cli stats-work`     | 按完整标题查视频发布数据                       |
 
 ### list_accounts
 
@@ -162,6 +165,36 @@ cd mcp && npm install && npm run build
 | `summary`   | 否     | 摘要                   |
 | `publishAt` | 否     | 定时发布时间           |
 | `show`      | 否     | 是否显示底层浏览器窗口 |
+
+### get_account_stats
+
+读取账号粉丝数据（本地快照）：粉丝/播放/点赞/评论/收藏等。
+
+| 参数       | 必填 | 说明                                                         |
+| ---------- | ---- | ------------------------------------------------------------ |
+| `phone`    | 是   | 分组名（GUI「媒体平台管理」中的分组）                        |
+| `platform` | 是   | `dy` / `sph` / `blbl` / `bjh` / `tt` / `ks` / `xhs`          |
+
+### sync_account_stats
+
+主动采集该账号最新数据并写入本地快照（复用 GUI 登录态，需该分组此平台已登录）。
+
+| 参数       | 必填 | 说明                                                         |
+| ---------- | ---- | ------------------------------------------------------------ |
+| `phone`    | 是   | 分组名                                                       |
+| `platform` | 是   | `dy` / `sph` / `blbl` / `bjh` / `tt` / `ks` / `xhs`          |
+
+### get_work_stats
+
+按完整标题查询某个视频的发布数据（播放/点赞/评论/分享/收藏/涨粉/发布时间），数据来自最近一次 `sync_account_stats` 采集。
+
+| 参数       | 必填 | 说明                                                         |
+| ---------- | ---- | ------------------------------------------------------------ |
+| `phone`    | 是   | 分组名                                                       |
+| `platform` | 是   | `dy` / `sph` / `blbl` / `bjh` / `tt` / `ks` / `xhs`          |
+| `title`    | 是   | 完整视频标题（精确匹配）                                     |
+
+没有数据时先调 `sync_account_stats` 采集，再用 `get_account_stats` / `get_work_stats` 读取。
 
 ## 登录说明
 
