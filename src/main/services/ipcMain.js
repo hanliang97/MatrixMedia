@@ -21,6 +21,8 @@ import { applyAccountProxyForTask } from "./proxyConfig";
 import { SERVER_REQUEST_TOKEN } from "../server/requestGuard";
 import { registerTelemetryPreferenceIpc } from "./telemetryPreferenceIpc.js";
 import { registerDataStatsIpc } from "./dataStats/index.js";
+import { runSphChromeLogin } from "./cliLogin/sphChromeLogin.js";
+import { prepareSphAccountLoginSession } from "./sphLoginSession.js";
 import {
   closeOtherAccountLoginWindows,
   getAccountLoginWindowByPartition,
@@ -254,6 +256,13 @@ export default {
     //
     // 互斥策略：同一时间只允许有一个'账号登录窗'。每次调用都会关掉其它
     // partition 的旧登录窗，避免用户切账号时桌面上堆一排登录窗口。
+    ipcMain.handle("open-sph-chrome-login", async (_event, args) => {
+      const partition = String((args && args.partition) || "");
+      const existingWin = getAccountLoginWindowByPartition(partition);
+      if (existingWin) existingWin.close();
+      return runSphChromeLogin({ partition, phone: args && args.phone });
+    });
+
     ipcMain.handle("open-account-login-window", async (_event, args) => {
       const partition = args && args.partition;
       const url = args && args.url;
@@ -263,20 +272,21 @@ export default {
         return { ok: false, message: "partition/url 必填" };
       }
 
+      let refreshedSession = false;
       try {
-        await applyAccountProxyForTask({
-          partition,
-          phone: args && args.phone,
-          pt: args && args.pt,
-        });
+        if (args.pt === "视频号") {
+          refreshedSession = (await prepareSphAccountLoginSession({ partition, phone: args.phone })).changed;
+        } else {
+          await applyAccountProxyForTask({ partition, phone: args.phone, pt: args.pt });
+        }
       } catch (proxyErr) {
         console.warn(
-          "[open-account-login-window] 应用代理失败:",
+          "[open-account-login-window] 登录准备失败:",
           proxyErr && proxyErr.message
         );
         return {
           ok: false,
-          message: (proxyErr && proxyErr.message) || "代理配置错误",
+          message: (proxyErr && proxyErr.message) || "登录准备失败",
         };
       }
 
@@ -288,6 +298,7 @@ export default {
 
       if (existingWin) {
         try {
+          if (refreshedSession) await existingWin.loadURL(url);
           if (existingWin.isMinimized()) existingWin.restore();
           existingWin.focus();
         } catch (_) {

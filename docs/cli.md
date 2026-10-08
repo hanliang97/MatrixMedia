@@ -43,6 +43,18 @@ electron . cli login -p dy --phone 13800138000
 - **QR 提取**：遍历所有 frame（含 wujie micro-frontend 的 `login-for-iframe`），从 `img.qrcode` 的 `data:` URL 直接解码。
 - 不支持 `--puppeteer-headless`。
 
+内置窗口扫码后若提示「没有可登录的视频号」，而同一微信在系统 Chrome 中可正常登录，可尝试系统 Chrome 回退：
+
+```bash
+matrixmedia cli login -p sph --phone 账号分组 --browser chrome
+```
+
+此模式会显示本机 Chrome / Chromium 窗口，不使用终端二维码。每个账号 partition 使用独立的持久化 Chrome 目录，不读取日常浏览器账号，也不会把内置窗口的旧凭据注入 Chrome。Chrome 端鉴权通过后，替换原账号分区中的视频号 Cookie，再验证应用端会话；仅两端均通过才报告成功，失败会恢复原会话。窗口关闭、超时、鉴权失败返回非零退出码。代理配置沿用该账号设置；带认证的 SOCKS 代理暂不支持。由于旧发布端会裁剪连字符分区，此回退暂拒绝包含连字符的 partition，避免登录成功却无法被发布端读取。
+
+复用账号分区时，旧的域 Cookie 与新扫码写入的 host-only `sessionid` 可能并存。主动打开 GUI / CLI 登录入口会先验证候选会话，再整理冲突；替换后仍须通过原生鉴权，否则恢复原 jar。普通状态检查不会改写 Cookie，不会仅凭到期时间猜测哪份会话有效，也不会清除其他平台分区或父域的无关 Cookie。
+
+GUI 的视频号账号管理页也提供「使用 Chrome 登录」。缺少 Chrome 时，请安装 Chrome / Chromium，或通过已有 Chrome 路径配置指定浏览器。该回退用于登录兼容性，不承诺解决内置浏览器的发布兼容问题。
+
 ```bash
 # 终端二维码（默认，无弹窗）
 electron . cli login -p sph --phone 13800138000

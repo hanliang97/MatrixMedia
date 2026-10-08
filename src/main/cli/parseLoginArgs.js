@@ -32,7 +32,8 @@ export function parseLoginArgs(subArgv) {
     timeoutSec: 900,
     saveQrPng: null,
     puppeteerHeadless: false,
-    force: false
+    force: false,
+    browser: 'electron'
   }
 
   for (let i = 0; i < args.length; i++) {
@@ -61,6 +62,11 @@ export function parseLoginArgs(subArgv) {
       out.puppeteerHeadless = true
     } else if (a === '--force') {
       out.force = true
+    } else if (a === '--browser') {
+      out.browser = args[++i]
+      if (!['electron', 'chrome'].includes(out.browser)) {
+        return { ok: false, error: '--browser 需为 electron 或 chrome' }
+      }
     }
   }
 
@@ -81,6 +87,13 @@ export function parseLoginArgs(subArgv) {
   }
   out.platform = pt
 
+  if (out.browser === 'chrome' && out.platform !== '视频号') {
+    return { ok: false, error: '--browser chrome 当前仅支持视频号登录' }
+  }
+  if (out.browser === 'chrome' && (out.puppeteerHeadless || out.saveQrPng)) {
+    return { ok: false, error: '系统 Chrome 登录使用可见窗口，不支持 --puppeteer-headless / --save-qr-png' }
+  }
+
   if (!out.partition) {
     if (!out.phone) {
       return {
@@ -98,7 +111,10 @@ export function parseLoginArgs(subArgv) {
     out.show = false
   }
 
-  if (!out.puppeteerHeadless) {
+  if (out.browser === 'chrome') {
+    out.show = true
+    out.terminalQr = false
+  } else if (!out.puppeteerHeadless) {
     if (!out.terminalQr) {
       return {
         ok: false,
@@ -134,11 +150,14 @@ export function loginHelpText() {
 可选 --puppeteer-headless（仅抖音）：用系统 Chrome/Chromium 真无头 + page.screenshot，userDataDir 与 partition 一致（需 PUPPETEER_EXECUTABLE_PATH 或已安装 Chrome/Chromium）。无 TTY 时请配合 --save-qr-png。
 
 视频号登录支持 --show 弹出登录窗口，扫码后窗口自动关闭。
+若内置窗口扫码后提示没有可登录的视频号，可用 --browser chrome 在本机 Chrome 中登录。
+系统 Chrome 使用独立账号目录，鉴权通过后同步到同一 partition；不会读取日常 Chrome 的登录态。
 
 选项:
   -p, --platform <id>   支持 dy / 抖音、sph / 视频号
       --phone <id>      账号手机号（与 GUI 一致，与 --partition 二选一）
       --partition <p>   完整 partition，如 persist:13800138000抖音
+      --browser <name>   electron（默认）或 chrome（仅视频号，显示本机 Chrome 登录窗口）
       --show              弹出登录窗口（视频号默认支持；抖音 CLI 不支持）
       --hide              不显示窗口（默认即为隐藏）
       --no-terminal-qr    关闭终端二维码时须使用 --puppeteer-headless
@@ -157,6 +176,7 @@ export function loginHelpText() {
 示例:
   electron . cli login -p dy --phone 13800138000
   electron . cli login -p sph --phone 13800138000 --show
+  electron . cli login -p sph --phone 13800138000 --browser chrome
   electron . cli login -p sph --phone 宠物
   xvfb-run -a ./矩媒.AppImage cli login -p dy --phone 13800138000
   electron . cli login -p dy --phone 13800138000 --puppeteer-headless

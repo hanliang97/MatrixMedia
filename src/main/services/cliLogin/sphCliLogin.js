@@ -22,7 +22,7 @@ import {
   getSphSessionId,
   normalizeSphPartition,
 } from "./sphSessionUtil.js";
-import { applyAccountProxyForTask } from "../proxyConfig.js";
+import { prepareSphAccountLoginSession } from "../sphLoginSession.js";
 import {
   CLI_LOGIN_QR_FIRST_DELAY_MS,
   CLI_LOGIN_QR_REFRESH_MS,
@@ -341,13 +341,19 @@ export async function runSphCliLogin({
   );
 
   // 与 GUI open-account-login-window 保持一致：先应用代理配置
+  let prepared;
   try {
-    await applyAccountProxyForTask({ partition: part, phone, pt: "视频号" });
+    prepared = await prepareSphAccountLoginSession({ partition: part, phone });
   } catch (proxyErr) {
-    console.warn("[sph-cli-login] 应用代理失败:", proxyErr && proxyErr.message);
+    console.error("[sph-cli-login] 登录准备失败:", proxyErr && proxyErr.message);
+    return 1;
   }
 
   // 记住旧 sessionid，轮询时检测到不同值才算"新登录成功"
+  if (prepared.changed && prepared.verified) {
+    console.log("视频号冲突会话已整理并通过鉴权，可执行 cli publish。");
+    return 0;
+  }
   // 不清除 cookie，避免破坏 login-for-iframe 页面加载
   const oldSessionId = await getSphSessionId(part);
   if (oldSessionId) {

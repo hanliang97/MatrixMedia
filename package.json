@@ -34,6 +34,8 @@
     "test:telemetry-preference-ipc": "node scripts/test-telemetry-preference-ipc.js",
     "test:main-process-log-file": "node scripts/test-main-process-log-file.js",
     "test:cli-login": "node scripts/test-cli-login.js",
+    "test:sph-chrome-login": "node scripts/test-sph-chrome-login.js",
+    "test:sph-cookie-session": "node scripts/test-sph-cookie-session.js",
     "test:publish-article-args": "node scripts/test-publish-article-args.js",
     "test:article-republish": "node scripts/test-article-republish.js",
     "test:publish-history-csv": "node scripts/test-publish-history-csv.js",
