@@ -12,6 +12,8 @@ let access_token = args[0];
 let name = args[1];
 const releaseBodyFromEnv = process.env.RELEASE_BODY;
 let owner = "gzlingyi_0";
+// 保留最近的 Release 数量，超过则删除最旧的
+let saveVision = 2
 let repo = "pubtw";
 let target_commitish = "main";
 let baseUrl = "gitee.com";
@@ -303,7 +305,7 @@ function deleteOldestRelease() {
       return;
     }
     console.log("已有 Release 数量:", releases.length);
-    if (releases.length >= 3) {
+    if (releases.length >= saveVision) {
       // 找到最旧的 Release
       const oldestRelease = releases[0];
       // 删除最旧的 Release
