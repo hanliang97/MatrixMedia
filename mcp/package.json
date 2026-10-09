@@ -15,5 +15,10 @@
   "devDependencies": {
     "typescript": "^5.0.0",
     "@types/node": "^20.0.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "express>proxy-addr": "2.0.8"
+    }
   }
 }
