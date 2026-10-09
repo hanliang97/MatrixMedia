@@ -1,4 +1,6 @@
 import { spawn, execSync } from 'node:child_process';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -31,39 +33,123 @@ export interface RunCliOptions {
   progressIntervalMs?: number; // default 30000
 }
 
-export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliResult> {
-  // Resolve project dir: env var takes priority, then infer from this file's location
-  // mcp/src/runner.ts -> mcp/ -> project root
-  const defaultDir = path.resolve(
-    fileURLToPath(import.meta.url),
-    '..', '..', '..'
-  );
-  const dir = process.env.MATRIXMEDIA_DIR ?? defaultDir;
+export const NOT_INSTALLED_MESSAGE =
+  '未找到 MatrixMedia（矩媒）桌面端。请先安装：' +
+  'https://github.com/hanliang97/MatrixMedia/releases （国内：https://gitee.com/gzlingyi_0/pubtw/releases ）。' +
+  '已安装但仍提示此错误时，可设置环境变量 MATRIXMEDIA_BIN 指向 matrixmedia 可执行文件。';
 
-  let command: string;
-  let spawnArgs: string[];
+interface ResolvedCommand {
+  command: string;
+  prefixArgs: string[];
+  cwd: string | undefined;
+  env: NodeJS.ProcessEnv;
+}
+
+function findOnPath(name: string): string | null {
+  const probe = process.platform === 'win32' ? `where ${name}` : `command -v ${name}`;
+  try {
+    const out = execSync(probe, { stdio: ['ignore', 'pipe', 'ignore'] }).toString('utf8');
+    const first = out.split(/\r?\n/).map(s => s.trim()).find(Boolean);
+    return first ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export function defaultInstallLocations(): string[] {
+  const home = os.homedir();
+  if (process.platform === 'darwin') {
+    return [
+      '/Applications/matrixmedia.app/Contents/MacOS/matrixmedia',
+      path.join(home, 'Applications/matrixmedia.app/Contents/MacOS/matrixmedia'),
+    ];
+  }
+  if (process.platform === 'win32') {
+    const local = process.env.LOCALAPPDATA ?? path.join(home, 'AppData', 'Local');
+    const pf = [process.env.ProgramFiles, process.env['ProgramFiles(x86)']].filter(
+      (p): p is string => Boolean(p)
+    );
+    const dirs = ['矩媒', 'matrix-video', 'MatrixMedia'];
+    return [
+      ...dirs.map(d => path.join(local, 'Programs', d, 'matrixmedia.exe')),
+      ...pf.flatMap(p => dirs.map(d => path.join(p, d, 'matrixmedia.exe'))),
+    ];
+  }
+  return ['/opt/矩媒/matrixmedia', '/opt/MatrixMedia/matrixmedia', '/usr/bin/matrixmedia'];
+}
+
+/** When running from a source checkout (mcp/dist/runner.js), the repo root is two levels up. */
+function inferRepoRoot(): string | null {
+  const candidate = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(candidate, 'package.json'), 'utf8'));
+    return pkg && pkg.name === 'matrix-video' ? candidate : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Resolution order:
+ * 1. MATRIXMEDIA_BIN — explicit path to the installed executable
+ * 2. `matrixmedia` on PATH (where / command -v)
+ * 3. Default install locations per OS
+ * 4. MATRIXMEDIA_DIR — source checkout, run via local electron (developer mode only)
+ */
+export function resolveMatrixmediaCommand(): ResolvedCommand | null {
   const env: NodeJS.ProcessEnv = { ...process.env };
 
-  let installed = false;
-  try {
-    execSync('which matrixmedia', { stdio: 'pipe' });
-    installed = true;
-  } catch {
-    installed = false;
+  const explicit = process.env.MATRIXMEDIA_BIN;
+  if (explicit && fs.existsSync(explicit)) {
+    return { command: explicit, prefixArgs: ['cli'], cwd: undefined, env };
   }
 
-  if (installed) {
-    command = 'matrixmedia';
-    spawnArgs = ['cli', ...args];
-  } else {
-    command = path.join(dir, 'node_modules/.bin/electron');
-    spawnArgs = ['.', 'cli', ...args];
-    env.ELECTRON_RUN_AS_NODE = '';
+  const onPath = findOnPath('matrixmedia');
+  if (onPath) {
+    return { command: onPath, prefixArgs: ['cli'], cwd: undefined, env };
   }
+
+  const installed = defaultInstallLocations().find(p => fs.existsSync(p));
+  if (installed) {
+    return { command: installed, prefixArgs: ['cli'], cwd: undefined, env };
+  }
+
+  const dir = process.env.MATRIXMEDIA_DIR ?? inferRepoRoot();
+  if (dir) {
+    const electronBin = path.join(
+      dir,
+      'node_modules',
+      '.bin',
+      process.platform === 'win32' ? 'electron.cmd' : 'electron'
+    );
+    if (fs.existsSync(electronBin)) {
+      env.ELECTRON_RUN_AS_NODE = '';
+      return {
+        command: electronBin,
+        prefixArgs: ['.', 'cli'],
+        cwd: dir,
+        env,
+      };
+    }
+  }
+
+  return null;
+}
+
+export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliResult> {
+  const resolved = resolveMatrixmediaCommand();
+  if (!resolved) {
+    // Surface a single actionable message to every tool instead of tool-specific exit-code text.
+    throw new Error(NOT_INSTALLED_MESSAGE);
+  }
+
+  const { command, prefixArgs, cwd, env } = resolved;
+  const spawnArgs = [...prefixArgs, ...args];
 
   return new Promise<CliResult>((resolve) => {
     const child = spawn(command, spawnArgs, {
-      cwd: dir,
+      cwd,
+      shell: process.platform === 'win32' && command.toLowerCase().endsWith('.cmd'),
       env,
       stdio: ['ignore', 'pipe', 'pipe'],
     });

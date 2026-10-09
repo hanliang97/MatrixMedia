@@ -1,0 +1,225 @@
+# Examples
+
+> Examples below assume `matrixmedia` is on PATH. On Windows the NSIS installer
+> handles this automatically. On macOS, the user runs once:
+>
+> ```bash
+> sudo ln -sf /Applications/matrixmedia.app/Contents/MacOS/matrixmedia /usr/local/bin/matrixmedia
+> ```
+>
+> Without the symlink, replace every `matrixmedia` below with
+> `/Applications/matrixmedia.app/Contents/MacOS/matrixmedia`.
+
+## Example 1: Minimal publish
+
+User intent: 发布抖音视频，已登录。
+
+```bash
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "测试标题"
+```
+
+## Example 2: Login then publish (Douyin)
+
+User intent: 首次登录后发布抖音。
+
+```bash
+matrixmedia cli login -p dy --phone 13800138000
+
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "矩媒CLI发布演示" \
+  --name "CLI演示任务" \
+  --tags "#开源 #CLI #自动化 #矩媒"
+```
+
+## Example 2b: Login then publish (视频号)
+
+User intent: 首次登录后发布视频号。
+
+```bash
+# 终端二维码登录（无弹窗，透明窗口）
+matrixmedia cli login -p sph --phone 13800138000
+
+# 或弹出可见窗口登录
+matrixmedia cli login -p sph --phone 13800138000 --show
+
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "矩媒CLI发布演示" \
+  --description "CLI发布演示简介" \
+  --short-title "CLI发布测试" \
+  --tags "#开源 #CLI #自动化 #矩媒"
+```
+
+## Example 3: Show window for debugging
+
+```bash
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "调试模式" \
+  --show \
+  --no-close-window
+```
+
+## Example 4: Audit all account login status
+
+User intent: 每天早上快速看一遍哪些账号掉登录了。
+
+```bash
+matrixmedia cli accounts --logged-out
+```
+
+Output (table mode):
+
+```
+账号           平台      登录态    失效时间            说明
+-----------  ------  -----  ----------------  -------------
+13800138000  抖音      未登录    -                 无登录 cookie
+13900139000  视频号     未登录    2026-04-15 09:10  cookie 已过期
+```
+
+## Example 5: JSON feed for orchestration
+
+User intent: 给上层调度系统喂当前登录态快照。
+
+```bash
+matrixmedia cli accounts --json > /tmp/mm-accounts.json
+```
+
+Each row: `{ phone, pt, partition, loggedIn, reason, expireAt, createdAt }`.
+
+## Example 6: Review recent publish failures
+
+User intent: 这周抖音发布失败的都是啥。
+
+```bash
+matrixmedia cli history -p dy -s failed -d 7
+```
+
+## Example 7: Explicit date range + machine output
+
+```bash
+matrixmedia cli history \
+  --since 2026-04-01 \
+  --until 2026-04-18 \
+  --json > /tmp/mm-april-history.json
+```
+
+## Example 8: 视频号 — 短标 + 空格分隔标签（最典型）
+
+User intent: 发布视频号视频，长标题 + 单独短标 + 3 个标签。
+
+```bash
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/run5km.mp4" \
+  -t "新手第一天跑步就坚持 5 公里是什么体验" \
+  --description "第一次跑步的完整过程" \
+  --short-title "5公里新手挑战" \
+  --tags "#跑步 #新手 #减脂 #5公里"
+```
+
+Why it matters:
+- `--short-title` is 7 chars, within 6–16; no punctuation that would be stripped.
+- `--description` 写入简介；视频号会把 `--tags` 拼在简介后面，**必须带 `#`** 才成话题。
+- **最多 4 个话题**：这里刚好 4，再多 agent 应该裁掉最弱相关的。
+- Tags use **single space** 分隔。
+- 旧 `--bt2` 仍兼容为短标题，但新调用应使用 `--short-title`。
+
+## Example 9: 抖音 — hashtag 风格标签
+
+抖音把 `--description` 与 `--tags` 拼成正文。想做 hashtag 显式加 `#`：
+
+```bash
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "新手第一天跑步就坚持5公里是什么体验" \
+  --description "第一次跑步的完整过程" \
+  --tags "#跑步 #减脂 #新手"
+```
+
+## Example 10: 哔哩哔哩 — 独立标签控件
+
+bilibili 的标签是独立输入 + 回车的控件，前导 `#` 会被剥掉，直接写词：
+
+```bash
+matrixmedia cli publish \
+  -p blbl \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "开黑就是快乐" \
+  --tags "游戏 解说 开黑"
+```
+
+## Example 11: 百家号 — tags 会被忽略
+
+当前 `upLoad/bjh.js` 没有写入 tag 逻辑；不要在这里浪费时间编标签，写好标题 + 地址即可：
+
+```bash
+matrixmedia cli publish \
+  -p bjh \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "这家咖啡店必须推给你" \
+  --address "北京市朝阳区三里屯"
+```
+
+## Example 12: Pre-publish preflight (Douyin)
+
+User intent: 发布前顺手核一次登录态。
+
+```bash
+# 1) 检查账号在线
+matrixmedia cli accounts -p dy --phone 13800138000
+
+# 2) 若返回「未登录」，先扫码登录
+matrixmedia cli login -p dy --phone 13800138000
+
+# 3) 发布
+matrixmedia cli publish \
+  -p dy \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "今日发布"
+
+# 4) 回查最近一条记录
+matrixmedia cli history --phone 13800138000 -p dy -n 1
+```
+
+## Example 13: Pre-publish preflight (视频号)
+
+User intent: 视频号发布前检查并登录。
+
+```bash
+# 1) 检查账号在线
+matrixmedia cli accounts -p sph --phone 13800138000
+
+# 2) 若返回「未登录」，CLI 扫码登录（终端 QR）
+matrixmedia cli login -p sph --phone 13800138000
+
+# 3) 发布
+matrixmedia cli publish \
+  -p sph \
+  --phone 13800138000 \
+  -f "/Users/me/videos/demo.mp4" \
+  -t "视频号发布测试" \
+  --description "视频号发布测试简介" \
+  --short-title "发布测试" \
+  --tags "#测试 #矩媒"
+
+# 4) 回查最近一条记录
+matrixmedia cli history --phone 13800138000 -p sph -n 1
+```

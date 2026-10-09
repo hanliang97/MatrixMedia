@@ -6,6 +6,7 @@
   "license": "GPL-2.0-only",
   "main": "./dist/electron/main.js",
   "scripts": {
+    "pack:workbuddy": "node scripts/pack-workbuddy.js",
     "dev": "cross-env TERGET_ENV=development node .electron-vue/dev-runner.js",
     "predev": "node scripts/gen-telemetry-secret.js",
     "dev:download": "node .electron-vue/dev-download-server.js",

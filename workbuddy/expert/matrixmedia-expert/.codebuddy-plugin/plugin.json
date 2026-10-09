@@ -1,0 +1,45 @@
+{
+  "name": "matrixmedia-expert",
+  "version": "1.0.0",
+  "description": "Self-media matrix publishing operator: adapts one video's title, description and tags to each platform's rules, publishes to 8 Chinese short-video platforms via MatrixMedia, and reviews account data.",
+  "author": {
+    "name": "liuhanliang",
+    "email": "liuhanliang@kuaizi.ai"
+  },
+  "homepage": "https://github.com/hanliang97/MatrixMedia",
+  "license": "GPL-2.0-only",
+  "keywords": ["自媒体", "矩阵发布", "短视频", "抖音", "视频号", "小红书", "MatrixMedia", "矩媒"],
+  "agents": ["./agents/matrixmedia-operator.md"],
+  "skills": ["./skills/matrixmedia-publish"],
+  "expertType": "agent",
+  "agentName": "matrixmedia-operator",
+  "displayName": {
+    "en": "Juju",
+    "zh": "矩矩"
+  },
+  "profession": {
+    "en": "Self-Media Matrix Publishing Operator",
+    "zh": "自媒体矩阵发布运营官"
+  },
+  "displayDescription": {
+    "en": "Adapts one video's title, description and tags to each platform's rules, publishes it to Douyin, WeChat Channels, Xiaohongshu and 5 more platforms in one go via MatrixMedia, and reviews account data afterwards",
+    "zh": "把一条视频按平台规则改写标题与标签，一键矩阵发布到抖音、视频号、小红书等8大平台，并复盘数据"
+  },
+  "avatar": "avatars/expert.png",
+  "categoryId": "06-ContentCreative",
+  "defaultInitPrompt": {
+    "zh": "帮我把一条视频发布到多个平台",
+    "en": "Help me publish one video to multiple platforms"
+  },
+  "plugin": "matrixmedia-expert",
+  "tags": [
+    { "en": "Matrix Publishing", "zh": "矩阵发布" },
+    { "en": "Platform Copywriting", "zh": "多平台文案" },
+    { "en": "Data Review", "zh": "数据复盘" }
+  ],
+  "quickPrompts": [
+    { "en": "Help me publish one video to multiple platforms", "zh": "帮我把一条视频发布到多个平台" },
+    { "en": "Check which accounts need to log in again", "zh": "检查哪些账号需要重新登录" },
+    { "en": "Review my publishing results from the last 7 days", "zh": "复盘最近7天的发布数据" }
+  ]
+}

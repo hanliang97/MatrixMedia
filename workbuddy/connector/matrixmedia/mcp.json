@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "matrixmedia": {
+      "type": "stdio",
+      "command": "npx",
+      "args": ["-y", "matrixmedia-mcp@latest"],
+      "runtime": {
+        "type": "node",
+        "version": "20"
+      },
+      "npmRegistries": [
+        "https://registry.npmmirror.com",
+        "https://registry.npmjs.org"
+      ],
+      "timeout": 60000
+    }
+  }
+}

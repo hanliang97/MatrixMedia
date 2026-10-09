@@ -1,22 +1,7 @@
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 import { runCli } from "../runner.js";
 
-// Maps short platform codes to Chinese names used in session partition strings
-const PLATFORM_CN: Record<string, string> = {
-  dy: "抖音",
-  ks: "快手",
-  blbl: "哔哩哔哩",
-  bjh: "百家号",
-  tt: "头条",
-  sph: "视频号",
-};
-
-// Derives the Electron session partition string from phone + platform code.
-// Convention: persist:<phone><平台中文名>  e.g. persist:13800138000抖音
-function derivePartition(phone: string, platform: string): string {
-  const cn = PLATFORM_CN[platform] ?? platform;
-  return `persist:${phone}${cn}`;
-}
+export const VIDEO_PLATFORMS = ["dy", "ks", "blbl", "bjh", "tt", "sph", "xhs", "fqsp"] as const;
 
 export const publishVideoTool: Tool = {
   name: "publish_video",
@@ -29,9 +14,9 @@ export const publishVideoTool: Tool = {
     properties: {
       platform: {
         type: "string",
-        enum: ["dy", "ks", "blbl", "bjh", "tt", "sph"],
+        enum: [...VIDEO_PLATFORMS],
         description:
-          "Target platform. dy=Douyin ks=Kuaishou blbl=Bilibili bjh=Baijiahao tt=Toutiao sph=Shipinhao",
+          "Target platform. dy=抖音 ks=快手 blbl=哔哩哔哩 bjh=百家号 tt=头条 sph=视频号 xhs=小红书 fqsp=番茄视频",
       },
       file: {
         type: "string",
@@ -72,7 +57,7 @@ export const publishVideoTool: Tool = {
       publishAt: {
         type: "string",
         description:
-          'Optional scheduled publish time, format "YYYY-MM-DD HH:mm".',
+          'Optional one-time scheduled publish time, format "YYYY-MM-DD HH:mm:ss". Must be in the future; MatrixMedia must be running at that time.',
       },
       show: {
         type: "boolean",
@@ -161,8 +146,9 @@ export async function handlePublishVideo(
     throw new Error("file must be non-empty string");
   }
 
-  // Derive partition from phone + platform automatically
-  const partition = derivePartition(phone, String(platform));
+  if (!VIDEO_PLATFORMS.includes(String(platform) as (typeof VIDEO_PLATFORMS)[number])) {
+    throw new Error("platform must be one of: " + VIDEO_PLATFORMS.join(", "));
+  }
 
   let sphLinkArgs: string[] = [];
   if (String(platform) === "sph") {
@@ -214,8 +200,9 @@ export async function handlePublishVideo(
     file,
     "-t",
     String(title),
-    "--partition",
-    partition,
+    // The CLI derives persist:<phone><平台中文名> itself, keeping every platform alias in sync.
+    "--phone",
+    phone,
     ...(description ? ["--description", String(description)] : []),
     ...(shortTitle ? ["--short-title", String(shortTitle)] : []),
     ...(bt2 ? ["--bt2", String(bt2)] : []),

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "matrixmedia": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/ABSOLUTE/PATH/TO/MatrixMedia/mcp/dist/index.js"],
+      "timeout": 60000
+    }
+  }
+}

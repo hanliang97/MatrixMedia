@@ -1,0 +1,25 @@
+{
+  "name": "矩媒 MatrixMedia",
+  "name_zh": "矩媒 MatrixMedia",
+  "name_en": "MatrixMedia",
+  "description": "Publish videos to Douyin, Kuaishou, WeChat Channels, Xiaohongshu, Bilibili, Baijiahao, Toutiao and Fanqie via the MatrixMedia desktop app.",
+  "description_zh": "通过本机矩媒桌面端，用自然语言把视频一键发布到抖音、快手、视频号、小红书、B站、百家号、头条、番茄视频，并查询账号登录态、发布记录与粉丝数据。需先安装矩媒桌面端。",
+  "description_en": "Publish videos to 8 Chinese short-video platforms, check login status, publish history and account stats through the locally installed MatrixMedia desktop app.",
+  "source": "hanliang97-matrixmedia",
+  "type": "mcp",
+  "version": "1.1.0",
+  "minWorkbuddyVersion": "5.0.0",
+  "examples_zh": [
+    "把桌面上的 demo.mp4 发到抖音账号 13800138000，标题是“新手跑步第一天”",
+    "看看我哪些账号登录过期了",
+    "把这个视频同时发到视频号和小红书，今晚 8 点定时发布",
+    "查一下最近 7 天发布失败的记录",
+    "同步一下抖音账号的粉丝和播放数据"
+  ],
+  "examples_en": [
+    "Publish ~/Desktop/demo.mp4 to Douyin account 13800138000 with title \"Day one running\"",
+    "Which of my accounts have expired logins?",
+    "Schedule this video to WeChat Channels and Xiaohongshu at 8pm tonight",
+    "Show failed publishes in the last 7 days"
+  ]
+}

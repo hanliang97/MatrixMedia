@@ -1,13 +1,40 @@
 {
   "name": "matrixmedia-mcp",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.3.0",
+  "description": "MCP server for MatrixMedia (矩媒) — publish videos to 抖音/快手/视频号/小红书/B站/百家号/头条/番茄视频 from any MCP client. Requires the MatrixMedia desktop app.",
   "type": "module",
   "main": "dist/index.js",
+  "bin": {
+    "matrixmedia-mcp": "dist/index.js"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "matrixmedia",
+    "workbuddy",
+    "douyin",
+    "video-publish"
+  ],
+  "author": "lhl",
+  "license": "GPL-2.0-only",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hanliang97/MatrixMedia.git",
+    "directory": "mcp"
+  },
+  "homepage": "https://github.com/hanliang97/MatrixMedia/blob/main/docs/mcp.md",
   "scripts": {
     "build": "tsc",
     "dev": "tsc --watch",
-    "test": "pnpm build && node --test tests/*.test.mjs"
+    "prepublishOnly": "npm run build",
+    "test": "npm run build && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0"

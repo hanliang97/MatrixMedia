@@ -13,7 +13,7 @@ export const listHistoryTool: Tool = {
       },
       platform: {
         type: 'string',
-        enum: ['dy', 'ks', 'blbl', 'bjh', 'tt', 'sph', 'xhs'],
+        enum: ['dy', 'ks', 'blbl', 'bjh', 'tt', 'sph', 'xhs', 'fqsp'],
       },
       status: {
         type: 'string',

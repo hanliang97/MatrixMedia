@@ -14,7 +14,10 @@ cd mcp && npm install && npm run build
 
 ## 配置 AI 工具
 
-将 `MATRIXMEDIA_DIR` 设为本仓库根目录的绝对路径。
+MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（可执行文件绝对路径）→ PATH 中的 `matrixmedia` →
+默认安装位置（macOS `/Applications/matrixmedia.app`、Windows `%LOCALAPPDATA%\Programs\矩媒`、Linux `/opt/矩媒`）→
+`MATRIXMEDIA_DIR` 指向的源码仓库（开发模式）。已安装桌面端时无需设置任何环境变量；以下示例为源码开发模式，
+`MATRIXMEDIA_DIR` 设为本仓库根目录的绝对路径。
 
 **Claude Desktop**（`~/Library/Application Support/Claude/claude_desktop_config.json`）：
 
@@ -56,8 +59,22 @@ cd mcp && npm install && npm run build
 | ----------------- | ------------------------- | ---------------------------------------------- |
 | `list_accounts`   | `cli accounts --json`     | 列出本机已登录账号，支持按平台过滤             |
 | `list_history`    | `cli history --json`      | 查询本机发布记录，支持按平台/状态/天数过滤     |
-| `publish_video`   | `cli publish ...`         | 发布视频（最长约 35 分钟，支持草稿和定时发布） |
-| `publish_article` | `cli publish-article ...` | 发布掘金文章（需已登录掘金账号）               |
+| `publish_video`   | `cli publish ...`         | 发布视频（后台任务，支持草稿和定时发布）       |
+| `publish_article` | `cli publish-article ...` | 发布掘金文章（后台任务，需已登录掘金账号）     |
+| `get_publish_status` | —                      | 查询发布任务进度与结果                         |
+
+### 长任务与 get_publish_status
+
+视频上传可能需要数分钟到数十分钟，而多数 MCP 客户端（如 WorkBuddy）要求单次调用约 30 秒内返回。
+`publish_video` / `publish_article` 最多阻塞 20 秒（环境变量 `MATRIXMEDIA_INLINE_WAIT_MS` 可调）：
+
+- 期间完成：直接返回最终结果；失败则直接返回错误。
+- 仍在执行：返回 `{ "status": "running", "jobId": "..." }`，再用 `get_publish_status({ jobId, waitSeconds? })` 轮询；
+  `waitSeconds` 默认 20、最大 25，任务完成会提前返回。
+- 运行中以完全相同的参数再次调用发布，会返回同一个 `jobId`（`reused: true`），不会重复上传。
+- 任务记录仅保存在内存中，MCP Server 重启后 `get_publish_status` 会提示未找到任务，此时用 `list_history` 核对结果。
+
+> 此前版本通过 `notifications/progress` 汇报进度并阻塞至上传完成，现已改为上述后台任务模式。
 
 ### list_accounts
 
@@ -80,16 +97,16 @@ cd mcp && npm install && npm run build
 
 | 参数           | 必填 | 说明                                                          |
 | -------------- | ---- | ------------------------------------------------------------- |
-| `platform`     | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph`                   |
+| `platform`     | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph` / `xhs` / `fqsp`  |
 | `file`         | 是   | 视频文件绝对路径                                              |
 | `title`        | 是   | 视频标题                                                      |
 | `description`  | 否   | 视频简介或正文                                                |
 | `shortTitle`   | 否   | 视频号短标题，建议 6～16 字；其他平台忽略                     |
-| `phone`        | 是   | 账号手机号，用于推导 session partition                        |
+| `phone`        | 是   | 账号手机号，CLI 据此推导 session partition                    |
 | `bt2`          | 否   | 旧兼容字段：视频号作为短标题，其他平台作为简介                |
 | `tags`         | 否   | 标签字符串                                                    |
 | `address`      | 否   | 地址（百家号等）                                              |
-| `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm`                                  |
+| `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm:ss`                               |
 | `show`         | 否   | 是否显示底层浏览器窗口                                        |
 | `draft`             | 否   | `true` 时保存到草稿箱，不直接发布                             |
 | `creativeStatement` | 否   | 创作声明 / 视频号视频标注                                     |
