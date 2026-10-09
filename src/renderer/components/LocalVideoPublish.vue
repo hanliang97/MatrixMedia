@@ -639,12 +639,14 @@ export default {
       // 短剧/剧集搜索下拉：key 为 `${nodeId}:${linkType}`
       // options  —— 服务端返回的搜索结果（下拉渲染内容，随每次搜索整体替换）
       // searched —— 是否已搜过（用于区分「还没搜」和「搜了没结果」的提示文案）
-      // seq      —— 请求序号令牌（自增；用于丢弃乱序返回的过期结果，
-      //              清空时也自增以作废在途请求）
+      // seq      —— 各 key 当前的请求序号（用于丢弃乱序返回的过期结果，
+      //              清空时也推进以作废在途请求）
+      // componentSeq —— 全局单调序号源，只增不减（见 nextPlatformEntitySeq）
       platformEntityOptions: {},
       platformEntitySearched: {},
       platformEntitySeq: {},
       platformEntityLoading: {},
+      componentSeq: 0,
       checkedPlatformIds: [],
       checkAllPlatforms: false,
       checkAllIndeterminate: false,
@@ -985,7 +987,9 @@ export default {
       this.platformProductLoading = {};
       this.platformEntitySearched = {};
       this.platformEntityOptions = {};
-      this.platformEntitySeq = {};
+      // 注意：不要清 platformEntitySeq 与 componentSeq。
+      // 清了会让序号从头开始，上一次会话遗留的在途响应可能与新会话撞号而复活下拉；
+      // 序号源是全局单调的，跨会话继续递增即可。
       this.platformEntityLoading = {};
     },
     getPlatformVideoLinkOptions(platform) {
@@ -1117,13 +1121,19 @@ export default {
     },
     /**
      * 取下一个请求序号（同时作废该 key 上所有在途请求）。
+     *
      * 用自增序号而不是关键词做令牌：清空后再输入同一个词时，
      * 关键词会相同、序号不会，过期响应才不会被误认成最新结果。
+     *
+     * 序号取自**全局单调计数器**（componentSeq），不复用：
+     * 若按 key 各自计数，resetPlatformVideoLinks 把 map 清空后计数器会从头开始，
+     * 上一次会话遗留的在途响应就可能与新会话撞上同一个号而复活下拉。
+     * 全局计数器只增不减，跨会话也不会撞号，故 reset 时无需（也不该）清它。
      */
     nextPlatformEntitySeq(key) {
-      const seq = (Number(this.platformEntitySeq[key]) || 0) + 1;
-      this.$set(this.platformEntitySeq, key, seq);
-      return seq;
+      this.componentSeq += 1;
+      this.$set(this.platformEntitySeq, key, this.componentSeq);
+      return this.componentSeq;
     },
     /** 回车：立即触发搜索（不选中；选中只能由用户点选完成） */
     onEntitySearchEnter(row, event) {
