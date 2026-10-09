@@ -303,6 +303,7 @@ assert.strictEqual(
     platformEntitySearched: {},
     platformEntitySeq: {},
     platformEntityLoading: {},
+    componentSeq: 0,
     platformVideoLinks: {},
     $set(obj, k, v) {
       obj[k] = v;
@@ -324,9 +325,16 @@ assert.strictEqual(
       return (this.platformVideoLinks[nodeId] || {}).value || "";
     },
     nextPlatformEntitySeq(key) {
-      const seq = (Number(this.platformEntitySeq[key]) || 0) + 1;
-      this.$set(this.platformEntitySeq, key, seq);
-      return seq;
+      // 全局单调计数器：不复用序号，跨会话也不会撞号
+      this.componentSeq += 1;
+      this.$set(this.platformEntitySeq, key, this.componentSeq);
+      return this.componentSeq;
+    },
+    resetPlatformVideoLinks() {
+      this.platformEntitySearched = {};
+      this.platformEntityOptions = {};
+      // 刻意不清 platformEntitySeq / componentSeq（清了会跨会话撞号）
+      this.platformEntityLoading = {};
     },
     clearPlatformEntityOptions(row) {
       if (!row) return;
@@ -471,6 +479,51 @@ assert.strictEqual(
     evm.platformEntityOptions[KEY].map((item) => item.name),
     ["新响应"],
     "清空后重输同一关键词，旧响应仍须被序号令牌拦下"
+  );
+
+  // 跨会话：resetPlatformVideoLinks 后序号不得复用
+  // 若按 key 各自计数，reset 清空 map 会让计数器从头开始，
+  // 上一次会话遗留的在途响应就会与新会话撞号而复活下拉。
+  evm = makeEntityVm();
+  let releasePrev;
+  const prevSession = evm.searchPlatformEntityOptions(
+    ROW,
+    "泳陷",
+    () => new Promise((r) => { releasePrev = () => r({ ok: true, entities: [{ name: "上一会话的结果" }] }); })
+  );
+  await Promise.resolve();
+  const seqBeforeReset = evm.platformEntitySeq[KEY];
+  evm.resetPlatformVideoLinks();
+  assert.strictEqual(
+    evm.platformEntitySeq[KEY],
+    seqBeforeReset,
+    "reset 不应清掉序号（清了会跨会话撞号）"
+  );
+  await evm.searchPlatformEntityOptions(ROW, "泳陷", okFetch(["本会话的结果"]));
+  assert.notStrictEqual(
+    evm.platformEntitySeq[KEY],
+    seqBeforeReset,
+    "重置后新搜索应拿到更大的序号"
+  );
+  releasePrev();
+  await prevSession;
+  assert.deepStrictEqual(
+    evm.platformEntityOptions[KEY].map((item) => item.name),
+    ["本会话的结果"],
+    "跨会话的旧响应不得覆盖下拉"
+  );
+
+  // 连续多轮「重置 + 搜索」，序号须严格单调递增（永不复用）
+  evm = makeEntityVm();
+  const seqHistory = [];
+  for (let i = 0; i < 5; i += 1) {
+    evm.resetPlatformVideoLinks();
+    await evm.searchPlatformEntityOptions(ROW, `第${i}词`, okFetch([`结果${i}`]));
+    seqHistory.push(evm.platformEntitySeq[KEY]);
+  }
+  assert.ok(
+    seqHistory.every((value, i) => i === 0 || value > seqHistory[i - 1]),
+    `序号须全局单调递增，实际为 ${JSON.stringify(seqHistory)}`
   );
 
   console.log("test-sph-entity-options passed");
