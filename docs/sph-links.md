@@ -69,6 +69,13 @@ GUI 的短剧/剧集录入是**服务端关键词搜索下拉**：下拉初始�
 > 清空路径（`clearPlatformEntityOptions`）与切换类型路径（`clearPlatformEntityCache`）
 > 都必须先自增序号再清数据，否则「清空后旧响应返回」会把下拉复活。
 
+> **序号取自全局单调计数器 `componentSeq`，只增不减，跨会话不复用**：
+> `nextPlatformEntitySeq` 从 `componentSeq` 取号而非按 key 各自递增；
+> `resetPlatformVideoLinks()` 由 `open` / `openRepublish` / `openDirectory` / `resetState`
+> 触发（每次开关对话框都会跑），**刻意不清** `platformEntitySeq` 与 `componentSeq`——
+> 清了会让计数器从头开始，上一次会话遗留的在途响应就会与新会话撞上同一个号而复活下拉。
+> 令牌仅在渲染进程重建时归零（刷新页面 / 重启应用），彼时旧回调已随进程消失，归零无害。
+
 ## 平台页面行为
 
 以下行为直接决定实现方式，修改相关代码前请先了解：
