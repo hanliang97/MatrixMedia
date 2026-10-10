@@ -1,4 +1,6 @@
 import path from "path";
+import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
+import { attachDyProductLink } from "./dyProductLink.js";
 import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
 import {
   readPageUrl,
@@ -235,6 +237,10 @@ export default async function (page, data, window, event) {
 
     // 自主声明入口在视频转码完成后才出现，必须在点击发布前完成
     await selectDyCreativeStatementWithRetry(page, data);
+
+    // 挂车未确认成功时必须进入同一失败分支，不能继续发布无商品的视频。
+    const productLink = resolveVideoLinkOption("抖音", data.publishOptions);
+    if (productLink.enabled) await attachDyProductLink(page, productLink);
 
     const urlBefore = readPageUrl(page);
     await clickDyPublish(page, isDraftMode);
