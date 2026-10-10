@@ -372,6 +372,15 @@
                   :placeholder="platformVideoLinkPlaceholder(row)"
                   @input="setPlatformVideoLinkValue(row.id, row.pt, $event)"
                 />
+                <el-input
+                  v-if="platformVideoLinkNeedsShortTitle(row)"
+                  :value="getPlatformVideoLinkShortTitle(row.id)"
+                  size="mini"
+                  clearable
+                  class="attrs-link-value"
+                  placeholder="商品短标题（必填，最多10字）"
+                  @input="setPlatformVideoLinkShortTitle(row.id, row.pt, $event)"
+                />
               </template>
             </div>
             <span v-else class="attrs-unsupported">暂不支持第三方属性</span>
@@ -379,6 +388,9 @@
         </el-table-column>
       </el-table>
 
+      <p v-if="attrsHasProductLink" class="bt2-tip">
+        抖音需填写商品链接和短标题；快手商品须先加入货架，并填写完整原名。商品无法唯一匹配或挂载失败时停止发布，请人工检查后重试。
+      </p>
       <p v-if="attrsHasEntityLink" class="bt2-tip">
         挂载失败时不会直接发布：视频处理完成后会自动转存草稿并提示「需要处理」，请到视频号后台手动确认。
       </p>
@@ -706,6 +718,12 @@ export default {
         platformSupportsVideoLink(node.pt)
       );
     },
+    attrsHasProductLink() {
+      return this.checkedPlatformNodes.some((node) => {
+        const info = this.getPlatformVideoLinkTypeInfo(node);
+        return info && ["product_url", "exact_product_name"].includes(info.selectionMode);
+      });
+    },
     attrsHasEntityLink() {
       return this.checkedPlatformNodes.some((node) => {
         const type = this.getPlatformVideoLinkType(node.id, node.pt);
@@ -959,14 +977,14 @@ export default {
       const link = buildVideoLinkOption(
         platformNode.pt,
         this.getPlatformVideoLinkType(platformNode.id, platformNode.pt),
-        this.getPlatformVideoLinkValue(platformNode.id)
+        this.getPlatformVideoLinkValue(platformNode.id),
+        { shortTitle: this.getPlatformVideoLinkShortTitle(platformNode.id) }
       );
+      if (!link.ok) throw new Error(link.error);
       return {
         ...baseVideo,
         publishOptions: {
-          link: link.ok
-            ? link.value
-            : buildVideoLinkOption(platformNode.pt, "", "").value,
+          link: link.value,
         },
         data: {
           ...baseVideo.data,
@@ -1005,23 +1023,38 @@ export default {
       const state = this.platformVideoLinks[nodeId];
       return String((state && state.value) || "");
     },
+    getPlatformVideoLinkShortTitle(nodeId) {
+      return String((this.platformVideoLinks[nodeId] || {}).shortTitle || "");
+    },
+    setPlatformVideoLinkShortTitle(nodeId, platform, shortTitle) {
+      this.$set(this.platformVideoLinks, nodeId, {
+        ...this.platformVideoLinks[nodeId],
+        type: this.getPlatformVideoLinkType(nodeId, platform),
+        shortTitle: String(shortTitle || ""),
+      });
+    },
+    platformVideoLinkNeedsShortTitle(row) {
+      return Boolean((this.getPlatformVideoLinkTypeInfo(row) || {}).requiresShortTitle);
+    },
     setPlatformVideoLinkType(nodeId, platform, type) {
       const old = this.platformVideoLinks[nodeId] || {};
       this.$set(this.platformVideoLinks, nodeId, {
         type: String(type || ""),
         value: old.type === type ? String(old.value || "") : "",
+        shortTitle: old.type === type ? String(old.shortTitle || "") : "",
       });
     },
     setPlatformVideoLinkValue(nodeId, platform, value) {
       this.$set(this.platformVideoLinks, nodeId, {
+        ...this.platformVideoLinks[nodeId],
         type: this.getPlatformVideoLinkType(nodeId, platform),
-        value: String(value || "").trim(),
+        value: String(value || ""),
       });
     },
     onAttrsLinkTypeChange(row, type) {
       this.clearPlatformEntityCache(row, type);
       this.setPlatformVideoLinkType(row.id, row.pt, type);
-      if (String(type) === "product") {
+      if (this.platformVideoLinkIsProduct(row)) {
         this.loadPlatformWindowProducts(row);
       }
       // 短剧/剧集：切换后下拉回到空，等用户重新输入回车搜索
@@ -1197,9 +1230,10 @@ export default {
       const info = this.getPlatformVideoLinkTypeInfo(data);
       return Boolean(info && info.inputKind !== "none");
     },
-    /** 商品有「橱窗选择 + 手动编号」双入口，其他类型（小程序短剧 / 视频号剧集等）只需一个编号输入框 */
+    /** 只有视频号商品使用橱窗接口；抖音 URL / 快手完整商品名独立填写。 */
     platformVideoLinkIsProduct(data) {
-      return this.getPlatformVideoLinkType(data.id, data.pt) === "product";
+      const info = this.getPlatformVideoLinkTypeInfo(data);
+      return Boolean(info && info.selectionMode === "product_id");
     },
     platformVideoLinkPlaceholder(data) {
       const info = this.getPlatformVideoLinkTypeInfo(data);
@@ -1213,7 +1247,7 @@ export default {
       return this.platformProductOptions[nodeId] || [];
     },
     async loadPlatformWindowProducts(row, force = false) {
-      if (!row || !platformSupportsVideoLink(row.pt)) return;
+      if (!row || !this.platformVideoLinkIsProduct(row)) return;
       if (
         !force &&
         Array.isArray(this.platformProductOptions[row.id]) &&
@@ -1253,7 +1287,8 @@ export default {
         const checked = validateVideoLinkValue(
           platform.pt,
           type,
-          this.getPlatformVideoLinkValue(platform.id)
+          this.getPlatformVideoLinkValue(platform.id),
+          { shortTitle: this.getPlatformVideoLinkShortTitle(platform.id) }
         );
         if (!checked.ok) {
           return `${platform.phone} ${platform.pt}：${checked.error}`;
@@ -1298,7 +1333,7 @@ export default {
         const rec = this.findRepublishRecord(node.pt, node.phone);
         const link = resolveVideoLinkOption(node.pt, rec && rec.publishOptions);
         if (link && link.enabled && link.value) {
-          next[node.id] = { type: link.type, value: String(link.value) };
+          next[node.id] = { type: link.type, value: String(link.value), shortTitle: String(link.shortTitle || "") };
         }
       });
       this.platformVideoLinks = next;
@@ -2075,6 +2110,14 @@ export default {
       const platforms = checked.filter((item) => item.url);
       if (platforms.length === 0) {
         this.$message.warning("请至少选择一个平台");
+        return;
+      }
+      // 目录批量尚未传递账号级挂车参数，显式阻断，不能静默丢弃后裸发。
+      if (platforms.some((row) =>
+        /抖音|快手/.test(String(row.pt || "")) &&
+        this.getPlatformVideoLinkType(row.id, row.pt) !== "none"
+      )) {
+        this.$message.warning("目录批量暂不支持抖音/快手商品挂载，请改用单视频发布，或明确选择「无」后重试");
         return;
       }
       if (

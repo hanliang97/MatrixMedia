@@ -1,5 +1,7 @@
 "use strict";
 
+import { validateDouyinProductUrl } from "./productLinkInput.js";
+
 export const VIDEO_LINK_TYPES = {
   NONE: "none",
   OFFICIAL_ARTICLE: "official_article",
@@ -12,12 +14,27 @@ export const VIDEO_LINK_TYPES = {
 
 /**
  * 平台链接能力表。
- * platformAvailable 表示平台页面存在该能力；automationSupported 表示工具已完成并验证自动化。
+ * platformAvailable 表示平台页面存在该能力；automationSupported 表示已提供自动化实现。
+ * 抖音 / 快手商品流程仍需有权限的账号实机验收；无法唯一确认挂载时停止发布。
  * 会员专区不进入工具能力表；小游戏仍仅预留结构，未验证前不向用户开放。
  * 小程序短剧 / 视频号剧集已按同款流程实现（见 main/services/upLoad/sphDrama.js 与 sphSeries.js），
  * 但平台 DOM 存在版本差异，失败时会由 sphLink 兜底转存草稿并返回 needs_attention，不会误报成功。
  */
 const VIDEO_LINK_CAPABILITIES = {
+  抖音: {
+    platformKey: "dy", maxItems: 1,
+    types: [
+      { type: VIDEO_LINK_TYPES.NONE, label: "无", inputKind: "none", placeholder: "", maxLength: 0, platformAvailable: true, automationSupported: true, selectionMode: "none" },
+      { type: VIDEO_LINK_TYPES.PRODUCT, label: "商品", inputKind: "url", placeholder: "粘贴完整商品链接", maxLength: 2048, platformAvailable: true, automationSupported: true, selectionMode: "product_url", requiresShortTitle: true },
+    ],
+  },
+  快手: {
+    platformKey: "ks", maxItems: 1,
+    types: [
+      { type: VIDEO_LINK_TYPES.NONE, label: "无", inputKind: "none", placeholder: "", maxLength: 0, platformAvailable: true, automationSupported: true, selectionMode: "none" },
+      { type: VIDEO_LINK_TYPES.PRODUCT, label: "商品", inputKind: "product_name", placeholder: "填写已在货架中的商品完整名称", maxLength: 200, platformAvailable: true, automationSupported: true, selectionMode: "exact_product_name" },
+    ],
+  },
   视频号: {
     platformKey: "sph",
     maxItems: 1,
@@ -133,7 +150,7 @@ export function normalizeVideoLinkValue(value) {
   return String(value == null ? "" : value).trim();
 }
 
-export function validateVideoLinkValue(platform, type, value) {
+export function validateVideoLinkValue(platform, type, value, details = {}) {
   const normalized = normalizeVideoLinkValue(value);
   const resolvedType = String(type || VIDEO_LINK_TYPES.NONE);
   const typeCapability = getVideoLinkTypeCapability(platform, resolvedType);
@@ -143,6 +160,21 @@ export function validateVideoLinkValue(platform, type, value) {
   }
   if (!typeCapability.automationSupported) {
     return { ok: false, value: normalized, error: "当前链接类型尚未开放" };
+  }
+  if (resolvedType === VIDEO_LINK_TYPES.PRODUCT && typeCapability.selectionMode === "product_url") {
+    const url = validateDouyinProductUrl(value);
+    if (!url.ok) return url;
+    const shortTitle = typeof details.shortTitle === "string" ? details.shortTitle.trim() : "";
+    if (!shortTitle || [...shortTitle].length > 10 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(details.shortTitle)) {
+      return { ok: false, value: normalized, error: "商品短标题必填，最多 10 个字符，不能包含控制字符" };
+    }
+    return url;
+  }
+  if (resolvedType === VIDEO_LINK_TYPES.PRODUCT && typeCapability.selectionMode === "exact_product_name") {
+    if (typeof value !== "string" || !normalized || [...normalized].length > 200 || /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/.test(value)) {
+      return { ok: false, value: normalized, error: "请填写货架商品的完整名称（最多 200 个字符，不能包含控制字符）" };
+    }
+    return { ok: true, value: normalized };
   }
   if (!normalized) {
     const emptyMessage =
@@ -184,11 +216,11 @@ export function validateVideoLinkValue(platform, type, value) {
   return { ok: true, value: normalized };
 }
 
-export function buildVideoLinkOption(platform, type, value) {
+export function buildVideoLinkOption(platform, type, value, details = {}) {
   const supportedTypes = getSupportedVideoLinkTypes(platform);
   const resolvedType = String(type || (supportedTypes[0] || {}).type || "");
   const typeCapability = getVideoLinkTypeCapability(platform, resolvedType);
-  const checked = validateVideoLinkValue(platform, resolvedType, value);
+  const checked = validateVideoLinkValue(platform, resolvedType, value, details);
   if (!checked.ok) return checked;
   const enabled = Boolean(
     resolvedType !== VIDEO_LINK_TYPES.NONE &&
@@ -205,7 +237,8 @@ export function buildVideoLinkOption(platform, type, value) {
       value: enabled ? checked.value : "",
       selectionMode:
         (typeCapability && typeCapability.selectionMode) || "direct_input",
-      failurePolicy: "save_draft",
+      ...(enabled && typeCapability.requiresShortTitle ? { shortTitle: details.shortTitle.trim() } : {}),
+      failurePolicy: ["dy", "ks"].includes((getVideoLinkCapability(platform) || {}).platformKey) ? "stop" : "save_draft",
     },
   };
 }
@@ -217,6 +250,8 @@ export function resolveVideoLinkOption(platform, publishOptions = {}) {
   if (link && typeof link === "object") {
     const resolvedType = String(link.type || VIDEO_LINK_TYPES.NONE);
     const typeCapability = getVideoLinkTypeCapability(platform, resolvedType);
+    const platformKey = (getVideoLinkCapability(platform) || {}).platformKey;
+    const commerceProduct = resolvedType === VIDEO_LINK_TYPES.PRODUCT && ["dy", "ks"].includes(platformKey);
     return {
       enabled: resolvedType !== VIDEO_LINK_TYPES.NONE && link.enabled === true,
       type: resolvedType,
@@ -224,12 +259,14 @@ export function resolveVideoLinkOption(platform, publishOptions = {}) {
         link.inputKind ||
         (typeCapability && typeCapability.inputKind) ||
         "text",
-      value: normalizeVideoLinkValue(link.value),
+      // 新商品输入保留原值交给平台模块校验，不能 trim 掉控制字符或把数值强转商品名。
+      value: commerceProduct ? link.value : normalizeVideoLinkValue(link.value),
+      ...(typeCapability && typeCapability.requiresShortTitle ? { shortTitle: link.shortTitle } : {}),
       selectionMode:
         link.selectionMode ||
         (typeCapability && typeCapability.selectionMode) ||
         "direct_input",
-      failurePolicy: link.failurePolicy || "save_draft",
+      failurePolicy: ["dy", "ks"].includes((getVideoLinkCapability(platform) || {}).platformKey) ? "stop" : (link.failurePolicy || "save_draft"),
     };
   }
   return buildVideoLinkOption(platform, VIDEO_LINK_TYPES.NONE, "").value;
