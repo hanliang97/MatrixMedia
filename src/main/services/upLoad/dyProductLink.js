@@ -1,7 +1,7 @@
 import { validateDouyinProductUrl } from "../../../shared/productLinkInput.js";
 
-// 根据需求方提供的桌面创作页截图，只使用可见文案与运行时 placeholder。
-// 尚需真实账号验收；不猜测样式类，不把弹窗关闭或商品数量当作添加成功。
+// 基于需求方截图及 PR #31 提供的真实 HTML，兼容没有 ARIA role 的 Semi Select。
+// 只使用已证实的稳定类/字段关系；仍需实机验收，不把弹窗关闭当作添加成功。
 export function dyProductLinkDom(request) {
   const norm = (value) => String(value || "").replace(/\s+/g, "");
   const visible = (el) => {
@@ -14,6 +14,12 @@ export function dyProductLinkDom(request) {
     return true;
   };
   const all = (root) => Array.from(root.querySelectorAll("*")).filter(visible);
+  const classes = (el) => String(el.getAttribute("class") || "").split(/\s+/);
+  const isSemiSelect = (el) => classes(el).includes("semi-select");
+  const within = (el, root) => {
+    for (let node = el; node; node = node.parentElement) if (node === root) return true;
+    return false;
+  };
   const text = (el) => el.tagName === "SELECT" && el.selectedOptions && el.selectedOptions.length === 1
     ? norm(el.selectedOptions[0].textContent) : norm(el.innerText || el.textContent);
   const leaves = (root, predicate) => all(root).filter((el) =>
@@ -34,6 +40,8 @@ export function dyProductLinkDom(request) {
   const usable = (el, boundary) => {
     for (let node = el; node; node = node.parentElement) {
       if (node.disabled || node.getAttribute("aria-disabled") === "true") return false;
+      // 客户 HTML 的添加链接是 span，仅通过此类表示禁用，不带 disabled 属性。
+      if (classes(node).some((name) => name === "semi-select-disabled" || name.startsWith("cart-mybtn-disable-"))) return false;
       if (node === boundary) break;
     }
     return true;
@@ -86,11 +94,20 @@ export function dyProductLinkDom(request) {
     if (inputs("粘贴商品链接").length) return { ready: true, selected: true };
     const label = only(exact(document, "添加标签"), "添加标签字段");
     const controls = (root) => all(root).filter((el) => el.tagName === "SELECT" ||
-      el.getAttribute("role") === "combobox" || ["listbox", "menu"].includes(el.getAttribute("aria-haspopup")));
+      el.getAttribute("role") === "combobox" || ["listbox", "menu"].includes(el.getAttribute("aria-haspopup")) || isSemiSelect(el));
     const row = containing(label, (node) => controls(node).length > 0, "添加标签下拉行");
     const control = only(controls(row), "添加标签语义下拉控件");
     const rects = [label, control].map((el) => el.getBoundingClientRect());
-    if (text(row).length > 600 || Math.min(...rects.map((rect) => rect.bottom)) <= Math.max(...rects.map((rect) => rect.top))) {
+    if (text(row).length > 600) throw new Error("抖音挂车：添加标签范围过大");
+    if (isSemiSelect(control)) {
+      // 实际页面中标题和内容是兄弟分区，可上下排列，不能强制矩形在同一水平行。
+      const child = only(Array.from(row.children).filter((el) =>
+        classes(el).some((name) => name.startsWith("content-child-"))), "添加标签内容分区");
+      if (!classes(row).some((name) => name.startsWith("content-")) ||
+          !within(control, child) || within(label, child) || exact(row, "添加标签").length !== 1) {
+        throw new Error("抖音挂车：无法确认 Semi 下拉属于添加标签分区");
+      }
+    } else if (Math.min(...rects.map((rect) => rect.bottom)) <= Math.max(...rects.map((rect) => rect.top))) {
       throw new Error("抖音挂车：无法确认添加标签与下拉控件在同一行");
     }
     if (!usable(control, row)) throw new Error("抖音挂车：添加标签下拉不可用");
@@ -105,10 +122,25 @@ export function dyProductLinkDom(request) {
     }
     const popupId = control.getAttribute("aria-controls") || control.getAttribute("aria-owns") || "";
     if (/\s/.test(popupId)) throw new Error("抖音挂车：添加标签关联多个弹出层");
+    const semi = isSemiSelect(control);
+    if (semi && all(document).some((el) => el.getAttribute("data-code") === "-10" && text(el) === "购物车")) {
+      throw new Error("抖音挂车：购物车已可见但缺少链接输入，请确认页面状态");
+    }
     control.click();
-    return { ready: true, popupId };
+    return { ready: true, popupId, semi };
   }
   if (request.action === "chooseCart") {
+    if (request.semi && !request.popupId) {
+      // 已验证并展开的 Semi 字段：只接受新出现、非选中值容器中的明确购物车代码。
+      const options = all(document).filter((el) => el.getAttribute("data-code") === "-10" &&
+        classes(el).includes("select-dropdown-option-video") && text(el) === "购物车" &&
+        !all(document).some((control) => isSemiSelect(control) && within(el, control)));
+      if (!options.length) return { ready: false };
+      const option = only(options, "Semi 购物车选项");
+      if (!usable(option, document.body)) throw new Error("抖音挂车：购物车选项不可用");
+      option.click();
+      return { ready: true };
+    }
     const popups = request.popupId
       ? [document.getElementById(request.popupId)].filter((el) => el && visible(el))
       : all(document).filter((el) => ["listbox", "menu"].includes(el.getAttribute("role")));
@@ -132,6 +164,15 @@ export function dyProductLinkDom(request) {
     if (text(row).length > 600) throw new Error("抖音挂车：购物车链接行范围过大");
     const button = only(exact(row, "添加链接"), "添加链接按钮");
     const cart = only(exact(row, "购物车"), "购物车选项");
+    const semiControls = all(row).filter(isSemiSelect);
+    if (semiControls.length) {
+      const control = only(semiControls, "购物车 Semi 下拉控件");
+      const anchor = only(all(document).filter((el) => el.getAttribute("id") === "douyin_creator_pc_anchor_jump"), "购物车链接容器");
+      if (!within(cart, control) || cart.getAttribute("data-code") !== "-10" ||
+          anchor.parentElement !== control.parentElement || !within(input, anchor) || !within(button, anchor)) {
+        throw new Error("抖音挂车：购物车代码或链接容器不匹配");
+      }
+    }
     const rects = [input, cart, button].map((el) => el.getBoundingClientRect());
     if (Math.min(...rects.map((rect) => rect.bottom)) <= Math.max(...rects.map((rect) => rect.top))) {
       throw new Error("抖音挂车：购物车选项、链接输入与添加按钮不在同一行");
@@ -203,7 +244,7 @@ export async function attachDyProductLink(page, link, options = {}) {
   const timeoutMs = options.timeoutMs == null ? 30000 : options.timeoutMs;
   const cart = await page.evaluate(dyProductLinkDom, { action: "prepareCart" });
   if (!cart.selected) {
-    if (!cart.native) await waitForStep(page, { action: "chooseCart", popupId: cart.popupId }, timeoutMs);
+    if (!cart.native) await waitForStep(page, { action: "chooseCart", popupId: cart.popupId, semi: cart.semi }, timeoutMs);
     await waitForStep(page, { action: "inspectCart" }, timeoutMs);
   }
   await page.evaluate(dyProductLinkDom, { action: "fillLink", value: checked.value });

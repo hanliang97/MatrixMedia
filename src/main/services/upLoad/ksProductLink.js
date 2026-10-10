@@ -1,7 +1,7 @@
 /**
- * 快手货架商品：截图只确认了交互文案，尚未完成真实账号验收。
- * 不依赖未经取证的平台 class；运行时无法唯一识别控件、商品或回显时停止发布。
- * 当前可滚动/未完整展开货架会停止，尚不支持虚拟列表遍历；不是完整快手挂车验收结果。
+ * 快手货架商品：Ant Select 结构来自 PR31 买方提供的真实 HTML（6095673896）。
+ * 输入完整商品名收窄货架；仍有未展开虚拟项、同名项或不能确认回显时停止发布。
+ * 离线 DOM 回归不代替真实账号验收，不遍历整货架或推断隐藏的商品。
  * 此函数会由 Puppeteer 序列化，所有 DOM 辅助函数必须保留在函数内部。
  */
 export function inspectKsProductDom({ phase, token, target }) {
@@ -28,6 +28,8 @@ export function inspectKsProductDom({ phase, token, target }) {
   };
   const semantic = 'input[role="combobox"],[role="combobox"],[aria-haspopup="listbox"]';
   const fail = (reason) => ({ ok: false, reason });
+  const own = (root, selector) => Array.from(root.querySelectorAll(selector))
+    .filter((node) => node.closest(".ant-select") === root);
 
   if (phase === "cleanup") {
     document.querySelectorAll(`[${mark}]`).forEach((node) => {
@@ -38,11 +40,39 @@ export function inspectKsProductDom({ phase, token, target }) {
 
   if (phase === "discover") {
     const labels = exactLeaves(document, "作者服务");
+    if (!labels.length) return fail("作者服务行尚未出现");
     if (labels.length !== 1) return fail("无法唯一定位可见的作者服务行");
     for (let row = labels[0].parentElement, depth = 0;
       row && row !== document.body && depth < 7; row = row.parentElement, depth++) {
       // 禁止把整张表单误认为这一行，从而误点其它下拉框。
       if (["关联热点", "作者声明", "发布设置"].some((value) => exactLeaves(row, value).length)) break;
+      // 真实页面把类型和商品放在两个 Ant Select；ARIA input 不是可点击入口。
+      const antSelects = Array.from(row.querySelectorAll(".ant-select")).filter(visible);
+      const modes = antSelects.filter((root) => own(root, ".ant-select-selection-item")
+        .some((node) => visible(node) && text(node) === "关联商品"));
+      if (modes.length > 1) return fail("作者服务中存在多个关联商品类型控件");
+      if (modes.length === 1) {
+        const goods = antSelects.filter((root) => root !== modes[0] &&
+          Boolean(modes[0].compareDocumentPosition(root) & 4) &&
+          root.classList.contains("ant-select-show-search") &&
+          own(root, 'input[role="combobox"]').length === 1);
+        if (goods.length > 1) return fail("关联商品后有多个候选控件");
+        if (!goods.length) continue;
+        const root = goods[0];
+        const input = own(root, 'input[role="combobox"]')[0];
+        const selectors = own(root, ".ant-select-selector").filter(visible);
+        const placeholder = own(root, ".ant-select-selection-placeholder").filter(visible);
+        const selection = own(root, ".ant-select-selection-item").filter(visible);
+        if (selectors.length !== 1 || (placeholder.length !== 1 && selection.length !== 1) ||
+            (placeholder.length === 1 && text(placeholder[0]) !== "关联商品获得更多收入")) {
+          return fail("商品控件结构已变化，无法确认安全入口");
+        }
+        if (input.disabled || input.readOnly || root.classList.contains("ant-select-disabled") ||
+            root.getAttribute("aria-disabled") === "true") return fail("商品搜索控件不可用");
+        stamp(root, "ant-frame");
+        const inputSelector = stamp(input, "ant-input");
+        return { ok: true, selector: stamp(selectors[0], "trigger"), inputSelector };
+      }
       const productLabels = exactLeaves(row, "关联商品");
       if (productLabels.length !== 1) continue;
       const productLabel = productLabels[0];
@@ -74,6 +104,74 @@ export function inspectKsProductDom({ phase, token, target }) {
       return { ok: true, selector };
     }
     return fail("未识别到作者服务中的唯一关联商品控件");
+  }
+
+  const antFrame = marked("ant-frame");
+  if (antFrame) {
+    const input = marked("ant-input");
+    const trigger = marked("trigger");
+    if (!visible(antFrame) || !visible(trigger) || !input || !antFrame.contains(input)) {
+      return fail("商品入口已变化");
+    }
+    const popupIds = new Set(["aria-controls", "aria-owns"].flatMap((attr) =>
+      String(input.getAttribute(attr) || "").split(/\s+/).filter(Boolean)));
+    const popups = [];
+    popupIds.forEach((id) => {
+      const ariaList = document.getElementById(id);
+      // ARIA listbox 是 0×0 的辅助列表；只取所属弹层，不能向上越过隐藏弹层。
+      const popup = ariaList && ariaList.closest(".ant-select-dropdown");
+      if (popup && visible(popup) && !popups.includes(popup)) popups.push(popup);
+    });
+    if (phase === "selected") {
+      if (input.getAttribute("aria-expanded") === "true" || popups.length) {
+        return fail("商品下拉仍展开，尚未确认选择完成");
+      }
+      const labels = own(antFrame, ".ant-select-selection-item").filter(visible);
+      if (labels.length !== 1 || (text(labels[0]) !== target && exactLeaves(labels[0], target).length !== 1)) {
+        return fail("商品入口未回显完整目标名称");
+      }
+      if (own(antFrame, ".ant-select-selection-placeholder").some(visible)) {
+        return fail("商品占位仍显示，尚未确认选择完成");
+      }
+      return { ok: true, value: target };
+    }
+    if (phase !== "options") return fail("未知商品检查阶段");
+    if (input.value !== target) return fail("尚未按完整商品名搜索");
+    if (input.getAttribute("aria-expanded") !== "true" || popups.length !== 1) {
+      return fail("商品下拉列表尚未唯一出现");
+    }
+    const popup = popups[0];
+    if (popup.getAttribute("aria-busy") === "true" ||
+        Array.from(popup.querySelectorAll('.ant-spin-spinning,[aria-busy="true"]')).some(visible)) {
+      return fail("商品列表仍在加载");
+    }
+    const holders = Array.from(popup.querySelectorAll(".rc-virtual-list-holder")).filter(visible);
+    if (holders.length !== 1) return fail("无法确认商品列表完整范围");
+    const holder = holders[0];
+    const inners = Array.from(holder.querySelectorAll(".rc-virtual-list-holder-inner")).filter(visible);
+    if (inners.length !== 1 || holder.clientHeight <= 0) return fail("无法确认商品列表完整范围");
+    const inner = inners[0];
+    // overflow-y:hidden 也可能是真实虚拟货架，不能仅检查 auto/scroll。
+    const matrix = getComputedStyle(inner).transform;
+    const translated = matrix && matrix !== "none" &&
+      !/^matrix\(1,\s*0,\s*0,\s*1,\s*0,\s*0\)$/.test(matrix);
+    if (holder.scrollHeight > holder.clientHeight + 1 || holder.scrollTop > 0 || translated ||
+        inner.getBoundingClientRect().height > holder.clientHeight + 1) {
+      return fail("搜索后商品列表未完整展开，无法排除未显示的同名商品");
+    }
+    const options = Array.from(inner.querySelectorAll(".ant-select-item-option")).filter(visible);
+    if (!options.length) return fail("未找到完整名称精确匹配的可见商品");
+    const matches = options.filter((node) => String(node.getAttribute("label") || "").trim() === target);
+    if (matches.length > 1) return fail("存在同名商品，不能自动选择");
+    if (!matches.length) return fail("未找到完整名称精确匹配的可见商品");
+    const option = matches[0];
+    if (/[….]{2,}|…/.test(target) || exactLeaves(option, target).length !== 1) {
+      return fail("商品名称原文不能确认完整匹配");
+    }
+    if (option.getAttribute("aria-disabled") === "true" || option.classList.contains("ant-select-item-option-disabled")) {
+      return fail("目标商品不可选");
+    }
+    return { ok: true, selector: stamp(option, "option") };
   }
 
   const trigger = marked("trigger");
@@ -169,8 +267,21 @@ export async function attachKsProductLink(page, link) {
     return requireResult(result);
   };
   try {
-    const entry = requireResult(await probe("discover"));
+    const entry = await waitProbe("discover");
     await page.click(entry.selector);
+    if (entry.inputSelector) {
+      // Ant 的占位和弹层容器覆盖输入框；聚焦已验证的搜索 input，再发真实键盘事件。
+      const focused = await page.$eval(entry.inputSelector, (input) => {
+        input.focus(); input.select();
+        return document.activeElement === input && input.selectionStart === 0 &&
+          input.selectionEnd === input.value.length;
+      });
+      if (!focused) throw new Error("快手挂车失败：无法聚焦商品搜索控件");
+      await page.keyboard.press("Backspace");
+      await page.type(entry.inputSelector, target);
+      // 等候受控输入过滤货架；后续仍逐次核验完整性与唯一性，不使用辅助 ARIA 缓存。
+      await page.waitForTimeout(400);
+    }
     const option = await waitProbe("options");
     await page.click(option.selector);
     requireResult(await waitProbe("selected"));

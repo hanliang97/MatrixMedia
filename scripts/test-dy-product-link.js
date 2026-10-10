@@ -5,7 +5,8 @@ const fs = require("node:fs");
 const path = require("node:path");
 const toModule = (source) => `data:text/javascript;base64,${Buffer.from(source).toString("base64")}`;
 
-// 小型 DOM 测试桩执行真实 evaluate 函数，验证语义定位/业务状态；不是实站 DOM 快照。
+// 小型 DOM 测试桩执行真实 evaluate 函数。另载入客户原始 HTML 保留真实嵌套/属性；
+// 布局、事件和编辑/成功阶段仍是桩，不等同于真实账号端到端验收。
 class Element {
   constructor(tag = "div", label = "", attrs = {}) {
     this.tagName = tag.toUpperCase(); this.label = label; this.attrs = attrs;
@@ -132,7 +133,79 @@ function fixture(mode = "success") {
     },
     async waitForTimeout() {},
   };
-  return { page, trace, input };
+  return { page, trace, input, document, main, row, add };
+}
+
+// 仅解析随测试保存的客户 HTML（不执行脚本、不联网），不作为应用的 HTML 解析器。
+function parseCustomerHtml(html) {
+  const root = new Element();
+  const stack = [root];
+  for (const token of html.match(/<[^>]+>|[^<]+/g) || []) {
+    if (token.startsWith("</")) { stack.pop(); continue; }
+    if (token.startsWith("<")) {
+      const tag = token.match(/^<([\w-]+)/)?.[1];
+      if (!tag) continue;
+      const attrs = {};
+      for (const match of token.matchAll(/([\w:-]+)\s*=\s*"([^"]*)"/g)) attrs[match[1]] = match[2];
+      const el = tag === "input" ? new Input(attrs.placeholder) : new Element(tag);
+      el.attrs = attrs;
+      if (tag === "input") el.value = attrs.value || "";
+      stack.at(-1).append(el);
+      if (!["input", "img", "br", "hr", "meta", "link"].includes(tag) && !token.endsWith("/>")) stack.push(el);
+    } else {
+      stack.at(-1).label += token;
+    }
+  }
+  assert.equal(stack.length, 1, "customer fixture tags must be balanced");
+  return root.children[0];
+}
+
+function customerFixture(mode = "selected") {
+  const f = fixture();
+  f.row.remove();
+  const html = fs.readFileSync(path.join(__dirname, "fixtures/dy-product-link-customer.html"), "utf8");
+  const section = parseCustomerHtml(html); f.main.append(section);
+  const all = () => section.querySelectorAll("*");
+  const control = all().find((el) => (el.getAttribute("class") || "").split(/\s+/).includes("semi-select"));
+  const selected = all().find((el) => el.getAttribute("data-code") === "-10");
+  const label = all().find((el) => el.label.trim() === "添加标签");
+  const anchor = all().find((el) => el.getAttribute("id") === "douyin_creator_pc_anchor_jump");
+  const input = all().find((el) => el.tagName === "INPUT");
+  const button = all().find((el) => el.label.trim() === "添加链接");
+  label.top = 20; // 客户标题和内容可上下分区，不能依赖标题与控件横向重叠。
+  button.onClick = f.add.onClick;
+  input.onEvent = () => {
+    if (mode !== "disabledAdd") button.attrs.class = "cart-mybtn-enabled-fixture";
+  };
+  if (["initial", "duplicateOption", "wrongCode", "existingOption"].includes(mode)) {
+    // 明确派生的未选状态：客户原始快照是已选购物车，日志来自先前未选状态。
+    const cartPart = anchor.children[0]; cartPart.remove();
+    selected.label = "无"; selected.attrs["data-code"] = "-1";
+    control.onClick = () => {
+      f.trace.push("openCart");
+      const popup = new Element();
+      const option = new Element("div", "购物车", { "data-code": mode === "wrongCode" ? "other" : "-10", class: "select-dropdown-option-video" });
+      option.onClick = () => {
+        f.trace.push("chooseCartOption"); popup.remove(); selected.label = "购物车";
+        selected.attrs["data-code"] = "-10"; anchor.append(cartPart);
+      };
+      popup.append(option);
+      if (mode === "duplicateOption") popup.append(new Element("div", "购物车", { "data-code": "-10", class: "select-dropdown-option-video" }));
+      f.document.body.append(popup);
+    };
+    if (mode === "existingOption") f.document.body.append(new Element("div", "购物车", { "data-code": "-10", class: "select-dropdown-option-video" }));
+  }
+  if (mode === "wrongAnchor") anchor.attrs.id = "unrelated-anchor";
+  if (mode === "wrongSelectedCode") selected.attrs["data-code"] = "other";
+  if (mode === "duplicateInput") anchor.append(new Input("粘贴商品链接"));
+  if (mode === "duplicateControl") control.parentElement.append(new Element("div", "其他", { class: "semi-select" }));
+  if (mode === "separatedControl") { control.remove(); label.parentElement.append(control); }
+  if (mode === "orphanControl") {
+    anchor.children[0].remove(); selected.label = "无"; selected.attrs["data-code"] = "-1";
+    control.remove(); label.parentElement.append(control);
+  }
+  f.input = input;
+  return f;
 }
 
 async function main() {
@@ -188,9 +261,28 @@ async function main() {
     await assert.rejects(attachDyProductLink(f.page, link, { timeoutMs: 0 }), error, mode);
     assert.deepEqual(f.trace.filter((step) => ["add", "complete"].includes(step)), clicked, mode);
   }
+  for (const mode of ["selected", "initial"]) {
+    const f = customerFixture(mode);
+    assert.deepEqual(await attachDyProductLink(f.page, link, { timeoutMs: 0 }),
+      { attached: true, productTitle: originalTitle, shortTitle: link.shortTitle }, mode);
+    assert.equal(f.input.value, link.value);
+    assert.deepEqual(f.trace.filter((step) => ["add", "complete"].includes(step)), ["add", "complete"]);
+    if (mode === "initial") assert.deepEqual(f.trace.filter((step) => ["openCart", "chooseCartOption"].includes(step)), ["openCart", "chooseCartOption"]);
+  }
+  const customerFailures = [
+    ["disabledAdd", /超时/], ["wrongAnchor", /购物车链接容器/],
+    ["wrongSelectedCode", /代码或链接容器/], ["duplicateInput", /必须唯一/],
+    ["duplicateControl", /必须唯一/], ["orphanControl", /内容分区/], ["separatedControl", /代码或链接容器/],
+    ["duplicateOption", /必须唯一/], ["wrongCode", /超时/], ["existingOption", /缺少链接输入/],
+  ];
+  for (const [mode, error] of customerFailures) {
+    const f = customerFixture(mode);
+    await assert.rejects(attachDyProductLink(f.page, link, { timeoutMs: 0 }), error, mode);
+    assert.deepEqual(f.trace.filter((step) => ["add", "complete"].includes(step)), [], mode);
+  }
   const broken = { evaluate: async () => { throw new Error("Execution context destroyed"); } };
   await assert.rejects(attachDyProductLink(broken, link), /Execution context destroyed/);
-  console.log(`test-dy-product-link passed (real DOM function exercised; ${cases.length} failure scenarios)`);
+  console.log(`test-dy-product-link passed (${cases.length} original + ${customerFailures.length} customer-HTML failure scenarios; original selected/derived initial Semi states)`);
 }
 
 main().catch((error) => { console.error(error); process.exitCode = 1; });
