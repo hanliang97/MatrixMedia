@@ -51,6 +51,8 @@ matrixmedia cli login -p sph --phone 账号分组 --browser chrome
 
 此模式会显示本机 Chrome / Chromium 窗口，不使用终端二维码。每个账号 partition 使用独立的持久化 Chrome 目录，不读取日常浏览器账号，也不会把内置窗口的旧凭据注入 Chrome。Chrome 端鉴权通过后，替换原账号分区中的视频号 Cookie，再验证应用端会话；仅两端均通过才报告成功，失败会恢复原会话。窗口关闭、超时、鉴权失败返回非零退出码。代理配置沿用该账号设置；带认证的 SOCKS 代理暂不支持。由于旧发布端会裁剪连字符分区，此回退暂拒绝包含连字符的 partition，避免登录成功却无法被发布端读取。
 
+用 `--browser chrome` 登录过的账号，`cli publish -p sph` 会复用同一个 Chrome 目录，在无头 Chrome 里发布（不弹窗口）。原因是以内置窗口（微信 UA）登录的会话调用上传凭证接口 `helper_upload_params` 会一律返回 `errCode 300001`，视频卡在 0%。Chrome 目录未登录或本机没有 Chrome 时，自动回退内置窗口发布。
+
 复用账号分区时，旧的域 Cookie 与新扫码写入的 host-only `sessionid` 可能并存。主动打开 GUI / CLI 登录入口会先验证候选会话，再整理冲突；替换后仍须通过原生鉴权，否则恢复原 jar。普通状态检查不会改写 Cookie，不会仅凭到期时间猜测哪份会话有效，也不会清除其他平台分区或父域的无关 Cookie。
 
 GUI 的视频号账号管理页也提供「使用 Chrome 登录」。缺少 Chrome 时，请安装 Chrome / Chromium，或通过已有 Chrome 路径配置指定浏览器。该回退用于登录兼容性，不承诺解决内置浏览器的发布兼容问题。

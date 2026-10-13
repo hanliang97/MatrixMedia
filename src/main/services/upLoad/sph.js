@@ -20,10 +20,6 @@ import {
 
 const SEL_ORIGINAL_CHECKBOX =
   "wujie-app.wujie_iframe >>> .declare-original-checkbox .ant-checkbox-wrapper";
-const SEL_ORIGINAL_DIALOG_CHECK =
-  "wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog label.ant-checkbox-wrapper";
-const SEL_ORIGINAL_DIALOG_OK =
-  "wujie-app.wujie_iframe >>> .declare-original-dialog .weui-desktop-dialog button.weui-desktop-btn_primary";
 
 /**
  * 声明原创：部分账号/版本无入口或已默认处理，失败不影响后续发布。
@@ -49,57 +45,46 @@ async function tryDeclareOriginal(page) {
     return;
   }
 
-  try {
-    await page.waitForSelector(
-      "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text",
-      { timeout: 2500 }
-    );
-    const protocol = await page.$(
-      "wujie-app.wujie_iframe >>> .weui-desktop-dialog__bd .protocol-text"
-    );
-    if (protocol) await protocol.click();
-    await page.waitForTimeout(300);
-    const clicked = await page.evaluate(() => {
-      const app = document.querySelector("wujie-app.wujie_iframe");
-      if (!app || !app.shadowRoot) return false;
-      const bodies = app.shadowRoot.querySelectorAll(
-        ".weui-desktop-dialog__bd"
-      );
-      for (const body of bodies) {
-        const dlg = body.closest(".weui-desktop-dialog") || body.parentElement;
-        const btns = (dlg || body).querySelectorAll(
-          "button.weui-desktop-btn_primary"
+  // 弹出「原创权益」框：DOM 里有一份隐藏的同款框，只操作可见的那份；
+  // 先勾协议（勾框在 label 上，点文字不生效），再点「声明原创」，都用真实点击
+  const visibleInDialog = (sel, text) =>
+    page.evaluateHandle(
+      (sel, text) => {
+        const root = document.querySelector("wujie-app.wujie_iframe").shadowRoot;
+        const wrap = [...root.querySelectorAll(".original-proto-wrapper")].find(
+          (el) => el.offsetParent !== null
         );
-        for (const btn of btns) {
-          if (
-            String(btn.textContent || "")
-              .trim()
-              .includes("声明原创")
-          ) {
-            btn.click();
-            return true;
-          }
-        }
-      }
-      return false;
-    });
-    if (clicked) await page.waitForTimeout(800);
-  } catch (_) {
-    /* 非首次账号或协议弹窗未出现 */
+        const dlg = wrap && wrap.closest(".weui-desktop-dialog");
+        if (!dlg) return null;
+        return (
+          [...dlg.querySelectorAll(sel)].find(
+            (el) => !text || el.textContent.trim() === text
+          ) || null
+        );
+      },
+      sel,
+      text
+    );
+  try {
+    await page.waitForTimeout(1000);
+    const agree = (await visibleInDialog(".original-proto-wrapper label")).asElement();
+    if (agree) {
+      await agree.click();
+      await page.waitForTimeout(300);
+      const ok = (await visibleInDialog("button", "声明原创")).asElement();
+      if (ok) await ok.click();
+      await page.waitForTimeout(800);
+    }
+  } catch (e) {
+    console.warn("声明原创：确认框处理异常", e && e.message ? e.message : e);
   }
 
-  try {
-    const cBox = await page.waitForSelector(SEL_ORIGINAL_DIALOG_CHECK, {
-      timeout: 3000,
-    });
-    await cBox.click();
-    const aBtn = await page.waitForSelector(SEL_ORIGINAL_DIALOG_OK, {
-      timeout: 3000,
-    });
-    await aBtn.click();
-  } catch (_) {
-    console.log("声明原创：未出现后续确认框或已完成，跳过");
-  }
+  const checked = await page.evaluate(() => {
+    const root = document.querySelector("wujie-app.wujie_iframe").shadowRoot;
+    const input = root.querySelector(".declare-original-checkbox input");
+    return !!(input && input.checked);
+  });
+  console.log(checked ? "声明原创：已勾选" : "声明原创：未勾选成功，按不声明继续");
 }
 
 /**
@@ -165,6 +150,21 @@ async function clickSphPublishButton(page) {
   if (!publishBtn) throw new Error("未找到视频号发布按钮");
   await publishBtn.click({ delay: 200 });
   await page.waitForTimeout(1000);
+  // 未声明原创时会弹「声明原创的视频有机会获得广告分成」，选「直接发表」
+  const direct = (
+    await page.evaluateHandle(() => {
+      const root = document.querySelector("wujie-app.wujie_iframe").shadowRoot;
+      return (
+        [...root.querySelectorAll(".weui-desktop-dialog button")].find(
+          (b) => b.offsetParent !== null && b.textContent.trim() === "直接发表"
+        ) || null
+      );
+    })
+  ).asElement();
+  if (direct) {
+    await direct.click();
+    await page.waitForTimeout(1000);
+  }
 }
 
 async function waitSphUploadProcessing(page) {
@@ -296,8 +296,9 @@ export default async function (page, data, window, event, onFinish) {
       );
     }
 
-    await tryDeclareOriginal(page);
     await waitSphUploadProcessing(page);
+    // 「声明原创」入口在视频上传后才渲染，必须等处理完再勾
+    await tryDeclareOriginal(page);
 
     // 所有表单项（包括商品）完成后，草稿和发布只能二选一执行。
     const urlBefore = readPageUrl(page);

@@ -17,6 +17,12 @@ import {
 } from "../../shared/xhsPublishPolicy.js";
 import { resolveChromePath } from "./chromeConfig.js";
 import xhsChromeHandler from "./upLoad/xhsChrome.js";
+import {
+  hasSphChrome,
+  hasSphChromeProfile,
+  isSphChromeLoggedIn,
+  launchSphChrome,
+} from "./upLoad/sphChrome.js";
 import { isPlatformLoginUrl } from "../../shared/platformPageState.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 import { capturePublishFailureScreenshot } from "./upLoad/failureScreenshot.js";
@@ -550,12 +556,66 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     }
   };
 
+  /**
+   * 视频号：系统 Chrome profile 已登录（cli login -p sph --browser chrome）时在无头 Chrome 里发布，
+   * 原因见 upLoad/sphChrome.js；Chrome 不可用或未登录则回退原 Electron 流程。
+   */
+  let _sphRealChromeFallback = false;
+  const runSphRealChrome = async () => {
+    if (finished) return;
+    let realBrowser = null;
+    const fakeWindow = {
+      _mmClosedByProgram: false,
+      _mmAllowCloseWithoutConfirm: false,
+      isDestroyed: () => !realBrowser,
+      close() {
+        const b = realBrowser;
+        realBrowser = null;
+        if (b) b.close().catch(() => {});
+      },
+    };
+    try {
+      const launched = await launchSphChrome(data.partition);
+      realBrowser = launched.browser;
+      const page = launched.page;
+      if (!(await isSphChromeLoggedIn(page, data.partition))) {
+        console.log("[sph-chrome] Chrome 中未登录视频号，回退 Electron 窗口发布");
+        fakeWindow.close();
+        _sphRealChromeFallback = true;
+        return createWindowAndAttempt();
+      }
+      activePage = page;
+      await page.goto(data.url, { waitUntil: "domcontentloaded", timeout: 60000 });
+      await page.waitForTimeout(3000);
+      await Type[data.pt](page, data, fakeWindow, createAttemptTransport(), finishOnce);
+    } catch (err) {
+      console.error("[sph-chrome] 真实浏览器发布失败:", err?.message || err);
+      await replyFailureWithShot({
+        ...(err && err._mmUploadFailurePayload),
+        ...data,
+        status: false,
+        message: `视频号发布失败: ${err?.message || err}`,
+      });
+      finishOnce();
+    } finally {
+      fakeWindow.close();
+    }
+  };
+
   const createWindowAndAttempt = async () => {
     if (finished) return;
 
     // 小红书 + 真实浏览器模式开关（fallback 时跳过，避免循环）
     if (isXhsTask && data.useRealBrowser && !_xhsRealChromeFallback) {
       return runXhsRealChrome();
+    }
+    if (
+      data.pt === "视频号" &&
+      !_sphRealChromeFallback &&
+      hasSphChrome() &&
+      hasSphChromeProfile(data.partition)
+    ) {
+      return runSphRealChrome();
     }
 
     currentAttempt++;
