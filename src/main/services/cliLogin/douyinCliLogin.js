@@ -11,6 +11,7 @@ import {
   paintLoginQrToTerminalFromPuppeteerPage,
 } from "./terminalQrFromCapture.js";
 import {
+  clearDouyinSession,
   hasDouyinSession,
   normalizeDouyinPartition,
 } from "./douyinSessionUtil.js";
@@ -35,6 +36,7 @@ export async function runDouyinCliLogin({
   timeoutMs,
   saveQrPngPath = null,
   puppeteerHeadless = false,
+  force = false,
 }) {
   const cfg = ptConfig.抖音;
   if (!cfg) {
@@ -43,6 +45,11 @@ export async function runDouyinCliLogin({
   }
 
   const part = normalizeDouyinPartition(partition);
+
+  if (force) {
+    const n = await clearDouyinSession(part);
+    console.log(`抖音：--force 已清除 ${n} 个旧登录 Cookie，重新扫码登录。`);
+  }
 
   if (puppeteerHeadless) {
     const { runDouyinPuppeteerHeadlessLogin } = await import(
