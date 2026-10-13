@@ -188,6 +188,42 @@ async function selectKsCreativeStatement(page, data) {
   console.log("[ks] 已选择声明:", label);
 }
 
+/**
+ * 填作品描述并回读校验，没填上就重试；用户给了描述却填不上则中断发布。
+ * 发布窗口隐藏、拿不到焦点时键盘事件进不了 contenteditable（实测描述为空却报成功），
+ * 改为脚本聚焦 + execCommand 插入，会正常触发编辑器的 input 事件。
+ */
+async function fillKsDescription(page, description) {
+  if (!description) return;
+  const selector = "#work-description-edit";
+  const head = description.replace(/\s+/g, "").slice(0, 10);
+  for (let i = 0; i < 3; i++) {
+    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
+    await page.evaluate(
+      (sel, text) => {
+        const el = document.querySelector(sel);
+        el.focus();
+        document.execCommand("selectAll", false);
+        document.execCommand("delete", false);
+        document.execCommand("insertText", false, text);
+      },
+      selector,
+      description
+    );
+    await page.waitForTimeout(800);
+    const got = await page.evaluate(
+      (sel) => (document.querySelector(sel) || {}).innerText || "",
+      selector
+    );
+    if (got.replace(/\s+/g, "").includes(head)) {
+      console.log("[ks] 作品描述已填写，长度", got.length);
+      return;
+    }
+    console.warn(`[ks] 作品描述未生效（第 ${i + 1} 次），重试`);
+  }
+  throw new Error("快手作品描述填写失败");
+}
+
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
@@ -203,18 +239,6 @@ export default async function (page, data, window, event) {
     console.error("文件上传失败:", err);
   }
 
-  try {
-    const text = buildPlatformVideoText("快手", data.data);
-    const selector = "#work-description-edit";
-    await page.waitForSelector(selector, { timeout: WAIT_SELECTOR_APPEAR_MS });
-    const input = await page.$(selector);
-    await input.click();
-    if (text.description) {
-      await page.keyboard.type(text.description, { delay: 50 });
-    }
-  } catch (e) {
-    console.error("❌ 输入标题失败", e);
-  }
   try {
     await page.click(".ant-checkbox-group>label:nth-of-type(2)", {
       delay: 200,
@@ -240,6 +264,8 @@ export default async function (page, data, window, event) {
       2000,
       "等待快手视频上传完成超时"
     );
+    // 描述放到上传完成后再填：上传过程中表单会重渲染，先填的内容会被清空
+    await fillKsDescription(page, buildPlatformVideoText("快手", data.data).description);
     await page.waitForFunction(
       (text) => {
         const bar = document.querySelector("#setting-tours + div");
