@@ -47,7 +47,7 @@ assert.strictEqual(
 );
 
 assert.strictEqual(platformSupportsVideoLink("视频号"), true);
-assert.strictEqual(platformSupportsVideoLink("抖音"), false);
+assert.strictEqual(platformSupportsVideoLink("抖音"), true);
 assert.deepStrictEqual(
   getSupportedVideoLinkTypes("视频号").map((item) => item.type),
   [
