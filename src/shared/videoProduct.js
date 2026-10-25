@@ -13,7 +13,8 @@ export function getVideoProductCapability(platform) {
     platform,
     VIDEO_LINK_TYPES.PRODUCT
   );
-  if (!capability) return null;
+  // 旧商品编号契约仅适用于视频号，不能将抖音 URL / 快手商品名作为商品 ID。
+  if (!capability || capability.selectionMode !== "product_id") return null;
   return {
     implemented: capability.automationSupported,
     maxItems: 1,
