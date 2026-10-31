@@ -198,3 +198,43 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 - `platform` 取值：`dy` `sph` `blbl` `bjh` `tt` `ks` `xhs`
 - `phone` 为分组名（GUI「媒体平台管理」中的分组）
 - 数据来自本地快照；没有数据时先调 `sync_account_stats`
+
+## 评论互动工具（Comment Tools）
+
+| 工具 | 说明 |
+| --- | --- |
+| `list_comments` | 拉取账号已发布作品的评论列表（只读）：`{phone, platform, limit?, work?}` |
+| `reply_comment` | 回复评论或对作品发顶层评论（写操作，confirm 门控）：`{phone, platform, content, comment_id?, work_id?, work_title?, match_content?, root_comment_id?, confirm?}` |
+
+- `platform` 取值：`dy` `ks` `sph`（抖音 / 快手 / 视频号）
+- `phone` 为分组名（GUI「媒体平台管理」中的分组），账号需已在 GUI 登录
+- 底层 CLI：`cli comments` / `cli comments-reply`。若已安装桌面端还不包含评论子命令，可让 MCP 走源码树：`MATRIXMEDIA_BIN` 指向 `mcp/mm-dev-bin.sh`（包装脚本，把 CLI 调用转发到源码树 electron）
+- **安全设计**：`reply_comment` 默认 `confirm=false` 为 dry-run——只校验目标评论/作品存在，不发送任何内容；`confirm=true` 才真发，且单次调用只发 1 条。请仅在人工核准回复文案后使用 `confirm=true`。每次调用（含 dry-run）都会追加台账 `<userData>/comments/<分组>/<平台>/reply-log.jsonl`
+- dy/ks 通过 `match_content`（目标评论原文）在评论管理页 DOM 定位；sph 通过 `comment_id` + `work_id`/`work_title` 走助手接口
+- 环境变量 `MM_MCP_COMMENTS_ONLY=1`：只暴露以上 2 个评论 tool——用于与已安装桌面端的 matrixmedia server **并存**部署（避免发布类 tool 重复注册、避免误把发布调用路由到源码树），启动器示例见 `mcp/run-comments-mcp.sh`
+
+调用示例（arguments）：
+
+```json
+// list_comments：拉取快手账号评论（最新 50 条）
+{ "phone": "13800138000", "platform": "ks", "limit": 50 }
+
+// list_comments：按作品过滤（标题子串或 workId）
+{ "phone": "13800138000", "platform": "dy", "work": "视频标题片段" }
+
+// reply_comment：dry-run 校验（缺省 confirm=false，不发送）
+{ "phone": "13800138000", "platform": "sph",
+  "content": "感谢指正！已核对原文。",
+  "comment_id": "<评论ID>", "work_id": "export/Uz..." }
+
+// reply_comment：人工核准后真发（单条）
+{ "phone": "13800138000", "platform": "sph",
+  "content": "感谢指正！已核对原文。",
+  "comment_id": "<评论ID>", "work_id": "export/Uz...", "confirm": true }
+
+// reply_comment：对作品发顶层评论（省略 comment_id，可用于置顶评论场景）
+{ "phone": "13800138000", "platform": "ks",
+  "content": "勘误与延伸阅读见评论区置顶", "match_content": "", "work_title": "视频标题片段" }
+```
+
+返回为底层 CLI 的 JSON：`list_comments` → `{success, count, comments:[{workId, workTitle, commentId, content, nickname, createTime, likeCount, replied, ...}]}`；`reply_comment` → `{success, mode: dry|execute, ok, dryOk, errors, results:[{status, detail, ...}], logFile}`。

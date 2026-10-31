@@ -242,6 +242,7 @@ module.exports = {
   mergeDaily,
   mergeWorks,
   readDaily,
+  readWorks,
   readAccount,
   readOverview,
   listAccounts,

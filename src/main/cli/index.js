@@ -14,9 +14,14 @@ import { parseLoginArgs, loginHelpText } from "./parseLoginArgs";
 import { parseAccountsArgs, accountsHelpText } from "./parseAccountsArgs";
 import { parseHistoryArgs, historyHelpText } from "./parseHistoryArgs";
 import { parseStatsArgs, statsHelpText } from "./parseStatsArgs";
+import {
+  parseCommentsArgs,
+  commentsHelpText,
+} from "./parseCommentsArgs";
 import { runAccountsCli } from "./runAccountsCli";
 import { runHistoryCli } from "./runHistoryCli";
 import { runStatsCli } from "./runStatsCli";
+import { runCommentsCli } from "./runCommentsCli";
 import ptConfig from "../config/ptConfig";
 import { runPuppeteerTask } from "../services/puppeteerFile";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
@@ -565,7 +570,7 @@ export async function runCliMain(argv = process.argv) {
   const sub = getCliSubArgv(argv);
   if (!sub || sub.length === 0) {
     console.error(
-      "用法: <应用> cli <publish|publish-article|login|accounts|history|stats|stats-sync|stats-work> ..."
+      "用法: <应用> cli <publish|publish-article|login|accounts|history|stats|stats-sync|stats-work|comments|comments-reply|comments-probe> ..."
     );
     console.error("  cli publish --help");
     console.error("  cli publish-article --help");
@@ -1014,9 +1019,33 @@ export async function runCliMain(argv = process.argv) {
     }
   }
 
+  // 评论互动：comments 拉评论列表 / comments-reply 回复（默认 dry-run）/ comments-probe 端点探针
+  const COMMENTS_CMDS = {
+    comments: "list",
+    "comments-reply": "reply",
+    "comments-probe": "probe",
+  };
+  if (Object.prototype.hasOwnProperty.call(COMMENTS_CMDS, cmd)) {
+    const parsed = parseCommentsArgs(sub.slice(1), COMMENTS_CMDS[cmd]);
+    if (!parsed.ok) {
+      console.error(parsed.error);
+      return 2;
+    }
+    if (parsed.value.help) {
+      console.log(commentsHelpText(cmd));
+      return 0;
+    }
+    try {
+      return await runCommentsCli(parsed.value);
+    } catch (e) {
+      console.error(e);
+      return 1;
+    }
+  }
+
   if (cmd === "--help" || cmd === "-h") {
     console.log(
-      "可用子命令: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work"
+      "可用子命令: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work | comments | comments-reply | comments-probe"
     );
     console.log("各自 --help 查看详细参数。");
     return 0;
@@ -1024,7 +1053,7 @@ export async function runCliMain(argv = process.argv) {
 
   console.error("未知子命令:", cmd);
   console.error(
-    "支持: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work"
+    "支持: publish | publish-article | login | accounts | history | stats | stats-sync | stats-work | comments | comments-reply | comments-probe"
   );
   return 2;
 }

@@ -19,6 +19,16 @@ import {
   getWorkStatsTool,
   handleGetWorkStats,
 } from './tools/stats.js';
+import {
+  listCommentsTool,
+  handleListComments,
+  replyCommentTool,
+  handleReplyComment,
+} from './tools/comments.js';
+
+// 评论专用实例（MM_MCP_COMMENTS_ONLY=1）：只暴露 comments 两个 tool，
+// 避免与安装版 matrixmedia server 的发布类 tool 重复/误路由到 dev CLI。
+const COMMENTS_ONLY = process.env.MM_MCP_COMMENTS_ONLY === '1';
 
 const server = new Server(
   { name: 'matrixmedia', version: '0.3.0' },
@@ -28,14 +38,20 @@ const server = new Server(
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
     tools: [
-      listAccountsTool,
-      listHistoryTool,
-      publishVideoTool,
-      publishArticleTool,
-      getPublishStatusTool,
-      getAccountStatsTool,
-      syncAccountStatsTool,
-      getWorkStatsTool,
+      ...(COMMENTS_ONLY
+        ? []
+        : [
+            listAccountsTool,
+            listHistoryTool,
+            publishVideoTool,
+            publishArticleTool,
+            getPublishStatusTool,
+            getAccountStatsTool,
+            syncAccountStatsTool,
+            getWorkStatsTool,
+          ]),
+      listCommentsTool,
+      replyCommentTool,
     ],
   };
 });
@@ -45,6 +61,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const args: Record<string, unknown> = request.params.arguments ?? {};
   try {
     let result: string;
+    if (COMMENTS_ONLY && name !== 'list_comments' && name !== 'reply_comment') {
+      throw new Error('Tool disabled in comments-only mode: ' + name);
+    }
     switch (name) {
       case 'list_accounts':
         result = await handleListAccounts(args);
@@ -79,6 +98,12 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         break;
       case 'get_work_stats':
         result = await handleGetWorkStats(args);
+        break;
+      case 'list_comments':
+        result = await handleListComments(args);
+        break;
+      case 'reply_comment':
+        result = await handleReplyComment(args);
         break;
       default:
         throw new Error('Unknown tool: ' + name);

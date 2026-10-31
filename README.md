@@ -42,6 +42,7 @@
 - **CLI 登录**：目前支持**抖音**与**视频号**（终端二维码；抖音另支持 puppeteer 无头）。
 - **CLI 发布**：**8 个平台**已完整自动化——抖音、快手、百家号、哔哩哔哩、头条、视频号、小红书、番茄视频。`file` 支持本地路径或 `http(s)` 远程 URL（自动下载，上传后清理临时文件）。
 - **CLI 查询**：`cli accounts` 实时检测登录态，`cli history` 查看本机发布记录。
+- **CLI 评论互动**：`cli comments` 拉取已发布作品评论（抖音/快手/视频号），`cli comments-reply` 回复评论（默认 dry-run，`--execute` 真发，全程台账）。
 - **HTTP API**：GUI 启动后可通过 `POST http://127.0.0.1:30088/publish` 由其它程序触发发布（见 [docs/http-api.md](./docs/http-api.md) 或应用内「项目详情」页）。
 
 便于脚本与智能体编排。GUI 打开后默认进入「**项目详情**」页，可查看 HTTP / MCP / CLI 接入说明。
@@ -124,7 +125,7 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 }
 ```
 
-重启 AI 工具后，以下 7 个 tool 即可在对话中直接调用（完整说明见 [docs/mcp.md](./docs/mcp.md)）：
+重启 AI 工具后，以下 9 个 tool 即可在对话中直接调用（完整说明见 [docs/mcp.md](./docs/mcp.md)）：
 
 | Tool                 | 说明                                                        |
 | -------------------- | ----------------------------------------------------------- |
@@ -135,6 +136,8 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | `get_account_stats`  | 读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）            |
 | `sync_account_stats` | 主动采集该账号最新数据并写入快照                            |
 | `get_work_stats`     | 按完整标题查某个视频的发布数据（含发布时间、互动数据）      |
+| `list_comments`      | 拉取账号已发布作品的评论列表（抖音/快手/视频号，只读）      |
+| `reply_comment`      | 回复评论/发顶层评论（默认 dry-run，`confirm=true` 才真发）  |
 
 > **登录说明**：所有平台均需在 GUI 中完成登录后再通过 MCP 发布。MCP 运行在无头 stdio 环境，无法弹出扫码窗口。
 
@@ -221,6 +224,8 @@ _Cursor / Cline_（`.cursor/mcp.json` 或全局 MCP 配置，格式相同）：
 | `cli stats`           | 7 个统计平台（`dy \| sph \| blbl \| bjh \| tt \| ks \| xhs`）                 | 读取账号粉丝数据快照（粉丝/播放/点赞/评论/收藏）               |
 | `cli stats-sync`      | 同上                                                                          | 主动采集该账号最新数据并写入快照（需 GUI 已登录）              |
 | `cli stats-work`      | 同上                                                                          | 按完整标题查某个视频的发布数据（含发布时间）                   |
+| `cli comments`        | 抖音、快手、视频号                                                            | 拉取已发布作品的评论列表（只读，归一化 JSON）                  |
+| `cli comments-reply`  | 同上                                                                          | 回复评论（默认 dry-run 校验，`--execute` 真发，写台账）        |
 
 > **非 CLI 登录平台的登录怎么办？** 当前 CLI 登录已实现抖音与视频号；其它平台**先在 GUI 完成一次登录**即可——CLI 通过同一 `persist:<phone><平台>` session partition 读取 cookie，后续 `cli publish` / `cli accounts` 会自动复用登录态。登录态过期时 `cli accounts` 会报 `cookie 已过期`，此时回到 GUI 重登一次即可。
 
@@ -247,6 +252,11 @@ matrixmedia cli history --json --days 7
 matrixmedia cli stats-sync -p sph --phone 123
 matrixmedia cli stats -p sph --phone 123
 matrixmedia cli stats-work -p ks --phone 123 --title "视频完整标题"
+
+# 评论互动：拉评论 → dry-run 校验 → 人工核准后真发
+matrixmedia cli comments -p ks --phone 123
+matrixmedia cli comments-reply -p ks --phone 123 --file replies.json
+matrixmedia cli comments-reply -p ks --phone 123 --file replies.json --execute
 ```
 
 开发环境调用示例：

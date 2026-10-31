@@ -13,11 +13,13 @@ export interface CliResult {
 
 const VERSION_NOISE = /^\d+\.\d+\.\d+/;
 const DEVTOOLS_NOISE = /^DevTools listening/;
+// dev 构建（无 terser drop_console）会把 [startup] 日志打到 stdout，安装版没有——一并过滤
+const STARTUP_NOISE = /^\[startup\]/;
 const TIMEOUT_MS = 2400000;
 
 function isNoiseLine(line: string): boolean {
   const trimmed = line.trim();
-  return VERSION_NOISE.test(trimmed) || DEVTOOLS_NOISE.test(trimmed);
+  return VERSION_NOISE.test(trimmed) || DEVTOOLS_NOISE.test(trimmed) || STARTUP_NOISE.test(trimmed);
 }
 
 function stripNoiseLines(raw: string): string {

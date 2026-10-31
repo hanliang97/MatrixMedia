@@ -239,3 +239,48 @@ matrixmedia cli stats -p sph --phone 123
 matrixmedia cli stats-sync -p dy --phone 123
 matrixmedia cli stats-work -p ks --phone 123 --title "你家猫也这样睡？倒挂笼子都不醒"
 ```
+
+## 评论互动命令（comments / comments-reply / comments-probe）
+
+拉取已发布作品的评论并回复，支持平台：抖音、快手、视频号。复用 `persist:<分组><平台>` 登录态；抖音/快手为「评论管理页嗅探页面自身响应」（签名接口不构造、不重放），视频号为页内 fetch 直调助手接口（无签名）。
+
+| 命令 | 说明 |
+| --- | --- |
+| `cli comments -p <平台> --phone <分组> [--limit N] [--work 标题或ID]` | 拉取评论列表（只读），输出归一化 JSON 并写本地快照 |
+| `cli comments-reply -p <平台> --phone <分组> --file replies.json [--execute] [--max N]` | 回复评论；**默认 dry-run 只校验不发送**，`--execute` 真发（单轮上限默认 5、硬上限 20） |
+| `cli comments-probe -p <平台> --phone <分组> [--url 路由] [--click 菜单,…] [--wait ms] [--fetch 路径,…] [--eval 脚本文件] [--deep]` | 端点探针：dump 导航/嗅探端点/请求体/响应结构（开发与维护工具） |
+
+`replies.json` 形状：
+
+```json
+{ "replies": [
+  {
+    "commentId": "目标评论ID（sph 回复必填；无此字段=对作品发顶层评论）",
+    "workId": "作品ID（sph: objectId/exportId；dy: aweme_id；ks: photoId）",
+    "workTitle": "作品标题子串（sph 可代替 workId 定位作品）",
+    "matchContent": "目标评论原文（dy/ks 必填，DOM 定位用）",
+    "rootCommentId": "楼中楼根评论ID（sph 可选，缺省=commentId）",
+    "content": "回复文本（必填）"
+  }
+] }
+```
+
+- 数据与台账：评论快照 `<userData>/comments/<分组>/<平台>/latest.json`；回复台账同目录 `reply-log.jsonl`（dry-run 与真发都记，含 mode/status/detail/errCode 字段）
+- 输出 JSON（含 `success` 字段）；退出码：0 成功（comments-reply=无 error 条目），1 异常（如未登录），2 参数错误
+- 安全约定：先跑 dry-run 人工核对 `results[].detail`（确认命中的作品/评论无误），再加 `--execute`；建议单轮少量、避免模板化群发
+- 已知限制：抖音仅覆盖评论管理页当前选中作品（默认最新一条）；快手评论的 photoId 与数据统计 works 的 workId 属不同 ID 体系，workTitle 无法回填；平台改版导致接口/页面变化时，用 `comments-probe` 重新巡检端点
+
+示例：
+
+```bash
+# 拉评论
+matrixmedia cli comments -p dy --phone 13800138000 --limit 50
+matrixmedia cli comments -p sph --phone 13800138000 --work "视频标题片段"
+
+# 回复：dry-run 校验 → 人工核准 → 真发
+matrixmedia cli comments-reply -p ks --phone 13800138000 --file replies.json
+matrixmedia cli comments-reply -p ks --phone 13800138000 --file replies.json --execute --max 3
+
+# 探针：巡检快手评论页端点
+matrixmedia cli comments-probe -p ks --phone 13800138000 --url "https://cp.kuaishou.com/article/comment" --wait 8000
+```
