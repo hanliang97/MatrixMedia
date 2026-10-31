@@ -1,5 +1,13 @@
 "use strict";
 
+require("@babel/register")({
+  extensions: [".js"],
+  ignore: [/node_modules/],
+  // Node 20 的 require() 不支持 ESM 源码：显式补 preset-env(commonjs)，
+  // .babelrc 只在 BABEL_ENV=renderer/web 下配置且 modules:false，默认不转模块
+  presets: [["@babel/preset-env", { targets: { node: "20" }, modules: "commonjs" }]],
+});
+
 /**
  * 验证 `cli history` 参数解析的输入契约（#41）：
  * 1. 带值选项位于参数末尾（缺值）时必须报参数错误，而不是静默通过
