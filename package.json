@@ -46,6 +46,7 @@
     "test:history-args": "node scripts/test-history-args.js",
     "test:history-status": "node scripts/test-history-status.js",
     "test:account-proxy-list": "node scripts/test-account-proxy-list.js",
+    "test:server-request-guard": "node scripts/test-server-request-guard.js",
     "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
     "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js",
     "test:pick-release-installer": "node scripts/test-pick-release-installer.js",
