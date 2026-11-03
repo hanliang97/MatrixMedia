@@ -16,20 +16,51 @@ const crypto = require("crypto");
 
 const SERVER_REQUEST_TOKEN = crypto.randomBytes(24).toString("hex");
 
-// 与 PR #14 的白名单保持一致：file:// 与各种 localhost 写法
-const TRUSTED_ORIGIN_RE = /^(file:|https?:\/\/localhost|https?:\/\/127\.0\.0\.1)/;
+// 可信来源 = file:// 页面 + 本机回环的三个写法（端口不限）。
+// 注意：这里不能用前缀正则。`(https?://localhost)` 会把
+// http://localhost.evil.com 这类外部域名一起放行，而服务端对所有
+// 响应都发了 Access-Control-Allow-Origin: *，一旦放行就等于把
+// 本机 API（含 /publish）暴露给任意网页。必须解析 URL 后逐字比对 hostname。
+const TRUSTED_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Origin / Referer 是否来自本机页面。
+ * @param {string} rawOrigin
+ * @returns {boolean}
+ */
+function isTrustedOrigin(rawOrigin) {
+  const origin = String(rawOrigin || "").trim();
+  if (!origin) return false;
+  // 沙箱 iframe 与部分 file:// 场景会发 null，不能当作可信来源
+  if (origin === "null") return false;
+  if (/^file:/i.test(origin)) return true;
+
+  let parsed;
+  try {
+    parsed = new URL(origin);
+  } catch (_) {
+    return false;
+  }
+  if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return false;
+  // URL 会把 hostname 规范化为小写，[::1] 保留方括号
+  return TRUSTED_HOSTNAMES.has(parsed.hostname);
+}
 
 /**
  * 信任条件二选一：
  * 1. 携带仅自家进程知晓的 X-Matrix-Token（打包后的 file:// 页面）；
- * 2. Origin / Referer 命中白名单（dev 模式 http://localhost:9080）。
+ * 2. Origin / Referer 命中本机回环（dev 模式 http://localhost:9080）。
  * 其余情况（curl、外部网站、删掉头部的脚本）一律拒绝。
  */
 function isTrustedLocalRequest(req) {
   const headers = (req && req.headers) || {};
   if (headers["x-matrix-token"] === SERVER_REQUEST_TOKEN) return true;
   const origin = headers.origin || headers.referer || "";
-  return TRUSTED_ORIGIN_RE.test(origin);
+  return isTrustedOrigin(origin);
 }
 
-module.exports = { SERVER_REQUEST_TOKEN, isTrustedLocalRequest };
+module.exports = {
+  SERVER_REQUEST_TOKEN,
+  isTrustedOrigin,
+  isTrustedLocalRequest,
+};

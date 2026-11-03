@@ -63,6 +63,12 @@ router.post("/changeData", function (req, res) {
 });
 
 router.post("/publish", async function (req, res) {
+  // 守卫必须放在解析参数之前：本接口接受 http(s) 远程视频 URL
+  // （resolvePublishFile 会先下载再发布到已登录账号），漏掉守卫时
+  // 任意网页都能借用户的登录态发内容。
+  if (!isTrustedLocalRequest(req)) {
+    return res.status(403).json({ success: false, message: "Forbidden" });
+  }
   try {
     const { parseMultiPublishRequest } = await import(
       "../../cli/parsePublishArgs.js"

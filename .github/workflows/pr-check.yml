@@ -28,6 +28,9 @@ jobs:
           yarn test:publish-failure-queue
           yarn test:publish-draft-args
           yarn test:publish-article-args
+
+          # 内置 HTTP 服务的访问守卫（Origin 精确比对 + 写接口必须有守卫）
+          yarn test:server-request-guard
           # 登记与历史
           yarn test:pushdata-dedupe
           yarn test:history-status
