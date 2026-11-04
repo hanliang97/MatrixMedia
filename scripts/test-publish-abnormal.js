@@ -338,6 +338,58 @@ function createTextPage(urls, text) {
     assert.ok(payload.message.includes("发布异常"));
   }
 
+  // 5b. 地址未变化 + 页面弹出平台校验提示：异常文案必须带上平台原文
+  //     （快手话题超 4 个时弹「最多只能添加4个话题」，点击被吞，此前只报「地址未变化」）
+  {
+    const page = createTextPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      "编辑作品 最多只能添加4个话题 发布 取消"
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, true);
+    assert.strictEqual(payload.publishSignal, "none");
+    assert.ok(
+      payload.publishBlockHint.includes("最多只能添加4个话题"),
+      "publishBlockHint 应带出平台校验原文"
+    );
+    assert.ok(
+      payload.message.includes("最多只能添加4个话题"),
+      "异常文案必须带出平台校验提示"
+    );
+    assert.ok(payload.message.includes("发布异常"));
+  }
+
+  // 5c. 有校验提示但地址已跳成功页：仍判成功，不携带 blockHint（提示不参与成功判定）
+  {
+    const page = createTextPage(
+      ["https://x.com/publish", "https://x.com/success"],
+      "最多只能添加4个话题 发布成功"
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+      successMessage: "上传成功",
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, undefined);
+    assert.strictEqual(payload.publishBlockHint, undefined);
+    assert.strictEqual(payload.message, "上传成功");
+  }
+
   // 6. 结果映射：异常不计成功
   {
     const abnormal = resolvePublishCompletion({

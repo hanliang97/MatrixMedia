@@ -27,14 +27,35 @@ const SUCCESS_TOAST_TEXTS = [
 ];
 
 /**
+ * 平台侧「拦住这次提交」的校验提示（点发布后页面弹出来、并吞掉点击的提示）。
+ *
+ * 典型：快手话题超过 4 个时弹「最多只能添加4个话题」，此时点「发布」不跳转、
+ * 不报错，只在 20000ms 判定窗口里什么都没发生，调用方只能拿到
+ * 「点击发布后 5 秒页面地址未变化」——把平台的明确原因抹成了看不出问题的通用文案。
+ * 这些文案只用于「地址未变化」时补充证据，不参与成功判定，误命中不会造假成功。
+ */
+const BLOCKING_TIP_PATTERNS = [
+  // 最多只能添加4个话题 / 最多上传1个视频 / 最多输入30个字
+  /最多(?:只能)?\s*(?:添加|上传|发布|选择|输入|填写|挂)?\s*\d+\s*(?:个|张|条|字)/,
+  // 话题超出限制 / 标题超过上限 / 字数超出限制
+  /(?:话题|标签|标题|简介|描述|正文|字数|图片|视频)[^。！\n]{0,14}(?:超出|超过)[^。！\n]{0,10}(?:限制|上限|字数)/,
+  // 不能超过30个字 / 不得超过 4 个话题
+  /(?:不能|不得)超过\s*\d+\s*(?:个|张|条|字)/,
+  // 请先删除部分话题 / 请减少图片数量
+  /请(?:先)?(?:删除|减少|移除)[^。！\n]{0,12}(?:话题|标签|图片|视频)/,
+];
+
+/**
  * 发布模式轮询等待成功信号：URL 跳转或平台成功提示，任一命中立即返回。
- * @returns {Promise<{ok: boolean, signal: string, urlAfter: string}>}
+ * 全程顺带记录页面上的「阻断类校验提示」，供地址未变化时补充失败原因。
+ * @returns {Promise<{ok: boolean, signal: string, urlAfter: string, blockHint: string}>}
  */
 async function waitForPublishSignal(page, urlBefore, timeoutMs) {
   // 按轮次而不是墙钟计时：每轮含 1 秒等待，真实环境等价于 timeoutMs；
   // 单测里 waitForTimeout 是空实现，也不会空转 20 秒。
   const maxRounds = Math.max(2, Math.ceil(timeoutMs / 1000));
   let urlAfter = readPageUrl(page);
+  let blockHint = "";
   for (let round = 0; round < maxRounds; round++) {
     urlAfter = readPageUrl(page);
     if (
@@ -42,19 +63,23 @@ async function waitForPublishSignal(page, urlBefore, timeoutMs) {
       urlAfter &&
       normalizeUrl(urlAfter) !== normalizeUrl(urlBefore)
     ) {
-      return { ok: true, signal: "url_changed", urlAfter };
+      return { ok: true, signal: "url_changed", urlAfter, blockHint: "" };
     }
     const text = await readPageText(page);
     if (text) {
       for (const kw of SUCCESS_TOAST_TEXTS) {
         if (text.includes(kw)) {
-          return { ok: true, signal: `toast:${kw}`, urlAfter };
+          return { ok: true, signal: `toast:${kw}`, urlAfter, blockHint: "" };
         }
+      }
+      if (!blockHint) {
+        // 取首次命中的上下文：平台 toast 一般只存活几秒，越早拿到越准
+        blockHint = matchPatternWithContext(BLOCKING_TIP_PATTERNS, text, 12);
       }
     }
     await delay(page, 1000);
   }
-  return { ok: false, signal: "none", urlAfter: readPageUrl(page) };
+  return { ok: false, signal: "none", urlAfter: readPageUrl(page), blockHint };
 }
 
 /** 存草稿结果的轮询间隔：toast 存活一般 ≥2 秒，400ms 足够捕捉 */
@@ -416,18 +441,25 @@ export async function replyPublishOutcome({
     status: true,
     publishPageUrl: urlAfter,
     publishSignal: verdict.signal,
-    message: abnormal ? PUBLISH_ABNORMAL_MESSAGE : successMessage,
+    message: abnormal
+      ? `${PUBLISH_ABNORMAL_MESSAGE}${
+          verdict.blockHint ? `；页面提示「${verdict.blockHint}」` : ""
+        }`
+      : successMessage,
   };
   if (abnormal) {
     payload.publishAbnormal = true;
     payload.outcome = "publish_abnormal";
     payload.needsAttention = true;
+    // 平台自己说清了为什么没提交成功时，把原文带回回执与日志：
+    // 否则用户只看到「页面地址未变化」，得自己开截图找原因。
+    if (verdict.blockHint) payload.publishBlockHint = verdict.blockHint;
     // 疑似没发出去时页面还停在发布页（通常是平台校验提示 / 风控弹窗），先截图再关窗。
     // 传入 window：hidden 窗口下 CDP 截图可能等不到合成帧超时，用 capturePage 兜底。
     const shot = await capturePublishFailureScreenshot(page, data, { window });
     if (shot) payload.failScreenshot = shot;
     console.warn(
-      `[publish] ${data.pt} ${PUBLISH_ABNORMAL_MESSAGE}（地址：${urlAfter}）`
+      `[publish] ${data.pt} ${payload.message}（地址：${urlAfter}）`
     );
   }
 
