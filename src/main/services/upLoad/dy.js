@@ -309,13 +309,111 @@ async function readDyEditorText(page) {
 }
 
 /**
- * 清空抖音简介编辑器，双策略：
- * A) selection API + execCommand("delete")——依赖文档焦点，Windows 后台窗口下
- *    是静默 no-op（这正是「简介无限叠加」的根因）；
- * B) 键盘全选 + Backspace——走 CDP 按键事件到焦点元素，不依赖 execCommand 焦点语义。
- * 返回是否确认清空（回读为空）。
+ * 尝试用抖音简介编辑器的 Slate onChange 直接重置状态。
+ * mode: object → onChange({text:"",textExtra:[]})（现网生效）；
+ *       emptyArray → onChange("",[])；empty → onChange("")（兼容旧实现）。
+ * 只返回“调用是否成功”，是否真正清空由 clearDyEditor 回读判定。
+ */
+async function trySlateClear(page, mode) {
+  return page
+    .evaluate(({ sel, mode }) => {
+      const root = document.querySelector(sel);
+      if (!root) return { ok: false, reason: "no-root" };
+      const editable = root.matches('[contenteditable="true"]')
+        ? root
+        : root.querySelector('[contenteditable="true"]');
+      const node = editable || root;
+      const key = Object.keys(node).find(
+        (k) =>
+          k.startsWith("__reactFiber$") ||
+          k.startsWith("__reactInternalInstance$")
+      );
+      if (!key) return { ok: false, reason: "no-fiber" };
+      let slate = null;
+      for (let fiber = node[key], i = 0; fiber && i < 60; i++, fiber = fiber.return) {
+        const p = fiber.memoizedProps || {};
+        if (p.text !== undefined && typeof p.onChange === "function") {
+          slate = p;
+          break;
+        }
+      }
+      if (!slate) return { ok: false, reason: "no-editor-props" };
+      const info = {
+        textType: typeof slate.text,
+        textPreview: String(slate.text || "").slice(0, 40),
+        textExtraType: Array.isArray(slate.textExtra)
+          ? `array(${slate.textExtra.length})`
+          : typeof slate.textExtra,
+      };
+      try {
+        if (mode === "empty") slate.onChange("");
+        else if (mode === "emptyArray") slate.onChange("", []);
+        else if (mode === "object") slate.onChange({ text: "", textExtra: [] });
+        else return { ok: false, reason: "bad-mode" };
+      } catch (e) {
+        return { ok: false, reason: String(e && e.message), info };
+      }
+      return { ok: true, info, mode };
+    }, { sel: DY_EDITOR_SELECTOR, mode })
+    .catch((e) => ({ ok: false, reason: String(e && e.message) }));
+}
+
+/**
+ * 清空抖音简介编辑器：Slate 状态重置优先（能清 #话题胶囊），
+ * 键盘三击/全选、selection API、Control 三层兜底；返回回读是否为空。
  */
 async function clearDyEditor(page) {
+  const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+  // 1) Slate 编辑器状态重置：fiber 上暴露 text/textExtra/onChange，
+  //    直接 onChange 清空可连 #话题胶囊一起清掉。异步函数不能塞进
+  //    page.evaluate（Babel regenerator 在页面上下文未定义），故每次只调一种签名。
+  let slateInfo = null;
+  for (const mode of ["object", "emptyArray", "empty"]) {
+    const r = await trySlateClear(page, mode);
+    if (!r.ok) continue;
+    slateInfo = r.info;
+    let cleared = false;
+    for (let i = 0; i < 10; i++) {
+      await page.waitForTimeout(100);
+      if (!normalizeDyEditorText(await readDyEditorText(page))) {
+        cleared = true;
+        break;
+      }
+    }
+    if (cleared) {
+      console.log(`[dy] 简介编辑器已清空（Slate onChange ${mode}）`);
+      return true;
+    }
+  }
+  console.log("[dy] Slate 状态重置未成功，走键盘兜底", JSON.stringify(slateInfo));
+
+  // 2) 键盘兜底：三击内容区选中当前段落，再全选/退格。
+  //    page.focus 对 contenteditable 不可靠，必须真实点击把光标放进去。
+  try {
+    const editable = await page.$(
+      `${DY_EDITOR_SELECTOR} [contenteditable="true"]`
+    );
+    if (editable) {
+      await editable.click({ clickCount: 3, delay: 20 });
+    } else {
+      await page.click(DY_EDITOR_SELECTOR, { clickCount: 3, delay: 20 });
+    }
+  } catch (_) {}
+  try {
+    await page.keyboard.down(mod);
+    await page.keyboard.press("a");
+    await page.keyboard.up(mod);
+  } catch (_) {}
+  try {
+    await page.keyboard.press("Backspace");
+  } catch (_) {}
+  if (!normalizeDyEditorText(await readDyEditorText(page))) {
+    console.log("[dy] 简介编辑器已通过键盘全选清空");
+    return true;
+  }
+
+  // A) selection API + execCommand("delete")（官方兜底，Windows 后台窗口可能 no-op）
   try {
     await page.evaluate((sel) => {
       const el = document.querySelector(sel);
@@ -331,12 +429,13 @@ async function clearDyEditor(page) {
     }, DY_EDITOR_SELECTOR);
   } catch (_) {}
   if (!normalizeDyEditorText(await readDyEditorText(page))) return true;
-  const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+  // B) 换 Control 再试（部分 Chromium 构建把全选映射到 Ctrl）
   try {
-    await page.focus(DY_EDITOR_SELECTOR);
-    await page.keyboard.down(mod);
+    await page.click(DY_EDITOR_SELECTOR);
+    await page.keyboard.down("Control");
     await page.keyboard.press("a");
-    await page.keyboard.up(mod);
+    await page.keyboard.up("Control");
     await page.keyboard.press("Backspace");
   } catch (_) {}
   return !normalizeDyEditorText(await readDyEditorText(page));
@@ -508,6 +607,31 @@ export default async function (page, data, window, event) {
       text.description,
       normalizeVideoTags(data.data.tags).length > 0
     );
+
+    // Slate 状态重置会触发描述区重渲染，复核标题没有被动掉（空标题发布后补不回来）
+    const titleInput = await page.$(".semi-input");
+    if (!titleInput) {
+      throw new Error("简介填写后未找到标题输入框");
+    }
+    const afterTitle = await titleInput
+      .evaluate((el) => String(el.value || el.textContent || "").trim())
+      .catch(() => "");
+    if (!matchesHead(afterTitle, text.title)) {
+      console.warn(
+        `[dy] 简介填写后标题被重置（实得 ${afterTitle.length} 字），重输一次`
+      );
+      await replaceAllText(page, titleInput, text.title, 80);
+      const again = await titleInput
+        .evaluate((el) => String(el.value || el.textContent || "").trim())
+        .catch(() => "");
+      if (!matchesHead(again, text.title)) {
+        throw new Error(
+          `简介填写后标题重输失败（期望含「${head(
+            text.title
+          )}」，实得 ${again.length} 字）`
+        );
+      }
+    }
   } catch (e) {
     console.error("❌ 输入标题失败", e);
     await replyPublishFailure({
