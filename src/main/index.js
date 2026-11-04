@@ -43,6 +43,7 @@ import {
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
 import { initializeElectronRuntime } from "./services/electronStartup";
 import { reportUsageTelemetry } from "./services/usageTelemetry";
+import { checkForUpdate, downloadLatestUpdate } from "./services/updateChecker";
 
 const cliMode = isCliMode(process.argv);
 
@@ -109,6 +110,66 @@ function requestQuit() {
     noLink: true,
   });
   if (choice === 0) performQuit();
+}
+
+// 托盘「检查更新」：主动到 Gitee 检查最新 Release，
+// 有新版本时弹窗确认并立即开始下载安装包（下载进度仍由主窗口页面展示）。
+async function checkUpdateFromTray(win) {
+  try {
+    const result = await checkForUpdate();
+    if (!result || !result.latestVersion) {
+      dialog.showMessageBox(win, {
+        type: "info",
+        title: "检查更新",
+        message: "未能获取到版本信息，请检查网络后重试。",
+        buttons: ["确定"],
+        noLink: true,
+      });
+      return;
+    }
+    if (!result.hasUpdate) {
+      dialog.showMessageBox(win, {
+        type: "info",
+        title: "检查更新",
+        message: `当前已是最新版本（v${result.currentVersion}）。`,
+        buttons: ["确定"],
+        noLink: true,
+      });
+      return;
+    }
+    // 检查到新版本：主动询问并下载最新安装包
+    const { response } = await dialog.showMessageBox(win, {
+      type: "question",
+      title: "发现新版本",
+      message: `发现新版本 ${result.latestVersion}（当前 v${result.currentVersion}）`,
+      detail: "是否立即下载最新安装包？下载完成后可在系统下载目录中找到安装包。",
+      buttons: ["立即下载", "取消"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response !== 0) return;
+    const dl = await downloadLatestUpdate(win);
+    if (!dl.ok) {
+      dialog.showErrorBox("下载失败", dl.message || "启动下载失败");
+      return;
+    }
+    // 下载已开始，主窗口收起时给个提示，避免用户以为没反应
+    if (!win.isVisible()) {
+      win.show();
+    }
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "正在下载更新",
+      message: `已开始下载 ${result.latestVersion} 安装包。`,
+      detail: "可在主界面的下载进度中查看，完成后运行安装包即可完成更新。",
+      buttons: ["确定"],
+      noLink: true,
+    });
+  } catch (e) {
+    console.error("[tray] 检查更新失败:", e && (e.stack || e.message));
+    dialog.showErrorBox("检查更新失败", (e && e.message) || String(e));
+  }
 }
 
 if (!cliMode) {
@@ -186,6 +247,13 @@ function onAppReady() {
         click: function () {
           console.log("setting");
           win.webContents.send("goSetting");
+        },
+      },
+      {
+        label: "检查更新",
+        click: () => {
+          win.show();
+          checkUpdateFromTray(win);
         },
       },
       {
