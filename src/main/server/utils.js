@@ -113,21 +113,123 @@ function isSamePushDataRecord(existingItem, newItem) {
 
 // 核心 CRUD
 /**
+ * 业务数据是「文档/MatrixMedia/data/<folder>/<YYYY-MM-DD>.json」结构，
+ * folder 与日期都会直接拼进文件路径。两者都必须先校验：
+ * 历史实现把 `fileName` / `item.date` 原样 `path.join`，`fileName: "../../.."`
+ * 就能把 JSON 写到数据目录之外（本地网页通过 /changeData 也能触发），
+ * 属于典型的路径穿越写文件。
+ */
+const DATA_FOLDER_NAME_RE = /^[A-Za-z0-9_-]{1,64}$/;
+/** Windows 保留设备名能过上面的正则，但在 Windows 上会命中设备而不是目录 */
+const WINDOWS_RESERVED_NAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+const DATA_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DATA_DAY_FILE_RE = /^\d{4}-\d{2}-\d{2}\.json$/;
+/** 只有这些类型才读写「<日期>.json」；config / get / getDyData 不该被日期入参牵连 */
+const DATE_FILE_TYPES = new Set(["add", "update", "delete"]);
+
+function safeRealpath(target) {
+  try {
+    return fs.realpathSync(target);
+  } catch (_) {
+    return "";
+  }
+}
+
+/** target 是否在 base 目录内（先解析符号链接，挡住数据目录里指向外部的软链） */
+function isInsideDir(base, target) {
+  const realBase = safeRealpath(base);
+  const realTarget = safeRealpath(target);
+  if (!realBase || !realTarget) return false;
+  return (
+    realTarget === realBase ||
+    realTarget.startsWith(realBase.endsWith(path.sep) ? realBase : realBase + path.sep)
+  );
+}
+
+/** 解析并校验数据文件夹名（不含路径分隔符，禁止 . / .. / Windows 设备名） */
+function resolveDataFolder(fileName) {
+  if (typeof fileName !== "string") {
+    return {
+      ok: false,
+      message: `非法的数据文件名：${JSON.stringify(fileName)}（必须是字符串）`,
+    };
+  }
+  const name = fileName.trim();
+  if (!DATA_FOLDER_NAME_RE.test(name) || WINDOWS_RESERVED_NAME_RE.test(name)) {
+    return { ok: false, message: `非法的数据文件名：${JSON.stringify(fileName)}` };
+  }
+  return { ok: true, name, folderPath: path.join(getDataDir(), name) };
+}
+
+/**
+ * 校验会进入文件名的日期：格式 + 日历有效性（'2026-99-99' 不能进历史文件，
+ * 否则 get 分支按 moment 排序会得到 Invalid Date）。
+ * 只有 add / update / delete 使用日期文件；config / get / getDyData 不受影响。
+ */
+function resolveTargetDate(item, type) {
+  const usesDateFile = DATE_FILE_TYPES.has(type);
+  if (!usesDateFile) return { ok: true, usesDateFile, targetDate: "" };
+  if ((type === "update" || type === "delete") && !item.date) {
+    return { ok: false, message: "请指定日期" };
+  }
+  const targetDate = item.date ? item.date : moment().format("YYYY-MM-DD");
+  if (
+    typeof targetDate !== "string" ||
+    !DATA_DATE_RE.test(targetDate) ||
+    !moment(targetDate, "YYYY-MM-DD", true).isValid()
+  ) {
+    return {
+      ok: false,
+      message: `非法的日期：${JSON.stringify(targetDate)}（格式应为 YYYY-MM-DD）`,
+    };
+  }
+  return { ok: true, usesDateFile, targetDate };
+}
+
+/**
  * @param {Object} item 数据对象，可包含部分字段
- * @param {String} fileName 不含 .json 的文件名
+ * @param {String} fileName 数据文件夹名（account / pushData / config 等）
  * @param {String} type 操作类型：add / update / delete / get
  * @returns {Object|Array|null} 结果
  */
-function changeData({ item, fileName, type }) {
-  const folderPath = path.join(getDataDir(), fileName); // fileName 是文件夹
+function changeData(payload) {
+  try {
+    return changeDataUnsafe(payload);
+  } catch (err) {
+    // fs 层异常（权限、保留名、磁盘满）不再冒到 Express 变成 500
+    console.error(
+      "[changeData] 本地数据读写失败:",
+      err && err.message ? err.message : err
+    );
+    return {
+      success: false,
+      message: `本地数据读写失败：${err && err.message ? err.message : err}`,
+    };
+  }
+}
+
+function changeDataUnsafe({ item, fileName, type } = {}) {
+  const folder = resolveDataFolder(fileName);
+  if (!folder.ok) {
+    return { success: false, message: folder.message };
+  }
+  const folderPath = folder.folderPath; // fileName 是文件夹
+  const dataDir = getDataDir();
+  item = item && typeof item === "object" ? item : {};
+
+  // 先把所有会进入路径的入参校验完，再创建目录：非法请求不留任何副作用
+  const date = resolveTargetDate(item, type);
+  if (!date.ok) {
+    return { success: false, message: date.message };
+  }
+
   if (!fs.existsSync(folderPath)) fs.mkdirSync(folderPath, { recursive: true });
-
-  item = item || {};
-
-  const dateFormat = "YYYY-MM-DD";
-  const today = moment().format(dateFormat);
-  const targetDate = item.date || today;
-  const filePath = path.join(folderPath, `${targetDate}.json`);
+  if (!isInsideDir(dataDir, folderPath)) {
+    return { success: false, message: `非法的数据路径：${folder.name}` };
+  }
+  const filePath = date.usesDateFile
+    ? path.join(folderPath, `${date.targetDate}.json`)
+    : "";
 
   // 工具：读写每天的 JSON
   const readDayData = file => readJsonFile(file);
@@ -168,7 +270,7 @@ function changeData({ item, fileName, type }) {
       };
 
       // 如果是pushData文件名，则检查重复数据
-      if (fileName == "pushData") {
+      if (folder.name === "pushData") {
         const duplicateIndex = list.findIndex(
           existingItem =>
             !existingItem.scheduledTask &&
@@ -252,10 +354,11 @@ function changeData({ item, fileName, type }) {
       const page = parseInt(item.page) || 1;
       const pageSize = parseInt(item.pageSize) || 10;
 
-      // 获取文件夹下的所有日期文件
+      // 获取文件夹下的所有日期文件（只认 <YYYY-MM-DD>.json，且不跟随软链到目录外）
       const files = fs
         .readdirSync(folderPath)
-        .filter(f => f.endsWith(".json"))
+        .filter(f => DATA_DAY_FILE_RE.test(f))
+        .filter(f => isInsideDir(folderPath, path.join(folderPath, f)))
         .sort((a, b) => moment(b.replace(".json", "")) - moment(a.replace(".json", "")));
 
       // 分页获取 N 天
@@ -290,8 +393,11 @@ function changeData({ item, fileName, type }) {
         return { success: false, message: "请提供 textOtherName" };
       }
 
-      // 遍历所有日期文件
-      const files = fs.readdirSync(folderPath).filter(f => f.endsWith(".json"));
+      // 遍历所有日期文件（同样只认日期文件名、不跟随目录外软链）
+      const files = fs
+        .readdirSync(folderPath)
+        .filter(f => DATA_DAY_FILE_RE.test(f))
+        .filter(f => isInsideDir(folderPath, path.join(folderPath, f)));
 
       for (const fileName of files) {
         const fullPath = path.join(folderPath, fileName);
