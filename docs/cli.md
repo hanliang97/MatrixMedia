@@ -90,7 +90,7 @@ matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\video.mp4 -t "标题
 | 参数                       | 对应 GUI / 载荷字段                                                        |
 | -------------------------- | -------------------------------------------------------------------------- |
 | `-p` / `--platform`        | 发布平台                                                                   |
-| `-f` / `--file`            | 本地视频路径 → `filePath`、`data.textOtherName`（文件名无扩展名）          |
+| `-f` / `--file`            | 本地视频路径，或 `http(s)://` 远程视频 URL → `filePath`、`data.textOtherName`（文件名无扩展名）；远程 URL 先下载到临时目录，默认上限 4 GiB，返回非视频类型（HTML/JSON 等）直接报错；服务端只回通用类型时会按视频容器魔数复核内容 |
 | `--phone` / `--partition`  | 会话分区，与账号树一致                                                     |
 | `-t` / `--title`           | **视频标题**（必填）→ `data.title`                                         |
 | `--description` / `--desc` | **视频简介** → `data.description`                                          |
