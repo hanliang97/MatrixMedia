@@ -7,6 +7,7 @@ import {
   isAccountProxyEnabled,
   pickActiveAccountProxy,
 } from "../../shared/accountProxy.js";
+import { getProxyBridge } from "./socksBridge.js";
 
 export {
   parseProxyUrl,
@@ -117,12 +118,38 @@ export async function applyAccountProxyToSession({
   }
 
   const { value } = parsed;
-  await ses.setProxy({
-    proxyRules: value.proxyRules,
-    proxyBypassRules: "<local>",
-  });
+  let proxyRules = value.proxyRules;
 
-  if (value.hasAuth) {
+  // Chromium 认证代理的两类硬伤，统一改走本地代理桥（无认证本地 HTTP 代理，
+  // 桥负责对上游预发认证，与 curl 行为一致）：
+  //  1. socks5= 规则在协议层面不支持账号密码认证；
+  //  2. HTTP 代理走「407 挑战应答」，实测 Electron 24 中 session 级 login 事件
+  //     对代理认证不触发，主进程 net 模块（SimpleURLLoader）更是完全不触发，
+  //     407 无人应答 → net::ERR_TUNNEL_CONNECTION_FAILED → 页面白屏/请求全挂。
+  // Electron → 127.0.0.1:<桥端口> → 认证上游代理 → 目标站点
+  if (value.hasAuth && (value.scheme === "socks5" || value.scheme === "socks" ||
+      value.scheme === "http" || value.scheme === "https")) {
+    try {
+      const bridge = await getProxyBridge({
+        scheme: value.scheme,
+        host: value.host,
+        port: value.port,
+        username: value.username,
+        password: value.password,
+      });
+      proxyRules = `http=127.0.0.1:${bridge.port};https=127.0.0.1:${bridge.port}`;
+      console.log(
+        `[proxy] partition=${partitionKey} 认证代理改走本地桥 127.0.0.1:${bridge.port}（上游 ${value.display}）`
+      );
+    } catch (err) {
+      throw new Error(`启动本地代理桥失败: ${err && err.message}`);
+    }
+    partitionProxyAuth.delete(partitionKey);
+  } else if (value.hasAuth && value.scheme === "socks4") {
+    throw new Error(
+      "socks4 代理不支持账号密码认证，请改用 socks5://用户名:密码@host:port，或去掉凭据"
+    );
+  } else if (value.hasAuth) {
     partitionProxyAuth.set(partitionKey, {
       username: value.username,
       password: value.password,
@@ -130,6 +157,13 @@ export async function applyAccountProxyToSession({
   } else {
     partitionProxyAuth.delete(partitionKey);
   }
+
+  await ses.setProxy({
+    proxyRules,
+    // localhost.weixin.qq.com 解析到 127.0.0.1，是网页视频号与本机微信客户端
+    // 的本地通信端口（130xx/140xx），走代理必然失败且无意义，必须直连
+    proxyBypassRules: "<local>,localhost.weixin.qq.com,*.localhost.weixin.qq.com",
+  });
 
   console.log(
     `[proxy] partition=${partitionKey} 已应用代理 ${value.display}${

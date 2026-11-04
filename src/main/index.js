@@ -41,6 +41,7 @@ import {
   cancelPuppeteerTasks,
 } from "./services/puppeteerFile";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
+import { closeAllSocksBridges } from "./services/socksBridge";
 import { initializeElectronRuntime } from "./services/electronStartup";
 import { reportUsageTelemetry } from "./services/usageTelemetry";
 import { checkForUpdate, downloadLatestUpdate } from "./services/updateChecker";
@@ -186,6 +187,20 @@ if (!cliMode) {
     });
   });
 }
+
+// Electron 24 的 net 模块（SimpleURLLoader）遇到代理隧道类网络错误时，即使
+// 请求上挂了 error 监听，仍会把错误以 uncaughtException 形式抛出（如
+// net::ERR_TUNNEL_CONNECTION_FAILED），默认行为是弹「主进程错误」对话框。
+// 这里兜底记录日志、不弹框不退出；真正的请求失败仍由各调用方的
+// error/reject 路径处理。注意：handler 内不能再 throw（会递归触发本事件）。
+process.on("uncaughtException", (err) => {
+  const message = err && err.message ? String(err.message) : String(err);
+  if (/^net::ERR_/.test(message)) {
+    console.error("[main] net 网络错误已兜底（不弹框不退出）:", message);
+    return;
+  }
+  console.error("[main] uncaughtException（已记录，不弹框不退出）:", err && (err.stack || message));
+});
 
 async function startApplication() {
   try {
@@ -368,6 +383,7 @@ function onAppReady() {
     });
     app.on("will-quit", () => {
       destroyAccountLoginWindows();
+      closeAllSocksBridges();
       tray.destroy();
     });
   });
