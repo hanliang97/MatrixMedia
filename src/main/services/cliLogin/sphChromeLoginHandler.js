@@ -34,7 +34,12 @@ export function createSphChromeLoginHandler(deps) {
       if (entry.cancelled) return { ok: false, exitCode: 3, message: "视频号登录已取消" };
       const accountDir = crypto.createHash("sha256").update(options.partition).digest("hex");
       const args = ["--no-first-run", "--no-default-browser-check"];
-      if (proxy.server) args.push("--proxy-server=" + proxy.server);
+      if (proxy.server) {
+        args.push("--proxy-server=" + proxy.server);
+        // localhost.weixin.qq.com 解析到 127.0.0.1，是视频号网页与本机微信
+        // 客户端的本地通信端口，不能走代理
+        args.push("--proxy-bypass-list=<local>;localhost.weixin.qq.com;*.localhost.weixin.qq.com");
+      }
       entry.browser = await deps.launchBrowser({
         executablePath,
         headless: false,

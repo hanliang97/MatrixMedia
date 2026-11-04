@@ -46,6 +46,7 @@
     "test:history-args": "node scripts/test-history-args.js",
     "test:history-status": "node scripts/test-history-status.js",
     "test:account-proxy-list": "node scripts/test-account-proxy-list.js",
+    "test:socks-bridge": "node scripts/test-socks-bridge.js",
     "test:server-request-guard": "node scripts/test-server-request-guard.js",
     "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
     "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js",
@@ -78,6 +79,7 @@
     "ai:mock-server": "node scripts/ai-mock-server.js",
     "import-capture": "node scripts/import-ps-capture.js",
     "test:text-readback": "node scripts/test-text-readback.js",
+    "test:video-metadata-tags": "node scripts/test-video-metadata-tags.js",
     "test:devtools-endpoint": "node scripts/test-devtools-endpoint.js",
     "test:scheduled-dedupe": "node scripts/test-scheduled-dedupe.js",
     "test:fans-history": "node scripts/test-fans-history.js"

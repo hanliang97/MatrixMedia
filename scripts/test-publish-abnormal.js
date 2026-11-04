@@ -68,6 +68,21 @@ function createTextPage(urls, text) {
   };
 }
 
+/**
+ * 弹层与整页正文分离的页面 mock：evaluate 返回 { full, overlay }，
+ * 与 readPageTextSignals 的真实返回结构一致。
+ * - full：整页正文（可能含常驻静态 UI 文案，阻断提示不应从这里命中）
+ * - overlay：弹层节点文本（toast / 弹窗）
+ */
+function createSignalPage(urls, full, overlay) {
+  const page = createTextPage(urls, full);
+  page.evaluate = async () => ({
+    full: full || "",
+    overlay: overlay || "",
+  });
+  return page;
+}
+
 (async () => {
   // 1. 地址未变化 → 发布异常
   {
@@ -336,6 +351,119 @@ function createTextPage(urls, text) {
     assert.strictEqual(payload.publishAbnormal, true, "静态泛化文案不得判成功");
     assert.strictEqual(payload.publishSignal, "none");
     assert.ok(payload.message.includes("发布异常"));
+  }
+
+  // 5b. 地址未变化 + 弹层出现平台校验提示：异常文案必须带上平台原文
+  //     （快手话题超 4 个时弹「最多只能添加4个话题」，点击被吞，此前只报「地址未变化」）
+  {
+    const page = createSignalPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      "编辑作品 最多只能添加4个话题 发布 取消",
+      "最多只能添加4个话题"
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, true);
+    assert.strictEqual(payload.publishSignal, "none");
+    assert.ok(
+      payload.publishBlockHint.includes("最多只能添加4个话题"),
+      "publishBlockHint 应带出平台校验原文"
+    );
+    assert.ok(
+      payload.message.includes("最多只能添加4个话题"),
+      "异常文案必须带出平台校验提示"
+    );
+    assert.ok(payload.message.includes("发布异常"));
+  }
+
+  // 5b-2. 整页正文里的常驻静态文案（字数上限等）不算校验提示：
+  //        阻断提示只认弹层节点，正文命中不产生 publishBlockHint
+  {
+    const page = createSignalPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      "编辑作品 最多输入30个字 最多上传1个视频 发布 取消",
+      ""
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, true);
+    assert.strictEqual(
+      payload.publishBlockHint,
+      undefined,
+      "正文静态文案不应产生阻断提示"
+    );
+    assert.ok(
+      !payload.message.includes("最多输入30个字"),
+      "异常文案不应带出正文里的静态 UI 文案"
+    );
+  }
+
+  // 5b-3. 弹层命中优先于正文：正文有静态字数上限、弹层有话题提示，
+  //        只带出弹层里的那条，不被静态文案污染
+  {
+    const page = createSignalPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      "编辑作品 最多输入30个字 发布 取消",
+      "最多只能添加4个话题"
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, true);
+    assert.ok(
+      payload.publishBlockHint.includes("最多只能添加4个话题"),
+      "提示应来自弹层文本"
+    );
+    assert.ok(
+      !payload.message.includes("最多输入30个字"),
+      "提示不应混入正文静态文案"
+    );
+  }
+
+  // 5c. 有校验提示但地址已跳成功页：仍判成功，不携带 blockHint（提示不参与成功判定）
+  {
+    const page = createSignalPage(
+      ["https://x.com/publish", "https://x.com/success"],
+      "最多只能添加4个话题 发布成功",
+      "最多只能添加4个话题"
+    );
+    const event = createEvent();
+    await replyPublishOutcome({
+      page,
+      data: { pt: "快手", closeWindowAfterPublish: false },
+      window: null,
+      event,
+      urlBefore: "https://x.com/publish",
+      waitMs: 0,
+      successMessage: "上传成功",
+    });
+    const payload = event.calls[0].payload;
+    assert.strictEqual(payload.publishAbnormal, undefined);
+    assert.strictEqual(payload.publishBlockHint, undefined);
+    assert.strictEqual(payload.message, "上传成功");
   }
 
   // 6. 结果映射：异常不计成功

@@ -32,11 +32,32 @@ export function joinDescriptionAndTags(description, tags) {
     .join(" ");
 }
 
+/**
+ * 各平台话题/标签的硬上限：超出时平台不是「权重降低」，而是直接拒绝本次提交。
+ *
+ * 快手：编辑器里每个 #话题 都是一个话题 chip，第 5 个会弹出「最多只能添加4个话题」，
+ * 并且「发布」按钮的点击被这个校验吞掉——页面停在发布页、不改地址、不给成功提示，
+ * 最终被 waitForPublishSignal 判成 signal=none 的「发布异常」。
+ * 真实复现：5 个话题连续两次发布均 publish_abnormal，裁到 4 个后同一账号立即发布成功。
+ * 所以在拼接描述文本时就裁到上限，并明确 warn 丢掉哪几个（不静默）。
+ */
+export const PLATFORM_TAG_LIMITS = {
+  快手: 4,
+};
+
 export function formatTagsForPlatform(platform, tags) {
   const prefix = platform === "哔哩哔哩" ? "" : "#";
-  return normalizeVideoTags(tags)
-    .map((tag) => `${prefix}${tag}`)
-    .join(" ");
+  let normalized = normalizeVideoTags(tags);
+  const limit = PLATFORM_TAG_LIMITS[platform] || 0;
+  if (limit > 0 && normalized.length > limit) {
+    const dropped = normalized.slice(limit);
+    console.warn(
+      `[text] ${platform} 话题上限 ${limit} 个（平台硬限制，超出会导致本次发布被拒绝），` +
+        `已丢弃 ${dropped.length} 个：${dropped.join(" ")}`
+    );
+    normalized = normalized.slice(0, limit);
+  }
+  return normalized.map((tag) => `${prefix}${tag}`).join(" ");
 }
 
 export function buildPlatformVideoText(platform, metadata = {}) {

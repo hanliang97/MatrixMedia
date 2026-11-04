@@ -27,14 +27,39 @@ const SUCCESS_TOAST_TEXTS = [
 ];
 
 /**
+ * 平台侧「拦住这次提交」的校验提示（点发布后页面弹出来、并吞掉点击的提示）。
+ *
+ * 典型：快手话题超过 4 个时弹「最多只能添加4个话题」，此时点「发布」不跳转、
+ * 不报错，只在 20000ms 判定窗口里什么都没发生，调用方只能拿到
+ * 「点击发布后 5 秒页面地址未变化」——把平台的明确原因抹成了看不出问题的通用文案。
+ * 这些文案只用于「地址未变化」时补充证据，不参与成功判定，误命中不会造假成功。
+ *
+ * ⚠ 只对「弹层类」节点的文本匹配（见 readPageTextSignals 的 overlay），
+ * 不对整页正文匹配：正文里常驻的输入辅助文案（如字数上限「最多输入30个字」）
+ * 会让无关原因的发布异常带出误导性的提示（PR #58 review 锁定的问题）。
+ */
+const BLOCKING_TIP_PATTERNS = [
+  // 最多只能添加4个话题 / 最多上传1个视频 / 最多输入30个字
+  /最多(?:只能)?\s*(?:添加|上传|发布|选择|输入|填写|挂)?\s*\d+\s*(?:个|张|条|字)/,
+  // 话题超出限制 / 标题超过上限 / 字数超出限制
+  /(?:话题|标签|标题|简介|描述|正文|字数|图片|视频)[^。！\n]{0,14}(?:超出|超过)[^。！\n]{0,10}(?:限制|上限|字数)/,
+  // 不能超过30个字 / 不得超过 4 个话题
+  /(?:不能|不得)超过\s*\d+\s*(?:个|张|条|字)/,
+  // 请先删除部分话题 / 请减少图片数量
+  /请(?:先)?(?:删除|减少|移除)[^。！\n]{0,12}(?:话题|标签|图片|视频)/,
+];
+
+/**
  * 发布模式轮询等待成功信号：URL 跳转或平台成功提示，任一命中立即返回。
- * @returns {Promise<{ok: boolean, signal: string, urlAfter: string}>}
+ * 全程顺带记录页面上的「阻断类校验提示」，供地址未变化时补充失败原因。
+ * @returns {Promise<{ok: boolean, signal: string, urlAfter: string, blockHint: string}>}
  */
 async function waitForPublishSignal(page, urlBefore, timeoutMs) {
   // 按轮次而不是墙钟计时：每轮含 1 秒等待，真实环境等价于 timeoutMs；
   // 单测里 waitForTimeout 是空实现，也不会空转 20 秒。
   const maxRounds = Math.max(2, Math.ceil(timeoutMs / 1000));
   let urlAfter = readPageUrl(page);
+  let blockHint = "";
   for (let round = 0; round < maxRounds; round++) {
     urlAfter = readPageUrl(page);
     if (
@@ -42,19 +67,29 @@ async function waitForPublishSignal(page, urlBefore, timeoutMs) {
       urlAfter &&
       normalizeUrl(urlAfter) !== normalizeUrl(urlBefore)
     ) {
-      return { ok: true, signal: "url_changed", urlAfter };
+      return { ok: true, signal: "url_changed", urlAfter, blockHint: "" };
     }
-    const text = await readPageText(page);
+    const signals = await readPageTextSignals(page);
+    const text = signals.full;
     if (text) {
       for (const kw of SUCCESS_TOAST_TEXTS) {
         if (text.includes(kw)) {
-          return { ok: true, signal: `toast:${kw}`, urlAfter };
+          return { ok: true, signal: `toast:${kw}`, urlAfter, blockHint: "" };
         }
+      }
+      // 阻断提示只在弹层文本里找：整页正文里的常驻静态文案（字数上限等）
+      // 不算数——平台 toast 一般只存活几秒，取首次命中的上下文
+      if (!blockHint && signals.overlay) {
+        blockHint = matchPatternWithContext(
+          BLOCKING_TIP_PATTERNS,
+          signals.overlay,
+          12
+        );
       }
     }
     await delay(page, 1000);
   }
-  return { ok: false, signal: "none", urlAfter: readPageUrl(page) };
+  return { ok: false, signal: "none", urlAfter: readPageUrl(page), blockHint };
 }
 
 /** 存草稿结果的轮询间隔：toast 存活一般 ≥2 秒，400ms 足够捕捉 */
@@ -132,49 +167,102 @@ function delay(page, ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/** 读取页面正文文本（含开放 shadow root 与同源 iframe），用于匹配保存成功/失败提示；
- *  页面跳转中或已销毁时返回空串。视频号等内容渲染在 wujie 影子树里，
- *  body.innerText 拿不到，必须递归收集 shadowRoot.textContent；
- *  wujie 的部分 UI（如 toast）渲染在其内部 iframe 里，需一并遍历 */
-export async function readPageText(page) {
-  if (!page || typeof page.evaluate !== "function") return "";
+/**
+ * 一次 evaluate 同时采集两类文本（含开放 shadow root 与同源 iframe）：
+ * - full：整页文本，用于匹配保存成功/失败提示；
+ * - overlay：只取「弹层类」节点（toast / 弹窗 / 气泡 / 通知）的文本，
+ *   供阻断类校验提示匹配——弹层与常驻 UI 分离，避免静态文案误命中。
+ *
+ * 视频号等内容渲染在 wujie 影子树里，body.innerText 拿不到，必须递归收集
+ * shadowRoot.textContent；wujie 的部分 UI（如 toast）渲染在其内部 iframe 里，
+ * 需一并遍历。页面跳转中或已销毁时返回空串；evaluate 直接返回字符串的
+ * 旧实现/mock 按「无弹层」处理（overlay 为空）。
+ */
+async function readPageTextSignals(page) {
+  if (!page || typeof page.evaluate !== "function") {
+    return { full: "", overlay: "" };
+  }
   try {
-    return String(
-      (await page.evaluate(() => {
-        try {
-          const acc = [];
-          const visit = (root) => {
+    const raw = await page.evaluate(() => {
+      try {
+        // 弹层类节点的通用选择器：覆盖各平台 UI 库的 toast/弹窗容器
+        //（antd message/modal、element el-message/el-dialog、semi-toast 等），
+        // class/id 用包含匹配 + i 标志，避免绑死某个平台的类名
+        const OVERLAY_SELECTOR = [
+          "[role='alert']",
+          "[role='alertdialog']",
+          "[role='dialog']",
+          "[role='tooltip']",
+          "[class*='toast' i]",
+          "[class*='modal' i]",
+          "[class*='dialog' i]",
+          "[class*='popup' i]",
+          "[class*='popover' i]",
+          "[class*='message' i]",
+          "[class*='notice' i]",
+          "[class*='alert' i]",
+          "[id*='toast' i]",
+          "[id*='modal' i]",
+          "[id*='dialog' i]",
+          "[id*='message' i]",
+        ].join(",");
+        const acc = [];
+        const overlays = [];
+        const visit = (root) => {
+          try {
+            const t = String(root.textContent || "");
+            if (t) acc.push(t);
+          } catch (_) {
+            /* 单个 root 读取失败不阻断 */
+          }
+          let hits = [];
+          try {
+            hits = Array.from(root.querySelectorAll(OVERLAY_SELECTOR));
+          } catch (_) {
+            /* 选择器异常不阻断 */
+          }
+          for (const el of hits) {
             try {
-              const t = String(root.textContent || "");
-              if (t) acc.push(t);
+              const t = String(el.textContent || "").trim();
+              if (t) overlays.push(t);
             } catch (_) {
-              /* 单个 root 读取失败不阻断 */
+              /* 单个弹层读取失败不阻断 */
             }
-            const els = root.querySelectorAll ? root.querySelectorAll("*") : [];
-            for (const el of els) {
-              if (el.shadowRoot) visit(el.shadowRoot);
-              // 同源 iframe（wujie 内部容器）：跨域时访问 contentDocument 会抛错，静默跳过
-              if (el.tagName === "IFRAME") {
-                try {
-                  const doc = el.contentDocument;
-                  if (doc && doc.body) visit(doc.body);
-                } catch (_) {
-                  /* 跨域 iframe */
-                }
+          }
+          const els = root.querySelectorAll ? root.querySelectorAll("*") : [];
+          for (const el of els) {
+            if (el.shadowRoot) visit(el.shadowRoot);
+            // 同源 iframe（wujie 内部容器）：跨域时访问 contentDocument 会抛错，静默跳过
+            if (el.tagName === "IFRAME") {
+              try {
+                const doc = el.contentDocument;
+                if (doc && doc.body) visit(doc.body);
+              } catch (_) {
+                /* 跨域 iframe */
               }
             }
-          };
-          if (document.body) visit(document.body);
-          return acc.join("\n");
-        } catch (_) {
-          return "";
-        }
-      })) || ""
-    );
+          }
+        };
+        if (document.body) visit(document.body);
+        return { full: acc.join("\n"), overlay: overlays.join("\n") };
+      } catch (_) {
+        return { full: "", overlay: "" };
+      }
+    });
+    if (typeof raw === "string") return { full: raw, overlay: "" };
+    return {
+      full: String((raw && raw.full) || ""),
+      overlay: String((raw && raw.overlay) || ""),
+    };
   } catch (_) {
     // 执行上下文随页面跳转被销毁属正常，下一轮轮询再试
-    return "";
+    return { full: "", overlay: "" };
   }
+}
+
+/** 读取页面正文文本（含开放 shadow root 与同源 iframe），用于匹配保存成功/失败提示 */
+export async function readPageText(page) {
+  return (await readPageTextSignals(page)).full;
 }
 
 /** 返回第一个命中的文案；无命中返回空串 */
@@ -416,18 +504,25 @@ export async function replyPublishOutcome({
     status: true,
     publishPageUrl: urlAfter,
     publishSignal: verdict.signal,
-    message: abnormal ? PUBLISH_ABNORMAL_MESSAGE : successMessage,
+    message: abnormal
+      ? `${PUBLISH_ABNORMAL_MESSAGE}${
+          verdict.blockHint ? `；页面提示「${verdict.blockHint}」` : ""
+        }`
+      : successMessage,
   };
   if (abnormal) {
     payload.publishAbnormal = true;
     payload.outcome = "publish_abnormal";
     payload.needsAttention = true;
+    // 平台自己说清了为什么没提交成功时，把原文带回回执与日志：
+    // 否则用户只看到「页面地址未变化」，得自己开截图找原因。
+    if (verdict.blockHint) payload.publishBlockHint = verdict.blockHint;
     // 疑似没发出去时页面还停在发布页（通常是平台校验提示 / 风控弹窗），先截图再关窗。
     // 传入 window：hidden 窗口下 CDP 截图可能等不到合成帧超时，用 capturePage 兜底。
     const shot = await capturePublishFailureScreenshot(page, data, { window });
     if (shot) payload.failScreenshot = shot;
     console.warn(
-      `[publish] ${data.pt} ${PUBLISH_ABNORMAL_MESSAGE}（地址：${urlAfter}）`
+      `[publish] ${data.pt} ${payload.message}（地址：${urlAfter}）`
     );
   }
 

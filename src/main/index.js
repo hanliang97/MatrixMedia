@@ -41,8 +41,10 @@ import {
   cancelPuppeteerTasks,
 } from "./services/puppeteerFile";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
+import { closeAllSocksBridges } from "./services/socksBridge";
 import { initializeElectronRuntime } from "./services/electronStartup";
 import { reportUsageTelemetry } from "./services/usageTelemetry";
+import { checkForUpdate, downloadLatestUpdate } from "./services/updateChecker";
 
 const cliMode = isCliMode(process.argv);
 
@@ -111,6 +113,66 @@ function requestQuit() {
   if (choice === 0) performQuit();
 }
 
+// 托盘「检查更新」：主动到 Gitee 检查最新 Release，
+// 有新版本时弹窗确认并立即开始下载安装包（下载进度仍由主窗口页面展示）。
+async function checkUpdateFromTray(win) {
+  try {
+    const result = await checkForUpdate();
+    if (!result || !result.latestVersion) {
+      dialog.showMessageBox(win, {
+        type: "info",
+        title: "检查更新",
+        message: "未能获取到版本信息，请检查网络后重试。",
+        buttons: ["确定"],
+        noLink: true,
+      });
+      return;
+    }
+    if (!result.hasUpdate) {
+      dialog.showMessageBox(win, {
+        type: "info",
+        title: "检查更新",
+        message: `当前已是最新版本（v${result.currentVersion}）。`,
+        buttons: ["确定"],
+        noLink: true,
+      });
+      return;
+    }
+    // 检查到新版本：主动询问并下载最新安装包
+    const { response } = await dialog.showMessageBox(win, {
+      type: "question",
+      title: "发现新版本",
+      message: `发现新版本 ${result.latestVersion}（当前 v${result.currentVersion}）`,
+      detail: "是否立即下载最新安装包？下载完成后可在系统下载目录中找到安装包。",
+      buttons: ["立即下载", "取消"],
+      defaultId: 0,
+      cancelId: 1,
+      noLink: true,
+    });
+    if (response !== 0) return;
+    const dl = await downloadLatestUpdate(win);
+    if (!dl.ok) {
+      dialog.showErrorBox("下载失败", dl.message || "启动下载失败");
+      return;
+    }
+    // 下载已开始，主窗口收起时给个提示，避免用户以为没反应
+    if (!win.isVisible()) {
+      win.show();
+    }
+    dialog.showMessageBox(win, {
+      type: "info",
+      title: "正在下载更新",
+      message: `已开始下载 ${result.latestVersion} 安装包。`,
+      detail: "可在主界面的下载进度中查看，完成后运行安装包即可完成更新。",
+      buttons: ["确定"],
+      noLink: true,
+    });
+  } catch (e) {
+    console.error("[tray] 检查更新失败:", e && (e.stack || e.message));
+    dialog.showErrorBox("检查更新失败", (e && e.message) || String(e));
+  }
+}
+
 if (!cliMode) {
   app.on("before-quit", (event) => {
     if (allowQuit) return;
@@ -125,6 +187,20 @@ if (!cliMode) {
     });
   });
 }
+
+// Electron 24 的 net 模块（SimpleURLLoader）遇到代理隧道类网络错误时，即使
+// 请求上挂了 error 监听，仍会把错误以 uncaughtException 形式抛出（如
+// net::ERR_TUNNEL_CONNECTION_FAILED），默认行为是弹「主进程错误」对话框。
+// 这里兜底记录日志、不弹框不退出；真正的请求失败仍由各调用方的
+// error/reject 路径处理。注意：handler 内不能再 throw（会递归触发本事件）。
+process.on("uncaughtException", (err) => {
+  const message = err && err.message ? String(err.message) : String(err);
+  if (/^net::ERR_/.test(message)) {
+    console.error("[main] net 网络错误已兜底（不弹框不退出）:", message);
+    return;
+  }
+  console.error("[main] uncaughtException（已记录，不弹框不退出）:", err && (err.stack || message));
+});
 
 async function startApplication() {
   try {
@@ -186,6 +262,13 @@ function onAppReady() {
         click: function () {
           console.log("setting");
           win.webContents.send("goSetting");
+        },
+      },
+      {
+        label: "检查更新",
+        click: () => {
+          win.show();
+          checkUpdateFromTray(win);
         },
       },
       {
@@ -300,6 +383,7 @@ function onAppReady() {
     });
     app.on("will-quit", () => {
       destroyAccountLoginWindows();
+      closeAllSocksBridges();
       tray.destroy();
     });
   });

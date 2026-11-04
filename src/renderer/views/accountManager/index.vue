@@ -138,7 +138,22 @@
       <p class="section-tip">
         为该账号配置独立代理后，登录窗口与视频发布都使用第一个启用代理。支持
         <code>http://host:port</code>、<code>http://user:pass@host:port</code>、
-        <code>socks5://host:port</code> 等格式。
+        <code>socks5://host:port</code>、<code>socks5://user:pass@host:port</code>
+        （带认证的代理会自动走本地代理桥）等格式；也支持直接粘贴
+        <b>悟空代理</b>复制的「IP|端口|账号|密码」格式（如
+        <code>183.131.35.19|21203|f9hm4uc1|yk0yi9k</code>），保存时自动转换。
+      </p>
+      <p class="section-tip">
+        还没有代理？账号发布需要独立稳定的出口 IP，推荐使用
+        <el-link
+          type="primary"
+          :underline="false"
+          href="https://www.wukongdaili.com/register?code=W2DGT7"
+          target="_blank"
+        >
+          悟空代理（注册直达）
+        </el-link>
+        ，注册后在「隧道代理」里复制 IP|端口|账号|密码，直接粘贴到下方代理列表即可。
       </p>
       <el-form label-width="88px" class="form-block proxy-form">
         <el-form-item label="代理列表">
@@ -156,7 +171,7 @@
               <el-input
                 v-model="item.url"
                 class="proxy-input"
-                placeholder="例如 http://user:pass@127.0.0.1:7890 或 socks5://127.0.0.1:1080"
+                placeholder="例如 http://user:pass@127.0.0.1:7890，或直接粘贴悟空代理的 183.131.35.19|21203|f9hm4uc1|yk0yi9k"
                 clearable
               />
               <el-button
