@@ -123,18 +123,24 @@ const renameOld = ref("");
 const renameNew = ref("");
 const renaming = ref(false);
 
-const groupOptions = computed(() =>
-  routes_list.value
-    .map((route) => extractGroupKey(route))
-    .filter((key) => key && !(routeHasAffix(key)))
-);
-
-function routeHasAffix(key) {
-  const route = routes_list.value.find(
-    (route) => extractGroupKey(route) === key
-  );
-  return Boolean(route && route.meta && route.meta.affix);
-}
+// 分组下拉选项：只取媒体平台管理模块的分组路由并去重。
+// permissionStore.routers 同时包含「媒体平台管理」(/accountManager/<组>)
+// 与「账号数据」(/data-stats/group/<组>) 两套同键路由，直接 map 会导致
+// 重命名下拉里同一分组出现两次。
+const groupOptions = computed(() => {
+  const seen = new Set();
+  const options = [];
+  routes_list.value.forEach((route) => {
+    if (!route.path || !String(route.path).startsWith("/accountManager/")) {
+      return;
+    }
+    const key = extractGroupKey(route);
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    options.push(key);
+  });
+  return options;
+});
 
 function openRenameDialog() {
   // 预选第一个可排序分组；用户可下拉切换
