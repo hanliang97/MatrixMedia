@@ -106,9 +106,9 @@
 
 | 字段       | 说明                                                     |
 | ---------- | -------------------------------------------------------- |
-| `fileName` | 数据文件名，如 `account`、`pushData`                     |
+| `fileName` | 数据文件夹名，如 `account`、`pushData`；只允许字母 / 数字 / 下划线 / 短横线（1-64 位），含路径分隔符或 `.` / `..` 一律返回 `success:false` |
 | `type`     | 操作类型：`add` / `update` / `delete` / `get` / `config` |
-| `item`     | 具体数据项，结构随 `fileName` 与 `type` 变化             |
+| `item`     | 具体数据项，结构随 `fileName` 与 `type` 变化；`item.date` 必须是 `YYYY-MM-DD` |
 
 ## POST /publish
 
