@@ -48,6 +48,16 @@
             />
           </el-select>
         </el-form-item>
+        <el-form-item label="账号名称">
+          <el-input
+            v-model="pushData.accountName"
+            placeholder="选填，默认与分组同名"
+            maxlength="50"
+          />
+          <div class="tips-content" style="margin-top: 4px">
+            同一分组可添加多个同平台账号（用不同账号名称区分）；同一平台账号在多个分组请保持名称一致，登录态自动共享、不会互相挤掉线。
+          </div>
+        </el-form-item>
         <el-form-item label="平台">
           <el-select v-model="pushData.pt" placeholder="请选择平台">
             <el-option
@@ -55,17 +65,7 @@
               :key="item.key"
               :value="item.key"
               :label="item.key"
-              :disabled="item.disabled"
-            >
-              <el-tooltip
-                :disabled="!item.disabled"
-                effect="dark"
-                placement="right"
-                content="一个分组只能设置一个同类型平台，如需添加多个相同平台，请创建多个分组"
-              >
-                <span class="platform-option-label">{{ item.key }}</span>
-              </el-tooltip>
-            </el-option>
+            />
           </el-select>
         </el-form-item>
         <el-form-item label="说明">
@@ -90,6 +90,10 @@ import { useAppStore } from "@/store/app";
 import dataRequest from "@/utils/dataRequest";
 import ptConfig from "@/utils/configUrl";
 import { usePermissionStore } from "@/store/permission";
+import {
+  deriveAccountKeyFromName,
+  recordAccountNameOf,
+} from "../../../shared/accountIdentity.js";
 
 const MEDIA_MENU_NO_ACCOUNT = "__media_no_account__";
 
@@ -104,6 +108,7 @@ export default {
       groupOptions: [],
       pushData: {
         phone: "",
+        accountName: "",
         pt: "",
         url: "",
       },
@@ -117,28 +122,8 @@ export default {
     isXhsPlatform() {
       return String(this.pushData.pt || "").trim() === "小红书";
     },
-    // 当前分组已占用的平台，避免同一分组重复添加
-    usedPtsForGroup() {
-      const phone = String(this.pushData.phone || "").trim();
-      if (!phone) return new Set();
-      try {
-        const tree = JSON.parse(localStorage.getItem("accountTree") || "{}");
-        const group = tree[phone];
-        if (!group || !Array.isArray(group.children)) return new Set();
-        return new Set(
-          group.children
-            .map((c) => (c.meta && c.meta.pt) || c.path || (c.meta && c.meta.title))
-            .filter(Boolean)
-        );
-      } catch (e) {
-        return new Set();
-      }
-    },
     platformOptions() {
-      return Object.keys(this.ptConfig).map((key) => ({
-        key,
-        disabled: this.usedPtsForGroup.has(key),
-      }));
+      return Object.keys(this.ptConfig).map((key) => ({ key }));
     },
   },
   created() {
@@ -151,14 +136,11 @@ export default {
       this.applyIsRouteFromPath(path);
       this.syncActiveIndexToCurrentRoute();
     },
-    "pushData.phone"() {
-      // 分组变更后，已选平台若对该分组不可用则清空
-      if (this.pushData.pt && this.usedPtsForGroup.has(this.pushData.pt)) {
-        this.pushData.pt = "";
-      }
-    },
     showDialog(open) {
-      if (open) this.refreshGroupOptions();
+      if (open) {
+        this.refreshGroupOptions();
+        this.pushData.accountName = "";
+      }
     },
   },
   methods: {
@@ -219,13 +201,20 @@ export default {
       }
       this.applyIsRouteFromPath(index);
     },
+    /**
+     * 新增账号（新分组模型）：
+     *   - 分组只是容器，同一分组可加多个同平台账号；
+     *   - accountKey（= 账号名清洗值）是登录主键，同一平台账号跨分组同名
+     *     即共享登录态（一份登录、一个出口 IP，不会互相挤掉线）；
+     *   - phone 字段继续按 "分组-账号名"（同名不带后缀）写入，兼容旧版本/CLI。
+     */
     addAccount() {
       const typed =
         this.$refs.groupSelect && this.$refs.groupSelect.query
           ? String(this.$refs.groupSelect.query).trim()
           : "";
-      const phone = String(this.pushData.phone || "").trim() || typed;
-      if (!phone) {
+      const group = String(this.pushData.phone || "").trim() || typed;
+      if (!group) {
         this.$message.warning("请选择或输入分组名称");
         return;
       }
@@ -233,56 +222,120 @@ export default {
         this.$message.warning("请选择平台");
         return;
       }
-      if (this.usedPtsForGroup.has(this.pushData.pt)) {
-        this.$message.warning("该分组已添加过此平台，请勿重复添加");
+      const accountName =
+        String(this.pushData.accountName || "").trim() || group;
+      const accountKey = deriveAccountKeyFromName(accountName) || group;
+      const pt = this.pushData.pt;
+
+      const tree = this.readAccountTree();
+      let duplicate = null;
+      let sharedLoginGroup = "";
+      Object.keys(tree).forEach((groupName) => {
+        ((tree[groupName] && tree[groupName].children) || []).forEach(
+          (child) => {
+            const meta = (child && child.meta) || {};
+            if (String(meta.pt || "") !== pt) return;
+            const sameAccount = recordAccountNameOf(meta) === accountName;
+            if (groupName === group && sameAccount) {
+              duplicate = meta;
+              return;
+            }
+            if (groupName !== group && sameAccount && !sharedLoginGroup) {
+              sharedLoginGroup = groupName;
+            }
+          }
+        );
+      });
+      if (duplicate) {
+        this.$message.warning(
+          `该分组下已存在同名账号「${accountName}」的 ${pt}，请更换账号名称`
+        );
         return;
       }
-      dataRequest({
-        type: "add",
-        fileName: "account",
-        item: {
-          ...this.pushData,
-          phone,
-          url: this.ptConfig[this.pushData.pt].index,
-        },
-      }).then(() => {
-        this.$message({
-          type: "success",
-          message: "添加成功!",
+
+      const doAdd = () => {
+        dataRequest({
+          type: "add",
+          fileName: "account",
+          item: {
+            phone: accountName === group ? group : `${group}-${accountName}`,
+            group,
+            accountName,
+            accountKey,
+            pt,
+            url: this.ptConfig[pt].index,
+          },
+        }).then(() => {
+          if (sharedLoginGroup) {
+            this.$message({
+              type: "success",
+              message: `添加成功！该账号已在分组「${sharedLoginGroup}」添加过，两个分组共享同一份登录态`,
+              duration: 6000,
+            });
+          } else {
+            this.$message({
+              type: "success",
+              message: "添加成功!",
+            });
+          }
+
+          this.showDialog = false;
+          this.pushData = {
+            phone: "",
+            accountName: "",
+            pt: "",
+            url: "",
+          };
+
+          usePermissionStore()
+            .GenerateRoutes()
+            .then(() => {
+              setTimeout(() => {
+                this.refreshAccountMenuIndex();
+                const accountRoutes = this.$router
+                  .getRoutes()
+                  .filter(
+                    (route) =>
+                      typeof route.path === "string" &&
+                      route.path.startsWith("/accountManager")
+                  );
+                if (accountRoutes.length > 0) {
+                  const targetPath = accountRoutes[0].path;
+                  if (this.$route.path !== targetPath) {
+                    this.$router.push(targetPath);
+                  }
+                  this.applyIsRouteFromPath(targetPath);
+                  if (this.getAccoutIndex) {
+                    this.activeIndex = this.getAccoutIndex;
+                  }
+                }
+              }, 200);
+            });
         });
+      };
 
-        this.showDialog = false;
-        this.pushData = {
-          phone: "",
-          pt: "",
-          url: "",
-        };
-
-        usePermissionStore()
-          .GenerateRoutes()
-          .then(() => {
-            setTimeout(() => {
-              this.refreshAccountMenuIndex();
-              const accountRoutes = this.$router
-                .getRoutes()
-                .filter(
-                  (route) =>
-                    typeof route.path === "string" &&
-                    route.path.startsWith("/accountManager")
-                );
-              if (accountRoutes.length > 0) {
-                const targetPath = accountRoutes[0].path;
-                if (this.$route.path !== targetPath) {
-                  this.$router.push(targetPath);
-                }
-                this.applyIsRouteFromPath(targetPath);
-                if (this.getAccoutIndex) {
-                  this.activeIndex = this.getAccoutIndex;
-                }
-              }
-            }, 200);
-          });
-      });
+      if (sharedLoginGroup) {
+        this.$confirm(
+          `平台账号「${accountName}」已在分组「${sharedLoginGroup}」添加过。继续添加将共享同一份登录态与代理出口（不会互相挤掉线），是否继续？`,
+          "共享登录态提示",
+          {
+            confirmButtonText: "继续添加",
+            cancelButtonText: "取消",
+            type: "info",
+          }
+        )
+          .then(doAdd)
+          .catch(() => {});
+        return;
+      }
+      doAdd();
+    },
+    readAccountTree() {
+      try {
+        return JSON.parse(localStorage.getItem("accountTree") || "{}") || {};
+      } catch (e) {
+        return {};
+      }
     },
   },
 };

@@ -5,6 +5,7 @@ import fs from "fs";
 import { app, session } from "electron";
 import ptConfig from "../config/ptConfig";
 import { evaluateLoginCookies } from "../../shared/loginState.js";
+import { buildAccountPartitionOf } from "../../shared/accountIdentity.js";
 import { probeSphSession } from "../services/sphAuthProbe.js";
 import { applyAccountProxyForTask } from "../services/proxyConfig.js";
 import { getSphSessionId } from "../services/cliLogin/sphSessionUtil.js";
@@ -49,7 +50,9 @@ function readAccounts() {
 }
 
 async function probeLogin(account) {
-  const partition = account.partition || `persist:${String(account.phone).split("-")[0]}${account.pt}`;
+  // partition 优先取记录存量值；缺失时按新分组模型 accountKey（回退历史 phone 前缀）拼装
+  const partition =
+    account.partition || buildAccountPartitionOf(account, account.pt);
   const cfg = ptConfig[account.pt];
   const probeUrl = account.url || (cfg && (cfg.listIndex || cfg.upload || cfg.index));
   if (!probeUrl) {
@@ -144,7 +147,7 @@ export async function runAccountsCli(options) {
     rows.push({
       phone: a.phone,
       pt: a.pt,
-      partition: a.partition || `persist:${String(a.phone).split("-")[0]}${a.pt}`,
+      partition: a.partition || buildAccountPartitionOf(a, a.pt),
       loggedIn: probe.loggedIn,
       reason: probe.reason,
       expireAt: probe.expireMs,

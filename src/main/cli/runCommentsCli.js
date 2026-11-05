@@ -8,7 +8,7 @@
 import { probeAccount, collectComments, replyComments } from "../services/comments/collector.js";
 import store from "../services/comments/store.js";
 import statsStore from "../services/dataStats/store.js";
-import { buildAccountPartition } from "../../shared/accountPartition.js";
+import { resolveTaskPartition } from "../services/accountLookup.js";
 import fs from "fs";
 
 function print(data) {
@@ -31,8 +31,8 @@ export async function runCommentsCli({
   execute,
   max,
 }) {
-  // 与登录窗口同一套 partition 规则（账号名取 "-" 前缀）
-  const partition = buildAccountPartition(phone, platform);
+  // 与登录窗口同一套 partition 规则：优先按账号记录的 accountKey（新分组模型）
+  const partition = resolveTaskPartition({ phone, pt: platform });
 
   if (action === "probe") {
     const startedAt = Date.now();

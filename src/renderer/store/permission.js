@@ -14,6 +14,12 @@ import {
   buildGroupOrderMap,
   sortGroupRoutes,
 } from "../../shared/accountGroupOrder.js";
+import {
+  buildAccountPartitionOf,
+  accountLoginFlagNameOf,
+  recordGroupOf,
+  recordAccountKeyOf,
+} from "../../shared/accountIdentity.js";
 
 const getCookieTaskHandlers = new Map();
 let getCookieListenerBound = false;
@@ -72,36 +78,42 @@ function addFetchRoute(routes) {
         for (const item in raw) {
           const v = raw[item];
           v.forEach((i) => {
-            if (!endData[i.phone]) {
-              endData[i.phone] = {
-                path: "/accountManager/" + i.phone,
-                name: `accountManager-${i.phone}`,
+            if (!i || !i.phone) return;
+            // 新分组模型：侧边栏分组 = group 字段（回退历史 phone "-" 前缀），
+            // 同一分组可挂多个同平台账号（各自独立登录分区）
+            const group = recordGroupOf(i);
+            if (!group) return;
+            if (!endData[group]) {
+              endData[group] = {
+                path: "/accountManager/" + group,
+                name: `accountManager-${group}`,
                 component: Layout,
                 redirect: "accountManager",
                 meta: {
-                  title: i.phone,
-                  phone: i.phone,
-                  groupOrder: i.groupOrder,
+                  title: group,
+                  phone: group,
+                  groupOrder: groupOrderMap[group],
                 },
-                children: [
-                  {
-                    path: i.pt,
-                    name: `${i.phone}-${i.pt}`,
-                    component: () => import("@/views/accountManager/index"),
-                    meta: { title: i.pt, ...i, date: item },
-                  },
-                ],
+                children: [],
               };
-            } else {
-              endData[i.phone].children.push({
-                path: i.pt,
-                name: `${i.phone}-${i.pt}`,
-                component: () => import("@/views/accountManager/index"),
-                meta: { title: i.pt, ...i, date: item },
-              });
             }
+            // 子路由 path：同分组首个该平台账号保留纯平台 path（兼容旧链接），
+            // 后续同平台多账号按 accountKey 追加，避免路径冲突
+            const groupNode = endData[group];
+            const hasSamePt = groupNode.children.some(
+              (child) => (child.meta && child.meta.pt) === i.pt
+            );
+            const accountKey = recordAccountKeyOf(i);
+            const childPath = hasSamePt ? `${i.pt}-${accountKey || i.id}` : i.pt;
+            groupNode.children.push({
+              path: childPath,
+              name: `accountManager-${group}-${i.id || accountKey}-${i.pt}`,
+              component: () => import("@/views/accountManager/index"),
+              // group 放在展开之后：保证 meta.group 恒为派生分组名
+              meta: { title: i.pt, ...i, group, date: item },
+            });
             const taskId = Date.now() + Math.random();
-            const partition = "persist:" + i.phone.split("-")[0] + i.pt;
+            const partition = buildAccountPartitionOf(i, i.pt);
 
             ensureGetCookieDoneListener();
             ipcRenderer.send("getCookie", {
@@ -109,11 +121,11 @@ function addFetchRoute(routes) {
               partition,
               url: i.url,
               pt: i.pt,
-              name: `${i.phone.split("-")[0]}${i.pt}登录`,
+              name: accountLoginFlagNameOf(i, i.pt),
             });
             getCookieTaskHandlers.set(taskId, (data) => {
               const flagName =
-                data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
+                data.flagName || accountLoginFlagNameOf(i, i.pt);
               if (data.success) {
                 if (data.result) {
                   setAccountLoginFlag(flagName, data.loginExpiresAtMs);
@@ -127,7 +139,7 @@ function addFetchRoute(routes) {
                 }
               } else {
                 clearAccountLoginFlag(flagName);
-                console.error(`[${i.phone}${i.pt}] 登录状态失败:`, data.error);
+                console.error(`[${accountKey}${i.pt}] 登录状态失败:`, data.error);
               }
             });
           });
@@ -155,7 +167,12 @@ function addFetchRoute(routes) {
                 meta: { title: pt, phone, pt },
               };
             })
-            .filter(Boolean);
+            .filter(Boolean)
+            // 同分组同平台多账号共享一份（分组 × 平台）统计数据，路由去重
+            .filter(
+              (child, idx, arr) =>
+                arr.findIndex((c) => c.path === child.path) === idx
+            );
           routes.push({
             path: "/data-stats/group/" + phone,
             name: `dataStats-${phone}`,

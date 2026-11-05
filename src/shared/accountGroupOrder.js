@@ -1,6 +1,7 @@
 /**
- * 分组排序：底层仍用 phone 字段，UI 展示为「分组」
+ * 分组排序：底层键为「分组名」（新分组模型 group 字段，回退历史 phone 前缀）
  */
+import { recordGroupOf } from "./accountIdentity.js";
 
 export function normalizeGroupOrder(value) {
   const n = Number(value);
@@ -24,9 +25,11 @@ export function buildGroupOrderMap(rawAccountData) {
     const list = rawAccountData[dateKey];
     if (!Array.isArray(list)) continue;
     for (const item of list) {
-      const phone = item && item.phone;
-      if (!phone || map[phone] != null) continue;
-      map[phone] = normalizeGroupOrder(item.groupOrder);
+      // 分组键用 recordGroupOf（新分组模型 group 字段，回退历史 phone 前缀）：
+      // 同一分组的所有账号记录（含同平台多账号）归到同一个排序键
+      const group = recordGroupOf(item);
+      if (!group || map[group] != null) continue;
+      map[group] = normalizeGroupOrder(item.groupOrder);
     }
   }
   return map;
@@ -105,20 +108,20 @@ export function reorderPermissionStoreRouters(routers, orderedPhones) {
   return [...staticRoutes, ...sortedAccountRoutes];
 }
 
-export function buildGroupOrderUpdates(rawAccountData, orderedPhones) {
+export function buildGroupOrderUpdates(rawAccountData, orderedGroups) {
   const updates = [];
-  if (!rawAccountData || !Array.isArray(orderedPhones)) return updates;
+  if (!rawAccountData || !Array.isArray(orderedGroups)) return updates;
   const orderIndex = {};
-  orderedPhones.forEach((phone, idx) => {
-    orderIndex[phone] = idx;
+  orderedGroups.forEach((group, idx) => {
+    orderIndex[group] = idx;
   });
   for (const dateKey of Object.keys(rawAccountData)) {
     const list = rawAccountData[dateKey];
     if (!Array.isArray(list)) continue;
     for (const item of list) {
-      const phone = item && item.phone;
-      if (!phone || orderIndex[phone] === undefined) continue;
-      const nextOrder = orderIndex[phone];
+      const group = recordGroupOf(item);
+      if (!group || orderIndex[group] === undefined) continue;
+      const nextOrder = orderIndex[group];
       if (normalizeGroupOrder(item.groupOrder) === nextOrder) continue;
       if (!item.id) continue;
       updates.push({

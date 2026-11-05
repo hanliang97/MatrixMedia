@@ -13,6 +13,7 @@
 
 import fs from "fs";
 import path from "path";
+import { recordAccountKeyOf } from "../../../shared/accountIdentity.js";
 
 /** 截图保留天数，超期自动清理，避免长期发布把磁盘撑满 */
 export const FAIL_SCREENSHOT_RETENTION_DAYS = 14;
@@ -78,10 +79,8 @@ function pad2(n) {
  */
 export function buildFailScreenshotName(data = {}, now = new Date()) {
   const pt = sanitizeSegment(data.pt, "未知平台");
-  const phone = sanitizeSegment(
-    String(data.phone || "").split("-")[0],
-    "未知账号"
-  );
+  // 账号段按登录主键 accountKey（回退历史 phone "-" 前缀），改名/备注不影响辨认
+  const phone = sanitizeSegment(recordAccountKeyOf(data || {}), "未知账号");
   const stamp =
     `${now.getFullYear()}${pad2(now.getMonth() + 1)}${pad2(now.getDate())}` +
     `-${pad2(now.getHours())}${pad2(now.getMinutes())}${pad2(now.getSeconds())}` +

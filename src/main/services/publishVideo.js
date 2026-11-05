@@ -15,6 +15,7 @@ import {
   guessFileNameFromUrl,
 } from "./resolvePublishFile";
 import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
+import { resolveTaskPartition } from "./accountLookup.js";
 import { resolvePublishCompletion } from "../../shared/publishResult.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
@@ -161,10 +162,19 @@ async function runSingleFilePublishInner(
   { sourceFile, resolvedFile, stem, metadata, bookName, coverPath = "" },
   options = {}
 ) {
+  // 新分组模型：CLI/HTTP 传入的 partition 可能仍按历史「phone 前缀」规则拼出，
+  // 这里按账号记录的 accountKey 重算标准 partition（未命中记录时原样保留）
+  v.partition = resolveTaskPartition({
+    partition: v.partition,
+    phone: v.phone,
+    pt: v.platform,
+  });
+
   // 结合「请求显式 draft」与账号「默认发布到草稿」设置，算出最终发布模式
   const effectivePublishMode = resolveAccountPublishMode({
     phone: derivePhoneForRecord(v),
     pt: v.platform,
+    partition: v.partition,
     requestDraftMode: Boolean(v.draft),
   });
 

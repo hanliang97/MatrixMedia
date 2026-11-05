@@ -20,7 +20,7 @@ ELECTRON_RUN_AS_NODE= electron . cli publish --help
 
 ### 通用机制
 
-1. **会话**：`partition` 形如 `persist:<手机号段><平台名>`，与账号树、webview 一致。
+1. **会话**：`partition` 形如 `persist:<登录主键><平台名>`，与账号树、webview 一致。登录主键为账号的 accountKey（新分组模型：同一平台账号跨分组共享登录态；老数据 = phone "-" 前缀）。`--phone` 传完整账号 phone（如 `宠物-旺财`）会按账号记录自动重算标准 partition，传历史前缀写法依旧兼容。
 2. **Cookie 持久化**：登录成功后自动 `cookies.flushStore()` + `flushStorageData()`，确保 CLI 与 GUI 共用同一 `userData` 下的 `persist:` 分区。
 3. **终端扫码**：CLI 自动捕获二维码并在终端展示，用户扫码后继续轮询登录 Cookie。
 4. **退出**：检测到 Cookie 后关窗；超时 / 用户关窗返回码 3。
@@ -91,7 +91,7 @@ matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\video.mp4 -t "标题
 | -------------------------- | -------------------------------------------------------------------------- |
 | `-p` / `--platform`        | 发布平台                                                                   |
 | `-f` / `--file`            | 本地视频路径 → `filePath`、`data.textOtherName`（文件名无扩展名）          |
-| `--phone` / `--partition`  | 会话分区，与账号树一致                                                     |
+| `--phone` / `--partition`  | 会话分区，与账号树一致（`--phone` 支持完整 phone，如 `分组-账号名`）       |
 | `-t` / `--title`           | **视频标题**（必填）→ `data.title`                                         |
 | `--description` / `--desc` | **视频简介** → `data.description`                                          |
 | `--short-title`            | **视频号短标题** → `data.shortTitle`，仅视频号消费                         |

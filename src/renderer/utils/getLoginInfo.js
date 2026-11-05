@@ -2,6 +2,7 @@ import { ipcRenderer } from "electron";
 import { useAppStore } from "@/store/app";
 import ptConfig from "@/utils/configUrl";
 import openLoginWindow from "@/utils/openLoginWindow";
+import { buildAccountPartitionOf } from "../../shared/accountIdentity.js";
 // 打开页面保持登录状态
 export default async function (endData) {
   const taskHandlers = new Map();
@@ -39,7 +40,7 @@ export default async function (endData) {
             taskId,
             bt: "tst",
             useragent: ptConfig[j.name].useragent,
-            partition: "persist:" + j.meta.phone.split('-')[0] + j.name,
+            partition: buildAccountPartitionOf(j.meta, j.name),
             url: ptConfig[j.name].listIndex,
             pt: j.name + "状态",
           });

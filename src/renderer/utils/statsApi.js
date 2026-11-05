@@ -2,7 +2,10 @@
  * 数据统计渲染层 API：封装主进程采集/读取 IPC。
  */
 import { ipcRenderer } from "electron";
-import { buildAccountPartition } from "../../shared/accountPartition.js";
+import {
+  buildAccountPartitionOf,
+  recordAccountKeyOf,
+} from "../../shared/accountIdentity.js";
 
 /** 不参与统计的平台（无数据接口） */
 const STATS_EXCLUDED = new Set(["番茄视频", "掘金"]);
@@ -20,14 +23,26 @@ export function buildCollectAccounts(filter) {
     return [];
   }
   const accounts = [];
-  for (const [phone, node] of Object.entries(tree)) {
+  const seenPartitions = new Set();
+  for (const [group, node] of Object.entries(tree)) {
     const children = (node && node.children) || [];
     for (const child of children) {
       const pt = (child.meta && child.meta.pt) || child.path;
       if (!pt || STATS_EXCLUDED.has(pt)) continue;
-      if (filter && !filter(phone, pt)) continue;
-      // partition 必须与登录窗口一致（账号名取 "-" 前缀），否则带 "-" 的账号读不到登录态
-      accounts.push({ group: phone, platform: pt, partition: buildAccountPartition(phone, pt) });
+      if (filter && !filter(group, pt)) continue;
+      // partition 按账号记录的 accountKey 拼装（与登录窗口一致，
+      // 老数据回退历史 phone "-" 前缀规则）；同一平台账号跨分组共享
+      // 登录态，partition 去重后只采一次
+      const meta = child.meta || {};
+      const partition = buildAccountPartitionOf(meta, pt);
+      if (seenPartitions.has(partition)) continue;
+      seenPartitions.add(partition);
+      accounts.push({
+        group,
+        platform: pt,
+        partition,
+        accountKey: recordAccountKeyOf(meta),
+      });
     }
   }
   return accounts;

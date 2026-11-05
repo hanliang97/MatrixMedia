@@ -199,6 +199,11 @@ import openLoginWindow from "@/utils/openLoginWindow";
 import LocalVideoPublish from "@/components/LocalVideoPublish.vue";
 import LocalArticlePublish from "@/components/LocalArticlePublish.vue";
 import { normalizeVideoRecordMetadata } from "../../../shared/videoMetadata.js";
+import {
+  buildAccountPartitionOf,
+  recordAccountKeyOf,
+  recordGroupOf,
+} from "../../../shared/accountIdentity.js";
 import { buildPublishHistoryCsv } from "../../../shared/publishHistoryCsv.js";
 
 export default {
@@ -270,9 +275,10 @@ export default {
     copy: copyToClipboard,
     getStatusRowKey(row) {
       if (!row) return "";
+      // 账号身份按登录主键 accountKey（回退历史 phone "-" 前缀）
       return [
         row.textOtherName || "",
-        String(row.phone || "").split("-")[0],
+        recordAccountKeyOf(row),
         row.selectedFile || "",
       ].join("-");
     },
@@ -300,10 +306,9 @@ export default {
       try {
         const tasks = targets.map((item, idx) => ({
           key: String(idx),
-          group: String(item.phone || "").split("-")[0],
+          group: recordGroupOf(item),
           platform: item.pt,
-          partition:
-            "persist:" + String(item.phone || "").split("-")[0] + item.pt,
+          partition: buildAccountPartitionOf(item, item.pt),
           title: item.title || item.bt || item.textOtherName || "",
         }));
         const res = await ipcRenderer.invoke("stats:match-works", { tasks });
@@ -487,9 +492,13 @@ export default {
       }
       if (row.textType === "article") {
         const sample = details[0] || {};
+        // 新分组模型：重发目标按 partition / accountKey 标识（同分组同平台
+        // 多账号时 phone 前缀不再唯一）
         const failedTargets = details.filter(this.isPublishFailed).map((v) => ({
           pt: v.pt,
-          phone: String(v.phone || "").split("-")[0],
+          phone: v.phone,
+          partition: v.partition,
+          accountKey: recordAccountKeyOf(v),
         }));
         const ok = this.$refs.articlePublishRef.openRepublish({
           sample,
@@ -497,7 +506,9 @@ export default {
             id: v.id,
             date: v.date,
             pt: v.pt,
-            phone: String(v.phone || "").split("-")[0],
+            phone: v.phone,
+            partition: v.partition,
+            accountKey: recordAccountKeyOf(v),
             publishAttemptCount: Number(v.publishAttemptCount) || 1,
             republishCount: Number(v.republishCount),
           })),
@@ -614,7 +625,9 @@ export default {
           .find(Boolean) || "";
       const failedTargets = details.filter(this.isPublishFailed).map((v) => ({
         pt: v.pt,
-        phone: String(v.phone || "").split("-")[0],
+        phone: v.phone,
+        partition: v.partition,
+        accountKey: recordAccountKeyOf(v),
       }));
 
       const ok = this.$refs.localPublishRef.openRepublish({
@@ -634,7 +647,9 @@ export default {
           id: record.id,
           date: record.date,
           pt: record.pt,
-          phone: String(record.phone || "").split("-")[0],
+          phone: record.phone,
+          partition: record.partition,
+          accountKey: recordAccountKeyOf(record),
           description: metadata.description,
           shortTitle: metadata.shortTitle,
           tags: metadata.tags,
@@ -681,7 +696,8 @@ export default {
       return String(value || "");
     },
     getRecordPhone(row) {
-      return String((row && row.phone) || "").split("-")[0];
+      // 记录身份键：accountKey（回退历史 phone "-" 前缀）
+      return recordAccountKeyOf(row);
     },
     getArticleField(row, key) {
       if (!row) return "";
@@ -724,14 +740,26 @@ export default {
       const selectedFile =
         donePayload.selectedFile || this.getFileName(donePayload.filePath);
       const pt = donePayload.pt;
-      const phone = String(donePayload.phone || "").split("-")[0];
+      // 账号身份：partition 优先，回退 accountKey（再回退历史 phone 前缀）
+      const payloadPartition = String(donePayload.partition || "");
+      const payloadKey = recordAccountKeyOf(donePayload);
+      const sameAccount = (sub) => {
+        if (
+          payloadPartition &&
+          String(sub.partition || "") &&
+          String(sub.partition) === payloadPartition
+        ) {
+          return true;
+        }
+        return recordAccountKeyOf(sub) === payloadKey;
+      };
       const dateKeys = Object.keys(this.dataList || {});
       for (const dateKey of dateKeys) {
         const dayRows = this.dataList[dateKey] || [];
         for (const row of dayRows) {
           const details = row.showAlltype || [];
           for (const sub of details) {
-            const subPhone = String(sub.phone || "").split("-")[0];
+            const subPhone = sameAccount(sub);
             if (textType === "article") {
               if (
                 sub.textType === "article" &&
@@ -747,7 +775,7 @@ export default {
               sub.pt === pt &&
               sub.textOtherName === textOtherName &&
               sub.selectedFile === selectedFile &&
-              subPhone === phone
+              subPhone
             ) {
               return { date: dateKey, row: sub };
             }

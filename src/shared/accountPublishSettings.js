@@ -22,15 +22,22 @@ export function resolveEffectivePublishMode(requestDraftMode, account = {}) {
   };
 }
 
-function normalizePhone(value) {
-  return String(value || "").split("-")[0];
-}
+import {
+  legacyPhoneGroup,
+  recordAccountKeyOf,
+} from "./accountIdentity.js";
 
 export function updateAccountTreePublishSettings(accountTree = {}, patch = {}) {
-  const targetPhone = normalizePhone(patch.phone);
   const targetPt = String(patch.pt || "");
   const nextTree = JSON.parse(JSON.stringify(accountTree || {}));
-  if (!targetPhone || !targetPt) return nextTree;
+  if (!targetPt) return nextTree;
+
+  // 匹配键：优先 accountKey（新分组模型，同一登录态只属一个平台账号），
+  // patch 未携带 accountKey 时回退历史 phone "-" 前缀匹配
+  const targetKey = patch.accountKey
+    ? String(patch.accountKey)
+    : legacyPhoneGroup(patch.phone);
+  if (!targetKey) return nextTree;
 
   Object.keys(nextTree).forEach((phoneKey) => {
     const group = nextTree[phoneKey];
@@ -40,9 +47,9 @@ export function updateAccountTreePublishSettings(accountTree = {}, patch = {}) {
     children.forEach((child) => {
       // accountTree children 结构为 { meta: { phone, pt, ... }, ... }
       const meta = (child && child.meta) || child || {};
-      const samePhone = normalizePhone(meta.phone) === targetPhone;
+      const sameKey = recordAccountKeyOf(meta) === targetKey;
       const samePt = String(meta.pt || "") === targetPt;
-      if (samePhone && samePt) {
+      if (sameKey && samePt) {
         if (!child.meta) child.meta = {};
         child.meta.defaultPublishToDraft = Boolean(patch.defaultPublishToDraft);
         if (typeof patch.useRealBrowser === "boolean") {
