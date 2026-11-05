@@ -20,6 +20,7 @@ import { createLaunchInstallerHandler } from "./launchInstaller";
 import { checkForUpdate, downloadLatestUpdate } from "./updateChecker";
 import { applyAccountProxyForTask } from "./proxyConfig";
 import { SERVER_REQUEST_TOKEN } from "../server/requestGuard";
+import { isInternalAppUrl } from "../../shared/navigationGuard";
 import { registerTelemetryPreferenceIpc } from "./telemetryPreferenceIpc.js";
 import { registerAiContentIpc } from "./aiContentIpc.js";
 import { createAiKeyStore } from "./aiKeyStore.js";
@@ -46,7 +47,13 @@ export default {
         const frameUrl = String(
           (event.senderFrame && event.senderFrame.url) || ""
         );
-        if (/^(file:|https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?[\/#?]?)/.test(frameUrl)) {
+        if (
+          isInternalAppUrl(frameUrl, {
+            appRoot: electronApp.getAppPath(),
+            devOrigins:
+              process.env.NODE_ENV === "development" ? [winURL] : [],
+          })
+        ) {
           return SERVER_REQUEST_TOKEN;
         }
       } catch (_) {

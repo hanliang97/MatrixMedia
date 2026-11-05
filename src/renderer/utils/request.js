@@ -1,13 +1,23 @@
 import axios from 'axios'
 import { Message } from 'element-ui'
+import { getServerToken } from './serverToken'
 const serves = axios.create({
   baseURL: 'http://127.0.0.1:30088',
   timeout: 5000
 })
 
 // 设置请求发送之前的拦截器
-serves.interceptors.request.use(config => {
+serves.interceptors.request.use(async config => {
   // 设置发送之前数据需要做什么处理
+  try {
+    const target = new URL(config.url || '', config.baseURL || 'http://127.0.0.1:30088')
+    if (target.origin === 'http://127.0.0.1:30088') {
+      const token = await getServerToken().catch(() => '')
+      if (token) config.headers['X-Matrix-Token'] = token
+    }
+  } catch (_) {
+    // Preserve the original request path if its URL is invalid.
+  }
   return config
 }, err => Promise.reject(err))
 
