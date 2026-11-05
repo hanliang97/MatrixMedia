@@ -91,7 +91,8 @@
     "test:video-metadata-tags": "node scripts/test-video-metadata-tags.js",
     "test:devtools-endpoint": "node scripts/test-devtools-endpoint.js",
     "test:scheduled-dedupe": "node scripts/test-scheduled-dedupe.js",
-    "test:fans-history": "node scripts/test-fans-history.js"
+    "test:fans-history": "node scripts/test-fans-history.js",
+    "test:toutiao-stats": "node scripts/test-toutiao-stats.js"
   },
   "build": {
     "forceCodeSigning": false,

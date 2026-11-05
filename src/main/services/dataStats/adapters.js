@@ -359,8 +359,12 @@ const ADAPTERS = {
       likes += w.like; comments += w.comment; favorites += w.favorite || 0;
       out.works.push(w);
     }
-    if (!j.has_more || !j.offset) break;
-    offset = j.offset;
+    // has_more 是 feed 的惯性标记：首屏就可能缺失或为 false，不能当翻页终止条件，
+    // 否则只会采到首屏 10 条（作品数与评论/点赞总量随之被截断）。
+    // 这里改用 offset 游标是否推进判断：游标缺失或与本次请求相同（不再前进）才终止。
+    const nextOffset = j.offset == null ? "" : String(j.offset);
+    if (!nextOffset || nextOffset === String(offset)) break;
+    offset = nextOffset;
     pageIndex += 1;
     await __sleep(800);
   }
