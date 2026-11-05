@@ -48,3 +48,5 @@ jobs:
           yarn test:fail-screenshot
           yarn test:fail-screenshot-timeout
           yarn test:puppeteer-cancel
+          # 数据统计（头条作品列表一次拉全 + 评论数累加）
+          yarn test:toutiao-stats
