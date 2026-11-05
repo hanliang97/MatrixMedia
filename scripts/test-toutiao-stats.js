@@ -1,13 +1,14 @@
 "use strict";
 
 /**
- * 验证头条作品列表翻页终止条件（dataStats/adapters.js → ADAPTERS.头条.collectScript）：
+ * 验证头条作品列表采集行为（dataStats/adapters.js → ADAPTERS.头条.collectScript）：
  *
- * 1. 首屏 has_more 缺失/false 但 offset 游标有值时继续翻页（修复前只采首屏 10 条，
- *    作品数与评论/点赞/收藏总量随之被截断）
- * 2. 游标不再推进（服务端重复返回同一 offset）时立即终止，不空转请求
- * 3. 空页终止（首屏就为空）
- * 4. 全量翻页后作品数与评论/点赞/收藏总量按全部作品累加
+ * 1. 请求必须带 count=200（count=10 只拿首屏 10 条，作品数与评论/点赞/收藏总量被截断，
+ *    且首屏最新作品评论多为 0，界面评论总数会显示成 0）
+ * 2. has_more=false 时立即终止，不空转请求
+ * 3. has_more=true 且游标推进时继续翻页（超 200 篇作品的账号），游标不推进时立即终止
+ * 4. 空页终止（首屏就为空）
+ * 5. 首页聚合缺 statistic 时按未登录抛错
  *
  * 脚本本身跑在平台页面上下文里（依赖 fetch / localStorage），这里用 vm 沙箱模拟。
  */
@@ -63,7 +64,6 @@ async function runCollect(pages) {
   const calls = [];
   const sandbox = {
     console,
-    // 页面上下文的 fetch：首页聚合固定返回，作品列表按 offset 取桩数据
     fetch: async (url) => {
       calls.push(url);
       let json;
@@ -76,9 +76,9 @@ async function runCollect(pages) {
           },
         };
       } else {
-        const offset = new URL(url, "https://mp.toutiao.com").searchParams.get("offset");
-        const build = pages[String(offset)];
-        if (!build) throw new Error("未预期的分页请求 offset=" + offset);
+        const u = new URL(url, "https://mp.toutiao.com");
+        const build = pages[u.searchParams.get("offset")];
+        if (!build) throw new Error("未预期的分页请求 offset=" + u.searchParams.get("offset"));
         json = build();
       }
       return { status: 200, text: async () => JSON.stringify(json) };
@@ -95,39 +95,51 @@ async function runCollect(pages) {
 }
 
 (async () => {
-  // 1. 首屏 has_more=false，但 offset 游标还在推进 → 继续翻页，直到游标缺失
+  // 1. 大 count + has_more=false：一次请求拉全，评论总量按全部作品累加
   {
     const { result, calls } = await runCollect({
-      "0": () => ({ data: Array.from({ length: 10 }, (_, i) => item(i, 3)), offset: "1700000000000", has_more: false }),
-      "1700000000000": () => ({ data: Array.from({ length: 10 }, (_, i) => item(10 + i, 3)), offset: "1690000000000", has_more: false }),
-      "1690000000000": () => ({ data: Array.from({ length: 5 }, (_, i) => item(20 + i, 3)) }),
+      "0": () => ({ data: Array.from({ length: 56 }, (_, i) => item(i, 3)), offset: "1791770476686", has_more: false }),
     });
-    assert.strictEqual(calls.length, 3, "应翻满三页，实际请求 " + calls.length + " 次");
-    assert.strictEqual(result.works.length, 25, "应采到 25 条作品");
-    assert.strictEqual(result.overview.comments, 75, "评论总量应为全部作品累加");
-    assert.strictEqual(result.overview.likes, 50, "点赞总量应为全部作品累加");
-    assert.strictEqual(result.overview.favorites, 25, "收藏总量应为全部作品累加");
+    assert.strictEqual(calls.length, 1, "has_more=false 应只请求一次，实际 " + calls.length + " 次");
+    assert.ok(/[?&]count=200(&|$)/.test(calls[0]), "列表请求必须带 count=200，实际：" + calls[0]);
+    assert.ok(!/[?&]count=10(&|$)/.test(calls[0]), "不应再使用 count=10");
+    assert.strictEqual(result.works.length, 56, "应采到全部 56 条作品");
+    assert.strictEqual(result.overview.comments, 168, "评论总量应为全部作品累加");
+    assert.strictEqual(result.overview.likes, 112, "点赞总量应为全部作品累加");
+    assert.strictEqual(result.overview.favorites, 56, "收藏总量应为全部作品累加");
     assert.strictEqual(result.overview.fans, 5, "粉丝数来自首页聚合");
     assert.strictEqual(result.overview.plays, 4967, "播放阅读来自首页聚合");
-    console.log("[通过] has_more=false + 游标推进 → 翻满全部页");
+    console.log("[通过] count=200 + has_more=false → 一次拉全并正确累加");
   }
 
-  // 2. 游标不推进（服务端重复返回同一 offset）→ 立即终止，避免空转
+  // 2. 超 200 篇作品的账号：has_more=true 且游标推进 → 继续翻页
   {
     const { result, calls } = await runCollect({
-      "0": () => ({ data: Array.from({ length: 10 }, (_, i) => item(i, 1)), offset: "500" }),
-      "500": () => ({ data: Array.from({ length: 10 }, (_, i) => item(10 + i, 1)), offset: "500" }),
+      "0": () => ({ data: Array.from({ length: 200 }, (_, i) => item(i, 1)), offset: "1710000000000", has_more: true }),
+      "1710000000000": () => ({ data: Array.from({ length: 12 }, (_, i) => item(200 + i, 2)), offset: "1700000000000", has_more: false }),
     });
-    assert.strictEqual(calls.length, 2, "游标不再推进时应立即终止，实际请求 " + calls.length + " 次");
-    assert.strictEqual(result.works.length, 20, "应保留已采到的 20 条作品");
-    assert.strictEqual(result.overview.comments, 20);
+    assert.strictEqual(calls.length, 2, "游标推进且 has_more=true 时应继续翻页，实际 " + calls.length + " 次");
+    assert.strictEqual(result.works.length, 212, "应采到 212 条作品");
+    assert.strictEqual(result.overview.comments, 200 + 24, "评论总量应按两页全部作品累加");
+    console.log("[通过] has_more=true + 游标推进 → 继续翻页");
+  }
+
+  // 3. 游标不推进（服务端重复返回同一 offset）→ 立即终止，避免空转
+  {
+    const { result, calls } = await runCollect({
+      "0": () => ({ data: Array.from({ length: 200 }, (_, i) => item(i, 1)), offset: "500", has_more: true }),
+      "500": () => ({ data: Array.from({ length: 200 }, (_, i) => item(200 + i, 1)), offset: "500", has_more: true }),
+    });
+    assert.strictEqual(calls.length, 2, "游标不再推进时应立即终止，实际 " + calls.length + " 次");
+    assert.strictEqual(result.works.length, 400, "应保留已采到的 400 条作品");
+    assert.strictEqual(result.overview.comments, 400);
     console.log("[通过] 游标不再推进 → 立即终止");
   }
 
-  // 3. 空页终止（首屏无作品）
+  // 4. 空页终止（首屏无作品）
   {
     const { result, calls } = await runCollect({
-      "0": () => ({ data: [], offset: "1700000000000" }),
+      "0": () => ({ data: [], offset: "1700000000000", has_more: true }),
     });
     assert.strictEqual(calls.length, 1);
     assert.strictEqual(result.works.length, 0);
@@ -135,9 +147,8 @@ async function runCollect(pages) {
     console.log("[通过] 空页终止");
   }
 
-  // 4. 首页聚合缺 statistic 时按未登录抛错（保持既有行为，别静默写入 0）
+  // 5. 首页聚合缺 statistic 时抛错（保持既有行为，别静默写入 0）
   {
-    const script = collectScript;
     const sandbox = {
       console,
       fetch: async () => ({ status: 200, text: async () => JSON.stringify({ data: {} }) }),
@@ -146,7 +157,7 @@ async function runCollect(pages) {
     };
     let err = null;
     try {
-      await vm.runInNewContext(script, sandbox);
+      await vm.runInNewContext(collectScript, sandbox);
     } catch (e) {
       err = e;
     }

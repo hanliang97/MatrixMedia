@@ -333,7 +333,7 @@ const ADAPTERS = {
     const r = await __get(
       "/api/feed/mp_provider/v1/?provider_type=mp_provider&aid=13&app_name=news_article&category=mp_all&stream_api_version=88" +
         "&genre_type_switch=" + genreSwitch + "&device_platform=pc&platform_id=0&visited_uid=" + uid +
-        "&offset=" + offset + "&count=10&keyword=&client_extra_params=" + clientExtra + "&app_id=1231"
+        "&offset=" + offset + "&count=200&keyword=&client_extra_params=" + clientExtra + "&app_id=1231"
     );
     const j = r.json;
     const list = j.data || [];
@@ -359,9 +359,12 @@ const ADAPTERS = {
       likes += w.like; comments += w.comment; favorites += w.favorite || 0;
       out.works.push(w);
     }
-    // has_more 是 feed 的惯性标记：首屏就可能缺失或为 false，不能当翻页终止条件，
-    // 否则只会采到首屏 10 条（作品数与评论/点赞总量随之被截断）。
-    // 这里改用 offset 游标是否推进判断：游标缺失或与本次请求相同（不再前进）才终止。
+    // 该接口的 offset 不是可推进的游标（实测把响应里的 offset 回传会直接返回空列表），
+    // 唯一可靠的翻全手段是把 count 放大：count=200 时服务端一次性返回账号全部作品
+    // （实测 56 条作品 + has_more:false）。count=10 时只会拿到首屏 10 条，作品数与
+    // 评论/点赞/收藏总量随之被截断，且首屏最新作品评论多为 0，评论总数会显示成 0。
+    // 因此这里以 has_more 作为终止条件，并保留游标是否推进的兜底判断防止空转。
+    if (!j.has_more) break;
     const nextOffset = j.offset == null ? "" : String(j.offset);
     if (!nextOffset || nextOffset === String(offset)) break;
     offset = nextOffset;
