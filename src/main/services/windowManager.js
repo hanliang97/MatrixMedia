@@ -1,4 +1,4 @@
-import { BrowserWindow, Menu } from "electron";
+import { BrowserWindow, Menu, shell, app } from "electron";
 import fs from "fs";
 import path from "path";
 import { platform } from "os";
@@ -7,12 +7,26 @@ import { openDevTools, IsUseSysTitle, UseStartupChart } from "../config/const";
 import setIpc from "./ipcMain";
 import { winURL, loadingURL } from "../config/StaticPath";
 import baseMenu from "../config/menu";
+import { loadUrlWithGuard } from "./windowNavigationGuard";
 
 
 let loadWindow = null;
 let mainWindow = null;
 // 版本以package.json为基准。
 const version = require("../../../package.json").version;
+
+/**
+ * 导航守卫的策略入参（见 shared/navigationGuard.js）：
+ *  - file: 只允许应用自己的页面 → appRoot 取应用根目录（打包后是 app.asar 路径）；
+ *  - http(s) 只允许 dev 本地开发服务器 → 仅 development 模式放开 winURL 的 origin，
+ *    打包后不保留「任意 localhost 端口都可信」的口子。
+ */
+function navigationPolicy() {
+  return {
+    appRoot: app.getAppPath(),
+    devOrigins: process.env.NODE_ENV === "development" ? [winURL] : [],
+  };
+}
 
 function resolveWindowsWindowIcon() {
   if (!platform().includes("win32")) return undefined;
@@ -101,7 +115,13 @@ function createMainWindow(fn) {
   // 载入菜单
   const menu = Menu.buildFromTemplate(menuconfig);
   Menu.setApplicationMenu(menu);
-  mainWindow.loadURL(winURL);
+  // 先装导航守卫再载入页面：主窗口带 nodeIntegration，任何远端导航都会
+  // 把 Node 能力交给远端脚本（详见 services/windowNavigationGuard.js）
+  loadUrlWithGuard(mainWindow, winURL, {
+    label: "主窗口",
+    openExternal: (url) => shell.openExternal(url),
+    ...navigationPolicy(),
+  });
 
   mainWindow.webContents.once("dom-ready", () => {
     mainWindow.show();
@@ -133,7 +153,11 @@ function loadingWindow(fn) {
     webPreferences: { experimentalFeatures: true, webSecurity: false },
   });
 
-  loadWindow.loadURL(loadingURL);
+  loadUrlWithGuard(loadWindow, loadingURL, {
+    label: "加载窗",
+    openExternal: (url) => shell.openExternal(url),
+    ...navigationPolicy(),
+  });
 
   loadWindow.show();
 
