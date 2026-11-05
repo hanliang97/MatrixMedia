@@ -49,6 +49,7 @@
     "test:socks-bridge": "node scripts/test-socks-bridge.js",
     "test:server-request-guard": "node scripts/test-server-request-guard.js",
     "test:change-data-path": "node scripts/test-change-data-path.js",
+    "test:window-navigation-guard": "node scripts/test-window-navigation-guard.js",
     "test:puppeteer-cancel": "node scripts/test-puppeteer-cancel.js",
     "test:account-login-window-manager": "node scripts/test-account-login-window-manager.js",
     "test:pick-release-installer": "node scripts/test-pick-release-installer.js",
