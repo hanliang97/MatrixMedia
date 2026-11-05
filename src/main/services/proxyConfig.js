@@ -1,12 +1,13 @@
 "use strict";
 
 import { session } from "electron";
-import { changeData } from "../server/utils.js";
 import {
   parseProxyUrl,
   isAccountProxyEnabled,
   pickActiveAccountProxy,
 } from "../../shared/accountProxy.js";
+import { buildAccountPartitionOf } from "../../shared/accountIdentity.js";
+import { listAllAccountRecords } from "./accountLookup.js";
 import { getProxyBridge } from "./socksBridge.js";
 
 export {
@@ -25,32 +26,45 @@ function normalizePhone(phone) {
 }
 
 /**
- * 从 account 数据源查找账号记录
+ * 从 account 数据源查找账号记录（新分组模型兼容版）。
+ *
+ * 匹配优先级：phone 全字匹配 > partition 精确匹配 > phone "-" 前缀匹配
+ * （全字无歧义必须先行，详见 accountLookup.findAccountRecordFlexible）。
+ * 老的 (phone, pt) 签名保留，新调用方建议直接传 partition（它由 accountKey
+ * 拼出，同一平台账号跨分组共享登录态时，任意分区的代理都能正确命中
+ * 同一条账号记录）。
+ *
  * @param {string} phone
  * @param {string} pt
+ * @param {string} [partition] 完整 partition（如 persist:旺财抖音）
  * @returns {object | null}
  */
-export function findAccountRecord(phone, pt) {
-  const phoneSeg = normalizePhone(phone);
+export function findAccountRecord(phone, pt, partition) {
   const platform = String(pt || "").trim();
-  if (!phoneSeg || !platform) return null;
+  if (!platform) return null;
+  const phoneStr = String(phone || "").trim();
+  const phoneSeg = normalizePhone(phoneStr);
+  if (!phoneSeg && !partition) return null;
 
-  const result = changeData({
-    fileName: "account",
-    type: "get",
-    item: { page: 1, pageSize: 9999 },
-  });
-  const grouped = (result && result.data) || {};
+  const partitionStr = String(partition || "").trim();
+  const rows = listAllAccountRecords();
 
-  for (const dateKey of Object.keys(grouped)) {
-    const rows = grouped[dateKey] || [];
+  if (phoneStr) {
     for (const item of rows) {
-      if (
-        String(item.pt || "").trim() === platform &&
-        normalizePhone(item.phone) === phoneSeg
-      ) {
-        return item;
-      }
+      if (String(item.pt || "").trim() !== platform) continue;
+      if (String(item.phone || "").trim() === phoneStr) return item;
+    }
+  }
+  if (partitionStr) {
+    for (const item of rows) {
+      if (String(item.pt || "").trim() !== platform) continue;
+      if (buildAccountPartitionOf(item, platform) === partitionStr) return item;
+    }
+  }
+  if (phoneSeg) {
+    for (const item of rows) {
+      if (String(item.pt || "").trim() !== platform) continue;
+      if (normalizePhone(item.phone) === phoneSeg) return item;
     }
   }
   return null;
@@ -101,7 +115,7 @@ export async function applyAccountProxyToSession({
 
   let proxy = proxyOverride;
   if (proxy === undefined) {
-    const account = findAccountRecord(phone, pt);
+    const account = findAccountRecord(phone, pt, partitionKey);
     proxy = account && account.proxy;
   }
   proxy = pickActiveAccountProxy(proxy);

@@ -628,6 +628,13 @@ import {
 } from "../../shared/xhsPublishPolicy.js";
 import { resolveEffectivePublishMode } from "../../shared/accountPublishSettings.js";
 import {
+  accountLoginFlagNameOf,
+  buildAccountPartitionOf,
+  recordAccountKeyOf,
+  recordAccountNameOf,
+  recordGroupOf,
+} from "../../shared/accountIdentity.js";
+import {
   buildVideoLinkOption,
   getDisplayableVideoLinkTypes,
   getVideoLinkTypeCapability,
@@ -1005,37 +1012,55 @@ export default {
       if (!Array.isArray(failedTargets) || failedTargets.length === 0)
         return [];
       const keys = [];
+      // 新分组模型：优先按 partition 匹配（同一分组同平台多账号时
+      // phone 前缀不再唯一），老记录缺失 partition 时回退账号登录主键
       const targetSet = new Set(
-        failedTargets.map(
-          (v) =>
-            `${String(v.pt || "").trim()}__${
-              String(v.phone || "").split("-")[0]
-            }`
-        )
+        failedTargets.map((v) => this.republishTargetKey(v))
       );
       (this.treeData || []).forEach((group) => {
         (group.children || []).forEach((child) => {
-          const key = `${String(child.pt || "").trim()}__${
-            String(child.phone || "").split("-")[0]
-          }`;
-          if (targetSet.has(key)) {
+          if (targetSet.has(this.republishTargetKey(child))) {
             keys.push(child.id);
           }
         });
       });
       return keys;
     },
-    findRepublishRecord(pt, phone) {
+    /** 重发匹配键：partition 优先，回退「登录主键 + 平台」 */
+    republishTargetKey(target) {
+      const pt = String((target && target.pt) || "").trim();
+      if (target && target.partition) {
+        return `p__${String(target.partition)}`;
+      }
+      return `k__${recordAccountKeyOf(target || {})}__${pt}`;
+    },
+
+    /**
+     * 按平台 + 账号身份查重发记录。
+     * @param {string} pt 平台
+     * @param {object} node 账号树子节点（含 accountKey / partition）
+     */
+    findRepublishRecord(pt, node) {
       if (
         !this.republishContext ||
         !Array.isArray(this.republishContext.records)
       )
         return null;
-      const p = String(phone || "").split("-")[0];
-      return this.republishContext.records.find(
+      const records = this.republishContext.records;
+      const nodePartition = String((node && node.partition) || "");
+      const nodeKey = recordAccountKeyOf(node || {});
+      if (nodePartition) {
+        const byPartition = records.find(
+          (item) =>
+            String(item.pt || "") === String(pt || "") &&
+            String(item.partition || "") === nodePartition
+        );
+        if (byPartition) return byPartition;
+      }
+      return records.find(
         (item) =>
           String(item.pt || "") === String(pt || "") &&
-          String(item.phone || "").split("-")[0] === p
+          recordAccountKeyOf(item) === nodeKey
       );
     },
 
@@ -1185,7 +1210,7 @@ export default {
       return {
         channel: isSeries ? "sph:list-series" : "sph:list-dramas",
         label: isSeries ? "剧集" : "短剧",
-        partition: "persist:" + row.phone.split("-")[0] + row.pt,
+        partition: buildAccountPartitionOf(row, row.pt),
       };
     },
     /**
@@ -1336,7 +1361,7 @@ export default {
         return;
       }
       if (this.platformProductLoading[row.id]) return;
-      const partition = "persist:" + row.phone.split("-")[0] + row.pt;
+      const partition = buildAccountPartitionOf(row, row.pt);
       this.$set(this.platformProductLoading, row.id, true);
       try {
         const result = await ipcRenderer.invoke("sph:list-window-products", {
@@ -1397,7 +1422,7 @@ export default {
       const fallback = normalizeCreativeStatement(fallbackValue);
       const next = { ...this.platformStatements };
       this.getAllPlatformLeafNodes().forEach((node) => {
-        const rec = this.findRepublishRecord(node.pt, node.phone);
+        const rec = this.findRepublishRecord(node.pt, node);
         if (rec && rec.creativeStatement) {
           next[node.id] = normalizeCreativeStatement(rec.creativeStatement);
         } else if (!next[node.id]) {
@@ -1409,7 +1434,7 @@ export default {
     applyRepublishPlatformVideoLinks() {
       const next = { ...this.platformVideoLinks };
       this.getAllPlatformLeafNodes().forEach((node) => {
-        const rec = this.findRepublishRecord(node.pt, node.phone);
+        const rec = this.findRepublishRecord(node.pt, node);
         const link = resolveVideoLinkOption(node.pt, rec && rec.publishOptions);
         if (link && link.enabled && link.value) {
           next[node.id] = { type: link.type, value: String(link.value) };
@@ -1676,7 +1701,11 @@ export default {
           children: (node.children || []).map((child) => ({
             id: child.meta.id,
             pt: child.meta.pt,
-            phone: child.meta.phone.split("-")[0],
+            // phone 保留完整记录值；分组/账号名/登录主键按新分组模型透传
+            phone: child.meta.phone,
+            group: recordGroupOf(child.meta),
+            accountName: recordAccountNameOf(child.meta),
+            accountKey: recordAccountKeyOf(child.meta),
             date: child.meta.date,
             url: child.meta.url,
             // 透传账号"默认发布到草稿"设置，让 resolveEffectivePublishMode 能识别
@@ -1686,9 +1715,7 @@ export default {
             proxyDisplay: getAccountProxyDisplay(child.meta.proxy),
             proxyEnabled: isAccountProxyEnabled(child.meta.proxy),
             loggedIn: (() => {
-              const name = `${child.meta.phone.split("-")[0]}${
-                child.meta.pt
-              }登录`;
+              const name = accountLoginFlagNameOf(child.meta, child.meta.pt);
               if (isAccountLoginFlagSet(name)) return true;
               const cookies = document.cookie.split(";");
               for (const c of cookies) {
@@ -1711,16 +1738,16 @@ export default {
 
     checkLoginStatus(i) {
       const taskId = Date.now() + Math.random();
-      const partition = "persist:" + i.phone.split("-")[0] + i.pt;
+      const partition = buildAccountPartitionOf(i, i.pt);
       ipcRenderer.send("getCookie", {
         taskId,
         partition,
         url: i.url,
         pt: i.pt,
-        name: `${i.phone.split("-")[0]}${i.pt}登录`,
+        name: accountLoginFlagNameOf(i, i.pt),
       });
       this.taskHandlers.set(taskId, (data) => {
-        const flagName = data.flagName || `${i.phone.split("-")[0]}${i.pt}登录`;
+        const flagName = data.flagName || accountLoginFlagNameOf(i, i.pt);
         if (data.success) {
           if (data.result) {
             setAccountLoginFlag(flagName, data.loginExpiresAtMs);
@@ -1735,7 +1762,7 @@ export default {
         } else {
           clearAccountLoginFlag(flagName);
           console.error(
-            `[${i.phone.split("-")[0]}${i.pt}] 登录状态失败:`,
+            `[${recordAccountKeyOf(i)}${i.pt}] 登录状态失败:`,
             data.error
           );
         }
@@ -1753,7 +1780,7 @@ export default {
     },
 
     async reLogin(item) {
-      const partition = "persist:" + item.phone.split("-")[0] + item.pt;
+      const partition = buildAccountPartitionOf(item, item.pt);
       try {
         const result = await openLoginWindow({ ...item, partition });
         if (result && result.ok === false) {
@@ -1866,7 +1893,7 @@ export default {
 
       const scheduledWriteTasks = [];
       for (let p of platforms) {
-        const partition = "persist:" + p.phone.split("-")[0] + p.pt;
+        const partition = buildAccountPartitionOf(p, p.pt);
         const taskId = Date.now() + Math.random();
         const shouldShow = this.thisShow;
         const shouldCloseWindowAfterPublish = shouldShow
@@ -1900,6 +1927,12 @@ export default {
                 filePath: this.localFilePath,
                 useragent: this.ptConfig[p.pt].useragent,
                 phone: p.phone,
+              group: p.group,
+              accountName: p.accountName,
+              accountKey: p.accountKey,
+                group: p.group,
+                accountName: p.accountName,
+                accountKey: p.accountKey,
                 partition,
                 url: this.ptConfig[p.pt].listIndex,
                 uploadUrl: this.ptConfig[p.pt].upload,
@@ -1947,7 +1980,7 @@ export default {
           JSON.parse(JSON.stringify(publishPayload))
         );
 
-        const republishRecord = this.findRepublishRecord(p.pt, p.phone);
+        const republishRecord = this.findRepublishRecord(p.pt, p);
         if (republishRecord && republishRecord.id && republishRecord.date) {
           const oldAttempt = Number(republishRecord.publishAttemptCount) || 1;
           let oldRepublish = Number(republishRecord.republishCount);
@@ -2014,6 +2047,9 @@ export default {
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,
+              group: p.group,
+              accountName: p.accountName,
+              accountKey: p.accountKey,
               partition,
               url: this.ptConfig[p.pt].listIndex,
               date: currentDate,
@@ -2315,7 +2351,7 @@ export default {
         });
 
         for (const p of platforms) {
-          const partition = "persist:" + p.phone.split("-")[0] + p.pt;
+          const partition = buildAccountPartitionOf(p, p.pt);
           const taskId = Date.now() + Math.random();
           const shouldShow = this.thisShow;
           const shouldCloseWindowAfterPublish = shouldShow
@@ -2367,6 +2403,15 @@ export default {
                   filePath,
                   useragent: this.ptConfig[p.pt].useragent,
                   phone: p.phone,
+                  group: p.group,
+                  accountName: p.accountName,
+                  accountKey: p.accountKey,
+              group: p.group,
+              accountName: p.accountName,
+              accountKey: p.accountKey,
+                group: p.group,
+                accountName: p.accountName,
+                accountKey: p.accountKey,
                   partition,
                   url: this.ptConfig[p.pt].listIndex,
                   uploadUrl: this.ptConfig[p.pt].upload,
@@ -2446,6 +2491,9 @@ export default {
               filePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,
+              group: p.group,
+              accountName: p.accountName,
+              accountKey: p.accountKey,
               partition,
               url: this.ptConfig[p.pt].listIndex,
               uploadUrl: this.ptConfig[p.pt].upload,

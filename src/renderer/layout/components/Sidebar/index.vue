@@ -2,8 +2,53 @@
   <div class="sidebar-panel">
     <div v-if="!isCollapse && showGroupHead" class="sidebar-head">
       <span class="sidebar-head-title">分组列表</span>
-      <span class="sidebar-head-tip">拖动分组排序</span>
+      <span class="sidebar-head-tip">
+        拖动分组排序
+        <el-button
+          type="text"
+          size="mini"
+          class="sidebar-rename-btn"
+          @click="openRenameDialog"
+        >重命名</el-button>
+      </span>
     </div>
+    <el-dialog
+      :visible.sync="renameVisible"
+      title="重命名分组"
+      width="420px"
+      append-to-body
+      :close-on-click-modal="false"
+    >
+      <el-form label-width="88px">
+        <el-form-item label="选择分组">
+          <el-select v-model="renameOld" filterable style="width: 100%">
+            <el-option
+              v-for="name in groupOptions"
+              :key="name"
+              :label="name"
+              :value="name"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="新名称">
+          <el-input
+            v-model="renameNew"
+            maxlength="50"
+            placeholder="输入新的分组名称"
+            @keyup.enter.native="confirmRenameGroup"
+          />
+        </el-form-item>
+      </el-form>
+      <p class="rename-tip">
+        改名只影响分组展示与账号归属，不影响各账号的登录态（登录态按平台账号保存）。
+      </p>
+      <template #footer>
+        <el-button @click="renameVisible = false">取消</el-button>
+        <el-button type="primary" :loading="renaming" @click="confirmRenameGroup">
+          保存
+        </el-button>
+      </template>
+    </el-dialog>
     <div class="box-left">
       <draggable
         v-if="show"
@@ -43,7 +88,9 @@
 <script setup>
 import { computed, defineComponent, watch, ref } from "vue";
 import draggable from "vuedraggable";
+import { Message } from "element-ui";
 import SidebarItem from "./SidebarItem";
+import router from "@/router";
 import { useAppStore } from "@/store/app";
 import { usePermissionStore } from "@/store/permission";
 import dataRequest from "@/utils/dataRequest";
@@ -53,6 +100,10 @@ import {
   reorderAccountTreeStorage,
   reorderPermissionStoreRouters,
 } from "../../../../shared/accountGroupOrder.js";
+import {
+  buildCompatPhone,
+  recordGroupOf,
+} from "../../../../shared/accountIdentity.js";
 
 defineComponent({
   name: "Sidebar",
@@ -65,6 +116,107 @@ const routes_list = ref([]);
 const visibleRoutes = ref([]);
 const show = ref(true);
 const sorting = ref(false);
+
+// ── 分组重命名（新分组模型：分组只是容器，改名不动登录态） ──
+const renameVisible = ref(false);
+const renameOld = ref("");
+const renameNew = ref("");
+const renaming = ref(false);
+
+const groupOptions = computed(() =>
+  routes_list.value
+    .map((route) => extractGroupKey(route))
+    .filter((key) => key && !(routeHasAffix(key)))
+);
+
+function routeHasAffix(key) {
+  const route = routes_list.value.find(
+    (route) => extractGroupKey(route) === key
+  );
+  return Boolean(route && route.meta && route.meta.affix);
+}
+
+function openRenameDialog() {
+  // 预选第一个可排序分组；用户可下拉切换
+  renameOld.value =
+    visibleRoutes.value
+      .filter((route) => !(route.meta && route.meta.affix))
+      .map((route) => extractGroupKey(route))
+      .filter(Boolean)[0] || "";
+  renameNew.value = "";
+  renameVisible.value = true;
+}
+
+async function confirmRenameGroup() {
+  const oldName = String(renameOld.value || "").trim();
+  const newName = String(renameNew.value || "").trim();
+  if (!oldName || !newName) {
+    Message.warning("请选择分组并填写新名称");
+    return;
+  }
+  if (oldName === newName) {
+    renameVisible.value = false;
+    return;
+  }
+  if (groupOptions.value.includes(newName)) {
+    Message.warning(`分组「${newName}」已存在，请换一个名称`);
+    return;
+  }
+  renaming.value = true;
+  try {
+    const res = await dataRequest({
+      type: "get",
+      fileName: "account",
+      item: { page: 1, pageSize: 10000 },
+    });
+    const raw = (res && res.data) || {};
+    const updates = [];
+    for (const dateKey of Object.keys(raw)) {
+      for (const row of raw[dateKey] || []) {
+        if (!row || !row.id) continue;
+        if (recordGroupOf(row) !== oldName) continue;
+        const next = { ...row, group: newName };
+        updates.push({
+          id: row.id,
+          date: row.date || dateKey,
+          group: newName,
+          // phone 是兼容字段（旧版本/CLI 按 phone 读写），同步重建
+          phone: buildCompatPhone(next),
+        });
+      }
+    }
+    if (updates.length === 0) {
+      Message.error(`未找到分组「${oldName}」下的账号记录`);
+      return;
+    }
+    for (const item of updates) {
+      const r = await dataRequest({
+        type: "update",
+        fileName: "account",
+        item,
+      });
+      if (r && r.success === false) {
+        throw new Error(r.message || "更新账号记录失败");
+      }
+    }
+    renameVisible.value = false;
+    Message.success(`分组已重命名为「${newName}」`);
+    await usePermissionStore().GenerateRoutes();
+    // 当前若停留在旧分组页面，跳到新分组
+    const currentPath = router.currentRoute.path || "";
+    const oldPrefix = `/accountManager/${oldName}`;
+    if (currentPath.startsWith(oldPrefix)) {
+      const tail = currentPath.slice(oldPrefix.length);
+      router
+        .push(`/accountManager/${newName}${tail}`.replace(/\/+$/, ""))
+        .catch(() => {});
+    }
+  } catch (e) {
+    Message.error("重命名分组失败：" + (e && e.message ? e.message : e));
+  } finally {
+    renaming.value = false;
+  }
+}
 
 const isCollapse = computed(() => !sidebarStatus.opened);
 
@@ -224,6 +376,18 @@ async function onGroupSortEnd() {
 .sidebar-head-tip {
   font-size: 12px;
   color: $menuMuted;
+}
+
+.sidebar-rename-btn {
+  padding: 0 0 0 6px;
+  font-size: 12px;
+}
+
+.rename-tip {
+  margin: 0;
+  font-size: 12px;
+  color: #909399;
+  line-height: 1.6;
 }
 
 .box-left {

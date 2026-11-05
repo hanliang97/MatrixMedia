@@ -220,6 +220,9 @@ export function parsePublishArgs(subArgv) {
           "缺少 --phone 或完整 --partition（与 GUI 一致，如 persist:13800138000抖音）",
       };
     }
+    // 历史规则（phone "-" 前缀）先拼兜底 partition；发布执行层
+    // （publishVideo）会按账号记录的 accountKey 重算标准 partition，
+    // 传完整 --phone（如 "分组-账号名"）时也能命中新分组模型账号。
     const phoneSeg = String(out.phone).split("-")[0];
     out.partition = `persist:${phoneSeg}${out.platform}`;
   }

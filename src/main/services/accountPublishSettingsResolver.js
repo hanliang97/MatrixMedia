@@ -1,48 +1,30 @@
 "use strict";
 
-import { changeData } from "../server/utils";
 import {
   resolveEffectivePublishMode,
   isDefaultPublishToDraftEnabled,
 } from "../../shared/accountPublishSettings.js";
-
-function normalizePhone(value) {
-  return String(value || "").split("-")[0];
-}
+import { findAccountRecordFlexible } from "./accountLookup.js";
 
 /**
- * 从账号数据文件夹里查匹配 phone + pt 的账号记录
- * @param {{ phone?: string, pt?: string }} query
+ * 从账号数据源查匹配 phone/partition + pt 的账号记录（新分组模型兼容版）。
+ * 匹配优先级见 accountLookup：partition 精确 > phone 全字 > phone "-" 前缀。
+ * @param {{ phone?: string, pt?: string, partition?: string }} query
  * @returns {{ defaultPublishToDraft: boolean } | null}
  */
-export function findAccountPublishSettings({ phone, pt } = {}) {
-  const targetPhone = normalizePhone(phone);
+export function findAccountPublishSettings({ phone, pt, partition } = {}) {
   const targetPt = String(pt || "");
-  if (!targetPhone || !targetPt) return null;
+  if (!targetPt) return null;
+  if (!String(phone || "").trim() && !String(partition || "").trim()) {
+    return null;
+  }
 
   try {
-    const result = changeData({
-      fileName: "account",
-      type: "get",
-      item: { page: 1, pageSize: 9999 },
-    });
-    const data = (result && result.data) || {};
-    const dateKeys = Object.keys(data).sort((a, b) =>
-      String(b).localeCompare(String(a))
-    );
-    for (const dateKey of dateKeys) {
-      const rows = data[dateKey] || [];
-      for (const row of rows) {
-        if (
-          row &&
-          normalizePhone(row.phone) === targetPhone &&
-          String(row.pt || "") === targetPt
-        ) {
-          return {
-            defaultPublishToDraft: isDefaultPublishToDraftEnabled(row),
-          };
-        }
-      }
+    const row = findAccountRecordFlexible({ phone, pt: targetPt, partition });
+    if (row) {
+      return {
+        defaultPublishToDraft: isDefaultPublishToDraftEnabled(row),
+      };
     }
   } catch (e) {
     console.warn(
@@ -55,14 +37,16 @@ export function findAccountPublishSettings({ phone, pt } = {}) {
 
 /**
  * 结合「请求显式 draft」+「账号 defaultPublishToDraft」算出最终发布模式
- * @param {{ phone?: string, pt?: string, requestDraftMode?: boolean }} query
+ * @param {{ phone?: string, pt?: string, partition?: string, requestDraftMode?: boolean }} query
  * @returns {{ publishMode: "publish"|"draft", publishToDraft: boolean }}
  */
 export function resolveAccountPublishMode({
   phone,
   pt,
+  partition,
   requestDraftMode = false,
 } = {}) {
-  const settings = findAccountPublishSettings({ phone, pt }) || {};
+  const settings =
+    findAccountPublishSettings({ phone, pt, partition }) || {};
   return resolveEffectivePublishMode(requestDraftMode, settings);
 }

@@ -32,6 +32,8 @@ import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
 import { resolveAccountPublishMode } from "../services/accountPublishSettingsResolver.js";
+import { resolveTaskPartition } from "../services/accountLookup.js";
+import { ensureAccountRecordsMigrated } from "../services/accountMigration.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 export {
@@ -338,9 +340,16 @@ async function runBatchDirPublish(v, cfg) {
     );
 
     // 批量目录发布同样尊重账号「默认发布到草稿」设置 + 显式 --draft
+    // partition 先按账号记录的 accountKey 规整（新分组模型，见 accountLookup）
+    v.partition = resolveTaskPartition({
+      partition: v.partition,
+      phone: v.phone,
+      pt: v.platform,
+    });
     const effectivePublishMode = resolveAccountPublishMode({
       phone: derivePhoneForRecord(v),
       pt: v.platform,
+      partition: v.partition,
       requestDraftMode: Boolean(v.draft),
     });
 
@@ -568,6 +577,8 @@ async function runBatchDirPublish(v, cfg) {
  */
 export async function runCliMain(argv = process.argv) {
   const sub = getCliSubArgv(argv);
+  // CLI 链路同样先做账号记录「分组新模型」一次性迁移（幂等）
+  ensureAccountRecordsMigrated();
   if (!sub || sub.length === 0) {
     console.error(
       "用法: <应用> cli <publish|publish-article|login|accounts|history|stats|stats-sync|stats-work|comments|comments-reply|comments-probe> ..."
@@ -593,6 +604,13 @@ export async function runCliMain(argv = process.argv) {
       return 0;
     }
     const v = parsed.value;
+    // CLI 登录同样按账号记录的 accountKey 规整 partition（新分组模型兼容：
+    // 老数据 accountKey = phone 前缀，行为不变；新数据 accountKey = 账号名）
+    v.partition = resolveTaskPartition({
+      partition: v.partition,
+      phone: v.phone,
+      pt: v.platform,
+    });
     try {
       const loginOpts = {
         partition: v.partition,
@@ -734,6 +752,12 @@ export async function runCliMain(argv = process.argv) {
 
     const resolvedArticleFile = v.file ? path.resolve(v.file) : "";
     const resolvedCover = v.cover ? path.resolve(v.cover) : "";
+    // partition 按账号记录的 accountKey 规整（新分组模型，见 accountLookup）
+    v.partition = resolveTaskPartition({
+      partition: v.partition,
+      phone: v.phone,
+      pt: v.platform,
+    });
     const title = String(v.title).trim();
     const category = String(v.category || "前端").trim() || "前端";
     const tags = String(v.tags || "前端 Electron").trim() || "前端 Electron";

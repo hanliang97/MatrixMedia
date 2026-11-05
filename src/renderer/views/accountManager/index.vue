@@ -7,7 +7,10 @@
       </div>
       <div class="account-header-actions">
         <el-tag type="info" size="medium" class="group-tag">
-          分组：{{ partition.split("-")[0] }}
+          分组：{{ groupName }}
+        </el-tag>
+        <el-tag v-if="accountDisplayName && accountDisplayName !== groupName" size="medium">
+          账号：{{ accountDisplayName }}
         </el-tag>
         <el-tag size="medium">平台：{{ title }}</el-tag>
         <el-button type="primary" :loading="opening" :disabled="openingChrome" @click="openLoginWindow">
@@ -216,6 +219,12 @@ import {
   normalizeAccountPublishSettings,
   updateAccountTreePublishSettings,
 } from "../../../shared/accountPublishSettings.js";
+import {
+  buildAccountPartitionOf,
+  recordGroupOf,
+  recordAccountNameOf,
+  recordAccountKeyOf,
+} from "../../../shared/accountIdentity.js";
 import { isXhsPlatform } from "../../../shared/xhsPublishPolicy.js";
 
 export default {
@@ -248,6 +257,13 @@ export default {
       const display = getAccountProxyDisplay({ proxies: this.proxyList });
       return display ? "当前：" + display : "";
     },
+    // 新分组模型：分组名与账号显示名（老数据回退历史 phone 规则）
+    groupName() {
+      return recordGroupOf(this.urldata || {});
+    },
+    accountDisplayName() {
+      return recordAccountNameOf(this.urldata || {});
+    },
   },
 
   mounted() {
@@ -269,9 +285,9 @@ export default {
   },
   methods: {
     syncRouteMeta(route) {
-      this.partition =
-        "persist:" + route.meta.phone.split("-")[0] + route.meta.title;
       this.urldata = route.meta;
+      // partition 按账号记录的 accountKey 拼装（老数据回退历史 phone 前缀）
+      this.partition = buildAccountPartitionOf(route.meta, route.meta.title);
       this.title = route.meta.title;
       this.loadProxyFromMeta();
       this.loadPublishSettingsFromMeta();
@@ -358,6 +374,7 @@ export default {
         const tree = raw ? JSON.parse(raw) : {};
         const nextTree = updateAccountTreePublishSettings(tree, {
           phone: this.urldata.phone,
+          accountKey: recordAccountKeyOf(this.urldata || {}),
           pt: this.title,
           defaultPublishToDraft,
           useRealBrowser,
@@ -463,6 +480,7 @@ export default {
         };
         this.$route.meta.proxy = normalized.value;
         this.$message.success("代理配置已保存");
+        this.warnSharedLoginProxyConflict(normalized.value);
         await usePermissionStore().GenerateRoutes();
       } catch (e) {
         this.$message.error(
@@ -472,6 +490,42 @@ export default {
         this.savingProxy = false;
       }
     },
+    /**
+     * 挤掉线防线：同一平台账号（accountKey 相同）跨分组共享登录态，
+     * 若各分组的代理出口不一致，平台会看到同一会话双 IP，触发风控互踢。
+     * 保存代理后做一次只读巡检，发现冲突仅提示、不阻断。
+     */
+    warnSharedLoginProxyConflict(proxy) {
+      try {
+        const raw = localStorage.getItem("accountTree");
+        const tree = raw ? JSON.parse(raw) : {};
+        const myKey = recordAccountKeyOf(this.urldata || {});
+        const myPt = this.title;
+        if (!myKey || !myPt) return;
+        const myDisplay = getAccountProxyDisplay(proxy);
+        Object.keys(tree).forEach((groupName) => {
+          ((tree[groupName] && tree[groupName].children) || []).forEach(
+            (child) => {
+              const meta = (child && child.meta) || {};
+              if (String(meta.pt || "") !== myPt) return;
+              if (recordAccountKeyOf(meta) !== myKey) return;
+              if (recordGroupOf(meta) === this.groupName) return;
+              const otherDisplay = getAccountProxyDisplay(meta.proxy);
+              if (otherDisplay !== myDisplay) {
+                this.$message({
+                  type: "warning",
+                  duration: 8000,
+                  message: `该账号在分组「${groupName}」的代理为「${otherDisplay || "直连"}」，与当前「${myDisplay || "直连"}」不一致：共享登录态会因出口 IP 变化被平台风控互踢，建议两处配置相同代理`,
+                });
+              }
+            }
+          );
+        });
+      } catch (e) {
+        /* 巡检失败不影响保存 */
+      }
+    },
+
     addProxy() {
       this.proxyList.push({ enabled: true, url: "" });
     },

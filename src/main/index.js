@@ -42,6 +42,7 @@ import {
 } from "./services/puppeteerFile";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
 import { closeAllSocksBridges } from "./services/socksBridge";
+import { ensureAccountRecordsMigrated } from "./services/accountMigration";
 import { initializeElectronRuntime } from "./services/electronStartup";
 import { reportUsageTelemetry } from "./services/usageTelemetry";
 import { checkForUpdate, downloadLatestUpdate } from "./services/updateChecker";
@@ -205,6 +206,8 @@ process.on("uncaughtException", (err) => {
 async function startApplication() {
   try {
     await initializeElectronRuntime({ app, pie });
+    // 账号记录「分组新模型」一次性迁移（幂等，失败自动回退历史规则）
+    ensureAccountRecordsMigrated();
     // 匿名使用统计（best-effort，不阻塞启动）
     reportUsageTelemetry(app, cliMode ? "cli" : "gui").catch(() => {});
     if (cliMode) {

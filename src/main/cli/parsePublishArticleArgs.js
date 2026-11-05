@@ -136,6 +136,8 @@ export function parsePublishArticleArgs(subArgv) {
         error: "缺少 --phone 或完整 --partition（与 GUI 一致，如 persist:13800138000掘金）",
       };
     }
+    // 历史规则先拼兜底 partition；执行层（cli publish-article）会按账号
+    // 记录的 accountKey 重算标准 partition（传完整 --phone 也可命中）
     const phoneSeg = String(out.phone).split("-")[0];
     out.partition = `persist:${phoneSeg}${out.platform}`;
   }
