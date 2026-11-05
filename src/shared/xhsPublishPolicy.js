@@ -20,7 +20,20 @@ export function applyXhsConservativePublishOptions(payload) {
 }
 
 export function getPublishAttemptLimit(data, defaultLimit = 5) {
-  return isXhsPlatform(data && data.pt) ? 1 : defaultLimit;
+  if (isXhsPlatform(data && data.pt)) return 1;
+  const platform = String((data && data.pt) || "");
+  const link = data && data.publishOptions && data.publishOptions.link;
+  // 挂车失败需要用户核对商品/权限；重开窗口重传既不能修复输入，
+  // 也无法排除前次点击已生效。仅限制抖快显式开启的商品任务。
+  if (
+    (platform.includes("抖音") || platform.includes("快手")) &&
+    link &&
+    link.enabled === true &&
+    link.type === "product"
+  ) {
+    return 1;
+  }
+  return defaultLimit;
 }
 
 export function getRandomDelayMs(min, max, random = Math.random) {
