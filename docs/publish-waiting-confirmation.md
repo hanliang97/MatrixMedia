@@ -31,6 +31,10 @@ yarn test:history-status
 yarn test:history-args
 yarn test:publish-history-csv
 yarn test:scheduled-dedupe
+yarn test:publish-draft-args
+yarn test:article-republish
+yarn test:pushdata-dedupe
+yarn test:change-data-path
 yarn --cwd mcp build
 node --test mcp/tests/publishWaitingConfirmation.test.mjs mcp/tests/publishJobs.test.mjs
 yarn build:dir
@@ -52,3 +56,9 @@ Standards 与 Spec 均发现草稿等待回执丢失原意图，以及 GUI 缺�
 受影响兼容检查发现旧草稿结果精确断言未包含新增的两个布尔标记，现补全明确的 false/true 预期，保留草稿和退出码断言。文章重发测试在 Node 20 下缺少 CommonJS 转换而无法加载原有 ESM 工具，按现有测试规范显式配置 preset-env 后通过；不改变文章重发产品逻辑。
 
 没有 schema 迁移、账号清理或发布重试策略变更；没有新增独立状态机，现有共享回执模块是唯一状态转换边界，无新增 ADR 系列。回退保留历史 `waiting_confirmation` 及原消息，禁止把这些记录当成功或自动重新发布；应停受影响任务并到平台核对原内容。当前原稿中的公众号配置/登录能力未随此修复交付。
+
+## 最终受影响验证与复审
+
+在独立 PR 分支的固定代码提交 `301b99f` 完成上述根包受影响测试、真实 Electron GUI 测试及 `yarn build:dir`，均退出 0。MCP 源码在最终代次修复中未变，已完成构建及上述 5 项测试（0 失败、0 跳过）。依赖通过本地链接复用且仅由本地 Git exclude 忽略，不提交依赖或构建产物；此分支只包含本切片的代码、测试和文档。
+
+固定非空范围 `284e47a...301b99f` 的 Standards / Spec 独立复审均无新增可操作问题，前述发现均已修复。权限/路径范围、同素材并发任务、重复及迟到回执、错误码和存储一致性由受影响回归覆盖；不将受控平台边界替代视为真实平台验证。真实平台门禁仍未通过，PR 保持草稿，不能因构建和受控测试通过而合并。
