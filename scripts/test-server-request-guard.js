@@ -39,8 +39,6 @@ const TRUSTED = [
   "http://127.0.0.1:30088",
   "https://127.0.0.1",
   "http://[::1]:9080",
-  "file://",
-  "file:///C:/app/dist/electron/index.html",
 ];
 for (const origin of TRUSTED) {
   assert.strictEqual(trusted(origin), true, `应放行本机来源: ${origin}`);
@@ -59,6 +57,11 @@ const UNTRUSTED = [
   "http://localhostx",
   "http://127.0.0.10",
   "http://0.0.0.0:30088",
+  // A local file URL alone does not prove this request came from the app;
+  // packaged requests must use the private token.
+  "file://",
+  "file:///C:/app/dist/electron/index.html",
+  "file:///C:/Users/Public/Downloads/untrusted.html",
   // 任意外站
   "https://evil.com",
   "http://192.168.1.10:9080",
@@ -94,6 +97,36 @@ assert.strictEqual(
   }),
   true,
   "持有效令牌的请求必须放行（打包后 file:// 页面不发 Origin）"
+);
+
+/* ---------- 5b. 打包页令牌只发给应用页面，renderer API 请求必须带令牌 ---------- */
+
+const ipcSource = fs.readFileSync(
+  path.join(root, "src/main/services/ipcMain.js"),
+  "utf8"
+);
+assert.ok(
+  /isInternalAppUrl\(frameUrl/.test(ipcSource),
+  "server token IPC 必须用应用导航策略校验请求页面"
+);
+assert.ok(
+  /appRoot:\s*electronApp\.getAppPath\(\)/.test(ipcSource),
+  "server token IPC 必须限制在应用安装目录"
+);
+const rendererRequestSource = fs.readFileSync(
+  path.join(root, "src/renderer/utils/request.js"),
+  "utf8"
+);
+assert.ok(
+  /getServerToken\(\)/.test(rendererRequestSource) &&
+    /X-Matrix-Token/.test(rendererRequestSource),
+  "renderer API 请求必须携带主进程签发的令牌"
+);
+assert.ok(
+  /target\.origin === ['"]http:\/\/127\.0\.0\.1:30088['"]/.test(
+    rendererRequestSource
+  ),
+  "renderer API 令牌不得附加到其他 origin"
 );
 
 /* ---------- 6. 每个写接口都必须带守卫 ---------- */

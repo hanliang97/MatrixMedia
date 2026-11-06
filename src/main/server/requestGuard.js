@@ -24,7 +24,8 @@ const SERVER_REQUEST_TOKEN = crypto.randomBytes(24).toString("hex");
 const TRUSTED_HOSTNAMES = new Set(["localhost", "127.0.0.1", "[::1]"]);
 
 /**
- * Origin / Referer 是否来自本机页面。
+ * Origin / Referer 是否来自本机开发页。打包后的 file:// 页面必须使用
+ * 主进程签发的随机令牌；file URL 本身不能证明请求来自本应用。
  * @param {string} rawOrigin
  * @returns {boolean}
  */
@@ -33,8 +34,6 @@ function isTrustedOrigin(rawOrigin) {
   if (!origin) return false;
   // 沙箱 iframe 与部分 file:// 场景会发 null，不能当作可信来源
   if (origin === "null") return false;
-  if (/^file:/i.test(origin)) return true;
-
   let parsed;
   try {
     parsed = new URL(origin);
