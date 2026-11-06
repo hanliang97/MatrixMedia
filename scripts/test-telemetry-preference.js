@@ -31,6 +31,12 @@ try {
   assert.ok(!fs.existsSync(path.join(configDir, "telemetry-enabled")));
   assert.strictEqual(fs.readFileSync(marker, "utf8"), "用户禁用");
   setTelemetryEnabled(true, options);
+  // 禁用标记即使是失效的符号链接也不能被当作“不存在”。
+  if (process.platform !== "win32") {
+    fs.symlinkSync(marker, marker);
+    assert.strictEqual(getTelemetryPreference(options).enabled, false);
+    fs.unlinkSync(marker);
+  }
   const forced = { configDir, env: { MATRIXMEDIA_DISABLE_TELEMETRY: "1" } };
   assert.deepStrictEqual(getTelemetryPreference(forced), { enabled: false, enforcedByEnvironment: true });
   assert.throws(() => setTelemetryEnabled(true, forced), /环境变量/);
@@ -42,9 +48,8 @@ try {
   console.log("test-telemetry-preference: 全部断言通过");
 } finally {
   // 仅清理本测试创建的临时文件和空目录。
-  const marker = path.join(configDir, "no-telemetry");
-  if (fs.existsSync(marker)) fs.unlinkSync(marker);
-  const consent = path.join(configDir, "telemetry-enabled");
-  if (fs.existsSync(consent)) fs.unlinkSync(consent);
+  for (const name of ["no-telemetry", "telemetry-enabled"]) {
+    fs.rmSync(path.join(configDir, name), { force: true });
+  }
   fs.rmdirSync(configDir);
 }

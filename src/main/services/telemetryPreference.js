@@ -4,13 +4,23 @@ import fs from "fs";
 import os from "os";
 import path from "path";
 
+function markerExists(filePath) {
+  try {
+    fs.lstatSync(filePath);
+    return true;
+  } catch (error) {
+    if (error.code === "ENOENT") return false;
+    throw error;
+  }
+}
+
 export function getTelemetryPreference({
   configDir = path.join(os.homedir(), ".matrixmedia"),
   env = process.env,
 } = {}) {
   const enforcedByEnvironment = Boolean(String(env.MATRIXMEDIA_DISABLE_TELEMETRY || "").trim());
-  const disabledByFile = fs.existsSync(path.join(configDir, "no-telemetry"));
-  const enabledByFile = fs.existsSync(path.join(configDir, "telemetry-enabled"));
+  const disabledByFile = markerExists(path.join(configDir, "no-telemetry"));
+  const enabledByFile = markerExists(path.join(configDir, "telemetry-enabled"));
   return { enabled: enabledByFile && !enforcedByEnvironment && !disabledByFile, enforcedByEnvironment };
 }
 

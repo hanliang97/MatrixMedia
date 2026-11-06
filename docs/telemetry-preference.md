@@ -12,4 +12,6 @@
 
 适用检查为 `yarn test:telemetry-preference`、`yarn test:telemetry-preference-ipc` 和 `git diff --check`。类型/lint：N/A，根包未配置。发布 GUI/CLI/MCP 链路、真实平台草稿、数据库迁移、打包与恢复演练：N/A，本改动不涉及发布或数据库；全仓门禁本轮未运行。实际 GUI 点击未验证，IPC 授权边界由现有自动化测试覆盖。
 
+审查另指出禁用标记访问异常可能被 `existsSync` 吞掉。以真实循环符号链接新增回归，确认开启同意存在时原实现错误返回 true；改用 `lstatSync` 检查标记本身，ENOENT 才视为缺失，其余错误向上抛出，使统计调用方停止发送。修复后两项适用测试再次通过。符号链接回归仅适用于非 Windows，Windows 该文件系统边界未验证。
+
 回滚代码会恢复旧版本默认开启行为；因此不能将回滚当成隐私默认值保持不变。紧急停止统计可设置环境禁用或保留 `no-telemetry` 标记；不会删除账号、素材或发布记录。
