@@ -13,7 +13,7 @@ const { getTelemetryPreference, setTelemetryEnabled } = require(outfile);
 const configDir = fs.mkdtempSync(path.join(os.tmpdir(), "mm-telemetry-test-"));
 const options = { configDir, env: {} };
 try {
-  assert.deepStrictEqual(getTelemetryPreference(options), { enabled: true, enforcedByEnvironment: false });
+  assert.deepStrictEqual(getTelemetryPreference(options), { enabled: false, enforcedByEnvironment: false });
   assert.strictEqual(setTelemetryEnabled(false, options).enabled, false);
   const marker = path.join(configDir, "no-telemetry");
   fs.writeFileSync(marker, "用户内容");
@@ -21,6 +21,15 @@ try {
   assert.strictEqual(fs.readFileSync(marker, "utf8"), "用户内容");
   assert.strictEqual(setTelemetryEnabled(true, options).enabled, true);
   assert.ok(!fs.existsSync(marker));
+  assert.ok(fs.existsSync(path.join(configDir, "telemetry-enabled")));
+  setTelemetryEnabled(true, options);
+  // 新进程读取相同配置目录时保留显式同意；旧禁用标记仍有最高优先级。
+  assert.strictEqual(getTelemetryPreference({ configDir, env: {} }).enabled, true);
+  fs.writeFileSync(marker, "用户禁用");
+  assert.strictEqual(getTelemetryPreference(options).enabled, false);
+  setTelemetryEnabled(false, options);
+  assert.ok(!fs.existsSync(path.join(configDir, "telemetry-enabled")));
+  assert.strictEqual(fs.readFileSync(marker, "utf8"), "用户禁用");
   setTelemetryEnabled(true, options);
   const forced = { configDir, env: { MATRIXMEDIA_DISABLE_TELEMETRY: "1" } };
   assert.deepStrictEqual(getTelemetryPreference(forced), { enabled: false, enforcedByEnvironment: true });
@@ -35,5 +44,7 @@ try {
   // 仅清理本测试创建的临时文件和空目录。
   const marker = path.join(configDir, "no-telemetry");
   if (fs.existsSync(marker)) fs.unlinkSync(marker);
+  const consent = path.join(configDir, "telemetry-enabled");
+  if (fs.existsSync(consent)) fs.unlinkSync(consent);
   fs.rmdirSync(configDir);
 }

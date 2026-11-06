@@ -9,7 +9,8 @@
  *   events.json 只保留最近 MAX_EVENTS 条滚动窗口，供"近 N 天/分布"统计
  * - 不做去重、不固定设备 ID，只记录"打开"这一动作
  * - 写入需要 token：env MATRIXMEDIA_GIST_TOKEN / ~/.matrixmedia/gist-token / 内置常量
- * - 关闭：env MATRIXMEDIA_DISABLE_TELEMETRY=1 或 ~/.matrixmedia/no-telemetry
+ * - 默认关闭；显式开启后创建 ~/.matrixmedia/telemetry-enabled
+ * - 强制关闭：env MATRIXMEDIA_DISABLE_TELEMETRY=1 或 ~/.matrixmedia/no-telemetry，优先于开启标记
  * - best-effort，失败静默，不影响应用启动
  */
 

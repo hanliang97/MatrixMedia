@@ -10,10 +10,11 @@ export function getTelemetryPreference({
 } = {}) {
   const enforcedByEnvironment = Boolean(String(env.MATRIXMEDIA_DISABLE_TELEMETRY || "").trim());
   const disabledByFile = fs.existsSync(path.join(configDir, "no-telemetry"));
-  return { enabled: !enforcedByEnvironment && !disabledByFile, enforcedByEnvironment };
+  const enabledByFile = fs.existsSync(path.join(configDir, "telemetry-enabled"));
+  return { enabled: enabledByFile && !enforcedByEnvironment && !disabledByFile, enforcedByEnvironment };
 }
 
-/** GUI 与 CLI 共用原有 no-telemetry 文件，不创建第二份隐私设置。 */
+/** 显式同意后才启用；环境禁用和原有 no-telemetry 标记始终优先。 */
 export function setTelemetryEnabled(enabled, options = {}) {
   if (typeof enabled !== "boolean") throw new Error("统计开关必须是布尔值");
   const configDir = options.configDir || path.join(os.homedir(), ".matrixmedia");
@@ -22,16 +23,23 @@ export function setTelemetryEnabled(enabled, options = {}) {
     throw new Error("环境变量已禁用匿名统计，请先移除 MATRIXMEDIA_DISABLE_TELEMETRY");
   }
   const marker = path.join(configDir, "no-telemetry");
+  const consent = path.join(configDir, "telemetry-enabled");
+  fs.mkdirSync(configDir, { recursive: true });
   if (enabled) {
+    fs.closeSync(fs.openSync(consent, "a", 0o600));
     try {
       fs.unlinkSync(marker);
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
   } else {
-    fs.mkdirSync(configDir, { recursive: true });
     // 已存在时保留用户自己写入的内容。
     fs.closeSync(fs.openSync(marker, "a"));
+    try {
+      fs.unlinkSync(consent);
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
   }
   return getTelemetryPreference({ ...options, configDir });
 }
