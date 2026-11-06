@@ -155,6 +155,11 @@
             inactive-text="不关闭"
           />
         </el-form-item>
+        <el-form-item label="作品下载权限">
+          <el-checkbox v-model="form.noDownload"
+            >禁止下载此作品（仅快手生效：取消勾选「允许下载此作品」并校验终态，未确认会中止发布）</el-checkbox
+          >
+        </el-form-item>
       </el-form>
 
       <el-divider content-position="left">账号平台选择</el-divider>
@@ -735,6 +740,7 @@ export default {
         shortTitle: "",
         // 自定义封面图片绝对路径（发布第一步选图；重发时从历史记录带入）
         coverPath: "",
+        noDownload: false,
       },
       thisShow: false,
       closeWindow: true,
@@ -971,6 +977,7 @@ export default {
         description: "",
         shortTitle: "",
         coverPath: "",
+        noDownload: false,
       };
       this.thisShow = false;
       this.closeWindow = true;
@@ -995,6 +1002,7 @@ export default {
         description: (form.description || form.bdText || "").trim(),
         shortTitle: (form.shortTitle || form.bt2Filled || "").trim(),
         coverPath: (form.coverPath || "").trim(),
+        noDownload: form.noDownload === true,
       };
       this.bqTags = parseBqToTags(form.tags || form.bq);
       this.resetPlatformStatementState();
@@ -1109,6 +1117,7 @@ export default {
           ...metadata.legacy,
           bq: formatBqFromTags(this.bqTags),
           coverPath: (this.form.coverPath || "").trim(),
+          noDownload: this.form.noDownload === true,
         },
       };
     },
@@ -1712,6 +1721,7 @@ export default {
       this.publishAt = "";
       this.republishContext = null;
       this.republishTextOtherName = "";
+      this.form.noDownload = false;
       this.dirBatchFiles = [];
       this.attrsVisible = false;
     },
@@ -1957,6 +1967,7 @@ export default {
                 bdText: video.data.bdText,
                 bq: video.data.bq,
                 creativeStatement: video.data.creativeStatement,
+                noDownload: video.data.noDownload === true,
                 publishOptions: video.publishOptions,
                 coverPath: video.data.coverPath || "",
                 filePath: this.localFilePath,
@@ -2041,6 +2052,7 @@ export default {
               bdText: video.data.bdText,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
+              noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
               coverPath: video.data.coverPath || "",
               filePath: this.localFilePath,
@@ -2077,6 +2089,7 @@ export default {
               bdText: video.data.bdText,
               bq: video.data.bq,
               creativeStatement: video.data.creativeStatement,
+              noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
               coverPath: video.data.coverPath || "",
               filePath: this.localFilePath,
@@ -2443,6 +2456,7 @@ export default {
                   bq,
                   creativeStatement,
                   coverPath: fileRow.coverResolved || "",
+                  noDownload: this.form.noDownload === true,
                   filePath,
                   useragent: this.ptConfig[p.pt].useragent,
                   phone: p.phone,
@@ -2495,6 +2509,7 @@ export default {
               bq,
               creativeStatement,
               coverPath: fileRow.coverResolved || "",
+              noDownload: this.form.noDownload === true,
             },
             textOtherName,
             selectedFile,
@@ -2531,6 +2546,7 @@ export default {
               bq,
               creativeStatement,
               coverPath: fileRow.coverResolved || "",
+              noDownload: this.form.noDownload === true,
               filePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,

@@ -512,6 +512,53 @@ async function selectKsCreativeStatement(page, data) {
   );
 }
 
+/**
+ * 互动设置：确保「允许下载此作品」为未勾选（字探禁下载红线，--no-download / noDownload=true 时执行）。
+ * 按文字定位+终态校验（替代旧 nth-of-type(2) 盲点），UI 重排不会误伤「允许跟拍/同城展示」。
+ * 失败抛错=中止发布（与封面同硬策略：宁可不发，不可发出可下载的作品）。
+ * 2026-10-31 由 0.12.9 字探补丁转正式参数（CLI/MCP/GUI 三入口）。
+ */
+async function ensureKsDownloadDisabled(page) {
+  const before = await page.evaluate(() => {
+    const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
+    for (const g of document.querySelectorAll(".ant-checkbox-group")) {
+      for (const lb of g.querySelectorAll("label")) {
+        if (norm(lb.textContent) !== "允许下载此作品") continue;
+        const cb = lb.querySelector('input[type="checkbox"]');
+        const was = cb ? cb.checked : null;
+        if (cb && cb.checked) lb.click();
+        return { found: true, checkedBefore: was };
+      }
+    }
+    return { found: false };
+  });
+  await page.waitForTimeout(600);
+  const checkedAfter = await page.evaluate(() => {
+    const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
+    for (const g of document.querySelectorAll(".ant-checkbox-group")) {
+      for (const lb of g.querySelectorAll("label")) {
+        if (norm(lb.textContent) !== "允许下载此作品") continue;
+        const cb = lb.querySelector('input[type="checkbox"]');
+        return cb ? cb.checked : null;
+      }
+    }
+    return null;
+  });
+  console.log(
+    `[ks] 允许下载此作品: ${JSON.stringify(before)} → 终态 checked=${checkedAfter}`
+  );
+  if (!before.found) {
+    throw new Error(
+      "未找到「允许下载此作品」复选框（快手 UI 可能改版），已中止发布，请人工核对"
+    );
+  }
+  if (checkedAfter !== false) {
+    throw new Error(
+      `「允许下载此作品」取消勾选未确认（终态 checked=${checkedAfter}），已中止发布，请人工核对`
+    );
+  }
+}
+
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
@@ -598,6 +645,12 @@ export default async function (page, data, window, event) {
     const coverPath = data.data && data.data.coverPath;
     if (coverPath) {
       await uploadKsCustomCover(page, coverPath);
+    }
+
+    // 互动设置（字探禁下载红线）：noDownload=true → 取消勾选「允许下载此作品」并校验终态；
+    // 失败抛错中止发布（在点「发布/取消」之前执行，中止=作品未发出，安全态）
+    if (data.data && data.data.noDownload === true) {
+      await ensureKsDownloadDisabled(page);
     }
 
     await page.waitForFunction(

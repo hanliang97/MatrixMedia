@@ -68,6 +68,11 @@ export const publishVideoTool: Tool = {
         description:
           "If true, save the video to the platform draft box instead of publishing it.",
       },
+      noDownload: {
+        type: "boolean",
+        description:
+          "Kuaishou (ks) only: uncheck 允许下载此作品 (disallow downloads for this work) and verify the final checkbox state before submitting; the publish aborts if it cannot be confirmed. Ignored on other platforms.",
+      },
       creativeStatement: {
         type: "string",
         description:
@@ -133,6 +138,7 @@ export async function handlePublishVideo(
   const publishAt = args.publishAt;
   const show = args.show;
   const draft = args.draft;
+  const noDownload = args.noDownload === true;
   const creativeStatement =
     args.creativeStatement == null ? "" : String(args.creativeStatement).trim();
   const cover = args.cover == null ? "" : String(args.cover).trim();
@@ -217,6 +223,7 @@ export async function handlePublishVideo(
     ...(publishAt ? ["--publish-at", String(publishAt)] : []),
     ...(show ? ["--show"] : []),
     ...(draft ? ["--draft"] : []),
+    ...(noDownload ? ["--no-download"] : []),
     ...(creativeStatement ? ["--creative-statement", creativeStatement] : []),
     ...(cover ? ["--cover", cover] : []),
     ...sphLinkArgs,

@@ -38,6 +38,7 @@ jobs:
           yarn test:publish-history-csv
           # 平台适配逻辑
           yarn test:ks-description
+          yarn test:ks-no-download
           yarn test:dy-description
           yarn test:video-metadata-tags
           yarn test:sph-video-product
