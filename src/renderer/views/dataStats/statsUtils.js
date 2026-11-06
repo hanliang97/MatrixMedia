@@ -69,7 +69,10 @@ export function pickWeekly(rows, weeks = 13) {
     const y = monday.getFullYear();
     const m = String(monday.getMonth() + 1).padStart(2, "0");
     const day = String(monday.getDate()).padStart(2, "0");
-    byWeek.set(`${y}-${m}-${day}`, r); // 后写覆盖 → 周内最后一天
+    // 周期取值优先真实采集日：缺日/残缺日只在整周都没有采集时兜底
+    const wk = `${y}-${m}-${day}`;
+    const cur = byWeek.get(wk);
+    if (!cur || isCollected(r) || !isCollected(cur)) byWeek.set(wk, r);
   });
   return [...byWeek.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))
@@ -81,7 +84,9 @@ export function pickWeekly(rows, weeks = 13) {
 export function pickMonthly(rows, months = 12) {
   const byMonth = new Map();
   rows.forEach((r) => {
-    byMonth.set(r.date.slice(0, 7), r); // 月内最后一天
+    const mo = r.date.slice(0, 7);
+    const cur = byMonth.get(mo);
+    if (!cur || isCollected(r) || !isCollected(cur)) byMonth.set(mo, r);
   });
   return [...byMonth.entries()]
     .sort((a, b) => (a[0] < b[0] ? -1 : 1))

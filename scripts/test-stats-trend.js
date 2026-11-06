@@ -20,7 +20,7 @@ require("@babel/register")({
 });
 
 const assert = require("assert");
-const { dailyToRows, isCollected, pickDaily } = require("../src/renderer/views/dataStats/statsUtils");
+const { dailyToRows, isCollected, pickDaily, pickWeekly, pickMonthly } = require("../src/renderer/views/dataStats/statsUtils");
 
 /* ---------- 1. dailyToRows ---------- */
 {
@@ -112,7 +112,29 @@ const { dailyToRows, isCollected, pickDaily } = require("../src/renderer/views/d
   console.log("✓ 起点前缺省日 __missing");
 }
 
-/* ---------- 5. 空输入 ---------- */
+/* ---------- 5. 周/月视图优先真实采集日 ---------- */
+{
+  const rows = dailyToRows({
+    "2026-11-02": { plays: 100, fans: 10 },
+    "2026-11-06": { fans: 3 }, // 同周残缺日，不能顶掉 11-02 的整周取值
+  });
+  const week = pickWeekly(rows, 13);
+  assert.strictEqual(week.length, 1);
+  assert.strictEqual(week[0].plays, 100, "周视图取周内最后一个真实采集日");
+  assert.ok(week[0].label.endsWith("周"));
+
+  const month = pickMonthly(rows, 12);
+  assert.strictEqual(month.length, 1);
+  assert.strictEqual(month[0].plays, 100, "月视图同样优先真实采集日");
+
+  // 整周都没有采集时，退回最后一条（不留空）
+  const onlyPartial = pickWeekly(dailyToRows({ "2026-11-06": { fans: 3 } }), 13);
+  assert.strictEqual(onlyPartial.length, 1);
+  assert.strictEqual(onlyPartial[0].fans, 3, "整周无采集时保留原始行兜底");
+  console.log("✓ 周/月视图优先真实采集日");
+}
+
+/* ---------- 6. 空输入 ---------- */
 {
   assert.deepStrictEqual(pickDaily([], 30), [], "无数据返回空数组");
   assert.deepStrictEqual(pickDaily(null, 30), []);
