@@ -161,9 +161,10 @@ export function buildTaskPayloadFromRecord(record) {
 
 function updateRecord(record, patch, isFinal = true) {
   if (!record || !record.id || !record.date) return;
-  changeData({
+  return changeData({
     fileName: "pushData",
     type: "update",
+    expectedTaskId: record.taskId,
     item: {
       id: record.id,
       date: record.date,
@@ -303,13 +304,15 @@ async function executeScheduledRecordAsync(record) {
       filePath: publishFilePath,
     });
     const taskId = taskPayload.taskId;
-    updateRecord(record, {
+    const started = updateRecord(record, {
       publishStatus: "publishing",
       taskId,
       publishSettled: false,
       lastPublishMessage: "定时任务开始发布",
       lastPublishAt: Date.now(),
     });
+    if (!started || !started.success) return;
+    const activeRecord = { ...record, taskId };
 
     await new Promise((resolve) => {
       let publishSettled = false;
@@ -327,17 +330,17 @@ async function executeScheduledRecordAsync(record) {
             if (!payload || payload.taskId !== taskId) return;
             const progress = resolvePublishProgress(payload);
             if (!progress) return;
-            updateRecord(record, {
+            updateRecord(activeRecord, {
               publishStatus: progress.recordStatus,
               lastPublishMessage: progress.message,
               lastPublishAt: Date.now(),
             }, false);
           } else if (channel === "puppeteerFile-done") {
-            finishScheduledRecord(record, payload);
+            finishScheduledRecord(activeRecord, payload);
             finish();
           } else if (channel === "puppeteer-noLogin") {
             // 登录失效单独标状态：任务本身没错，补扫码后可重新排期
-            updateRecord(record, {
+            updateRecord(activeRecord, {
               publishStatus: "login_required",
               publishSettled: true,
               publishFailCount: Number(record.publishFailCount || 0) + 1,

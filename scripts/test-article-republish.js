@@ -1,6 +1,7 @@
 require("@babel/register")({
   extensions: [".js"],
   ignore: [/node_modules/],
+  presets: [["@babel/preset-env", { targets: { node: "20" }, modules: "commonjs" }]],
 });
 
 const assert = require("assert");

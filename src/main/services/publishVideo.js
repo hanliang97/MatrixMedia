@@ -347,9 +347,10 @@ async function runSingleFilePublishInner(
   const updateRecord = (status, message, isFinal = true) => {
     if (!recordId) return;
     try {
-      changeData({
+      const updated = changeData({
         fileName: "pushData",
         type: "update",
+        expectedTaskId: taskId,
         item: {
           id: recordId,
           date: recordDate,
@@ -367,6 +368,7 @@ async function runSingleFilePublishInner(
           lastPublishAt: Date.now(),
         },
       });
+      if (!updated.success) console.warn("[publish] 回执未写入当前任务:", updated.code || updated.message);
     } catch (e) {
       console.error("MatrixMedia: 更新 pushData 记录失败:", e && e.message);
     }

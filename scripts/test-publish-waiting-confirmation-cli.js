@@ -12,7 +12,9 @@ const temp = fs.mkdtempSync(path.join(os.tmpdir(), "mm-waiting-cli-"));
 const cache = path.join(root, "test/.cache/waiting-confirmation");
 fs.mkdirSync(cache, { recursive: true });
 const tasks = [];
-global.__waitingCli = { temp, tasks };
+const allTasks = [];
+const pendingCalls = [];
+global.__waitingCli = { temp, tasks, allTasks };
 const bundle = build({ entryPoints: [path.join(root, "src/main/cli/index.js")], bundle: true,
   platform: "node", format: "cjs", packages: "external", outfile: path.join(cache, "cli.cjs"),
   plugins: [{ name: "external-runtime", setup(build) {
@@ -22,12 +24,17 @@ const bundle = build({ entryPoints: [path.join(root, "src/main/cli/index.js")], 
        exports.ipcMain={on(){}};` }));
     build.onResolve({ filter: /puppeteerFile$/ }, () => ({ path: "browser", namespace: "browser" }));
     build.onLoad({ filter: /.*/, namespace: "browser" }, () => ({ contents:
-      "exports.runPuppeteerTask=(task,transport)=>global.__waitingCli.tasks.push({task,transport});" }));
+      "exports.runPuppeteerTask=(task,transport)=>{const item={task,transport};global.__waitingCli.tasks.push(item);global.__waitingCli.allTasks.push(item);};" }));
   } }] });
 let runCliMain;
 const logs = [];
 const originalLog = console.log;
 const argv = (...args) => ["electron", ".", "cli", ...args];
+function publish(...args) {
+  const promise = runCliMain(argv("publish", ...args));
+  pendingCalls.push(promise);
+  return promise;
+}
 async function history() {
   const start = logs.length;
   assert.equal(await runCliMain(argv("history", "--all", "--json")), 0);
@@ -46,7 +53,7 @@ async function main() {
     const single = path.join(temp, "single.mp4");
     fs.writeFileSync(single, "synthetic-video-fixture");
     let finished = false;
-    const pending = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "-f", single, "-t", "即时等待"))
+    const pending = publish("-p", "dy", "--phone", "fixture", "-f", single, "-t", "即时等待")
       .then(code => { finished = true; return code; });
     const { task, transport } = await nextTask();
     transport.reply("puppeteerFile-progress", { ...task, phase: "waiting_confirmation" });
@@ -61,9 +68,21 @@ async function main() {
     transport.reply("puppeteerFile-done", { ...task, status: true });
     assert.equal((await history())[0].status, "waiting_confirmation", "重复终结回执不能覆盖原结果");
 
+    const attemptA = publish("-p", "dy", "--phone", "fixture", "-f", single, "-t", "并发A");
+    const oldTask = await nextTask();
+    const attemptB = publish("-p", "dy", "--phone", "fixture", "-f", single, "-t", "并发B");
+    const currentTask = await nextTask();
+    oldTask.transport.reply("puppeteerFile-progress", { ...oldTask.task, phase: "waiting_confirmation" });
+    assert.equal((await history()).find(row => row.title === "并发B").status, "publishing", "旧任务进度不能覆盖重新登记的任务");
+    oldTask.transport.reply("puppeteerFile-done", { ...oldTask.task, status: true });
+    assert.equal(await attemptA, 0);
+    assert.equal((await history()).find(row => row.title === "并发B").status, "publishing", "旧任务完成不能终结新任务");
+    currentTask.transport.reply("puppeteerFile-done", { ...currentTask.task, status: true, outcome: "waiting_confirmation" });
+    assert.equal(await attemptB, 4);
+
     const draftFile = path.join(temp, "draft.mp4");
     fs.writeFileSync(draftFile, "synthetic-video-fixture");
-    const draftWait = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "-f", draftFile, "-t", "草稿等待", "--draft"));
+    const draftWait = publish("-p", "dy", "--phone", "fixture", "-f", draftFile, "-t", "草稿等待", "--draft");
     const draftTask = await nextTask();
     draftTask.transport.reply("puppeteerFile-done", { ...draftTask.task, status: true, outcome: "waiting_confirmation" });
     assert.equal(await draftWait, 4);
@@ -77,7 +96,7 @@ async function main() {
     const workbook = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(workbook, xlsx.utils.json_to_sheet([{ filename: "batch.mp4", title: "目录等待" }]), "任务");
     xlsx.writeFile(workbook, config);
-    const batch = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "--dir", batchDir, "--config", config));
+    const batch = publish("-p", "dy", "--phone", "fixture", "--dir", batchDir, "--config", config);
     const next = await nextTask();
     next.transport.reply("puppeteerFile-progress", { ...next.task, phase: "waiting_confirmation" });
     next.transport.reply("puppeteerFile-done", { ...next.task, status: true, outcome: "waiting_confirmation" });
@@ -93,7 +112,7 @@ async function main() {
     const draftBook = xlsx.utils.book_new();
     xlsx.utils.book_append_sheet(draftBook, xlsx.utils.json_to_sheet([{ filename: "draft-batch.mp4", title: "目录草稿" }]), "任务");
     xlsx.writeFile(draftBook, config);
-    const draftBatch = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "--dir", batchDir, "--config", config, "--draft"));
+    const draftBatch = publish("-p", "dy", "--phone", "fixture", "--dir", batchDir, "--config", config, "--draft");
     const draftNext = await nextTask();
     draftNext.transport.reply("puppeteerFile-done", { ...draftNext.task, status: true, draftVerified: true });
     assert.equal(await draftBatch, 0);
@@ -102,6 +121,8 @@ async function main() {
     assert.equal(draftRow.successCount, 1, "目录草稿与即时/定时的保存成功计数必须一致");
     fs.writeFileSync(path.join(cache, "cli-result.json"), JSON.stringify({ single: receipt, batch: summary, history: rows }, null, 2));
   } finally {
+    for (const { task, transport } of allTasks) transport.reply("puppeteerFile-done", { ...task, skipped: true });
+    await Promise.allSettled(pendingCalls);
     console.log = originalLog;
     fs.rmSync(temp, { recursive: true, force: true });
     delete global.__waitingCli;
