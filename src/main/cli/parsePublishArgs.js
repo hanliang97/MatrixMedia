@@ -46,6 +46,7 @@ export function parsePublishArgs(subArgv) {
     cover: null,
     creativeStatement: null,
     draft: false,
+    noDownload: false,
     sphLinkType: null,
     sphLinkValue: null,
     publishOptions: {},
@@ -89,6 +90,8 @@ export function parsePublishArgs(subArgv) {
       out.creativeStatement = args[++i];
     } else if (a === "--draft") {
       out.draft = true;
+    } else if (a === "--no-download") {
+      out.noDownload = true;
     } else if (a === "--sph-link-type") {
       out.sphLinkType = args[++i];
     } else if (a === "--sph-link-value") {
@@ -384,6 +387,8 @@ export function publishBodyToArgv(body) {
   if (body.show === true) argv.push("--show");
   if (body.closeWindowAfterPublish === false) argv.push("--no-close-window");
   if (body.draft === true) argv.push("--draft");
+  if (body.noDownload === true || body["no-download"] === true)
+    argv.push("--no-download");
 
   return argv;
 }
@@ -424,6 +429,8 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "show",
   "closeWindowAfterPublish",
   "draft",
+  "noDownload",
+  "no-download",
   "platformOptions",
   "sphLink",
   "sphProductId",
@@ -673,6 +680,8 @@ export function publishHelpText() {
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
       --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
                             里开启了「默认发布到草稿」，即使不加该参数也会自动走草稿。
+      --no-download     快手专用：取消勾选「允许下载此作品」并校验终态（其它平台忽略；
+                            取消未确认会中止发布，宁可不发不可漏禁下载红线）
       --sph-product-id <id>   视频号商品上架（快捷参数，等价于 product + 商品编号）
       --sph-drama-id <name>   视频号挂载小程序短剧。值为短剧「名称」而非编号（发布页按名称搜索），
                                 如 --sph-drama-id 泳陷错恋；传数字编号会搜不到。

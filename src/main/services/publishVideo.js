@@ -191,6 +191,7 @@ async function runSingleFilePublishInner(
       ...metadata.legacy,
       creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
       coverPath,
+      noDownload: v.noDownload === true,
     },
     url: cfg.upload,
     show: v.show,
@@ -226,6 +227,7 @@ async function runSingleFilePublishInner(
     ...metadata.legacy,
     creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
     coverPath,
+    noDownload: v.noDownload === true,
     filePath:
       v.publishAt && isRemotePublishFile(sourceFile)
         ? sourceFile

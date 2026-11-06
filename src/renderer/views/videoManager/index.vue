@@ -642,6 +642,7 @@ export default {
           bq: sample.bq || "",
           creativeStatement: sample.creativeStatement,
           coverPath: sample.coverPath || "",
+          noDownload: sample.noDownload === true,
         },
         records: normalizedDetails.map(({ record, metadata }) => ({
           id: record.id,

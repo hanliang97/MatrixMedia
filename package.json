@@ -61,6 +61,7 @@
     "e2e:draft:dry": "node e2e/run.js --dry-run",
     "test:pushdata-dedupe": "node scripts/test-pushdata-dedupe.js",
     "test:ks-description": "node scripts/test-ks-description.js",
+    "test:ks-no-download": "node scripts/test-ks-no-download.js",
     "test:dy-description": "node scripts/test-dy-description.js",
     "test:publish-failure-queue": "node scripts/test-publish-failure-queue.js",
     "test:fail-screenshot": "node scripts/test-fail-screenshot.js",
