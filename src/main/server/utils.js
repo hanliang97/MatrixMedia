@@ -208,10 +208,16 @@ function changeData(payload) {
   }
 }
 
-function changeDataUnsafe({ item, fileName, type } = {}) {
+function changeDataUnsafe({ item, fileName, type, expectedTaskId } = {}) {
   const folder = resolveDataFolder(fileName);
   if (!folder.ok) {
     return { success: false, message: folder.message };
+  }
+  if (expectedTaskId !== undefined && (folder.name !== "pushData" || type !== "update" ||
+      !["string", "number"].includes(typeof expectedTaskId) ||
+      (typeof expectedTaskId === "string" && !expectedTaskId.trim()) ||
+      (typeof expectedTaskId === "number" && !Number.isFinite(expectedTaskId)))) {
+    return { success: false, code: "invalid_expected_task", message: "非法的发布任务匹配条件" };
   }
   const folderPath = folder.folderPath; // fileName 是文件夹
   const dataDir = getDataDir();
@@ -331,6 +337,11 @@ function changeDataUnsafe({ item, fileName, type } = {}) {
       const index = list.findIndex(obj => obj.id == item.id);
       if (index === -1) {
         return { success: false, message: `未找到 id=${item.id} 的记录` };
+      }
+      // 同一主进程同步读/比较/写：旧代次与终结后的事件不能覆盖当前任务。
+      if (expectedTaskId !== undefined &&
+          (list[index].taskId !== expectedTaskId || list[index].publishSettled === true)) {
+        return { success: false, code: "stale_publish_task", message: "发布任务已变化或终结，已忽略过期回执" };
       }
       list[index] = { ...list[index], ...item };
       writeDayData(filePath, list);

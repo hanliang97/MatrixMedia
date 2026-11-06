@@ -61,6 +61,15 @@ async function main() {
     transport.reply("puppeteerFile-done", { ...task, status: true });
     assert.equal((await history())[0].status, "waiting_confirmation", "重复终结回执不能覆盖原结果");
 
+    const draftFile = path.join(temp, "draft.mp4");
+    fs.writeFileSync(draftFile, "synthetic-video-fixture");
+    const draftWait = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "-f", draftFile, "-t", "草稿等待", "--draft"));
+    const draftTask = await nextTask();
+    draftTask.transport.reply("puppeteerFile-done", { ...draftTask.task, status: true, outcome: "waiting_confirmation" });
+    assert.equal(await draftWait, 4);
+    const draftReceipt = JSON.parse(logs.filter(line => line.startsWith('{"channel"')).at(-1));
+    assert.equal(draftReceipt.publishMode, "draft", "草稿等待不能丢失原保存意图");
+
     const batchDir = path.join(temp, "videos");
     fs.mkdirSync(batchDir);
     fs.writeFileSync(path.join(batchDir, "batch.mp4"), "synthetic-video-fixture");
@@ -78,8 +87,19 @@ async function main() {
     assert.equal(summary.needsAttention, 1);
     assert.equal(summary.results[0].status, "needs_attention");
     const rows = await history();
-    assert.equal(rows.length, 2);
+    assert.equal(rows.length, 3);
     assert.ok(rows.every(row => row.status === "waiting_confirmation" && row.successCount === 0));
+    fs.writeFileSync(path.join(batchDir, "draft-batch.mp4"), "synthetic-video-fixture");
+    const draftBook = xlsx.utils.book_new();
+    xlsx.utils.book_append_sheet(draftBook, xlsx.utils.json_to_sheet([{ filename: "draft-batch.mp4", title: "目录草稿" }]), "任务");
+    xlsx.writeFile(draftBook, config);
+    const draftBatch = runCliMain(argv("publish", "-p", "dy", "--phone", "fixture", "--dir", batchDir, "--config", config, "--draft"));
+    const draftNext = await nextTask();
+    draftNext.transport.reply("puppeteerFile-done", { ...draftNext.task, status: true, draftVerified: true });
+    assert.equal(await draftBatch, 0);
+    const draftRow = (await history()).find(row => row.title === "目录草稿");
+    assert.equal(draftRow.status, "draft");
+    assert.equal(draftRow.successCount, 1, "目录草稿与即时/定时的保存成功计数必须一致");
     fs.writeFileSync(path.join(cache, "cli-result.json"), JSON.stringify({ single: receipt, batch: summary, history: rows }, null, 2));
   } finally {
     console.log = originalLog;

@@ -764,6 +764,7 @@ export default {
         for (const row of dayRows) {
           const details = row.showAlltype || [];
           for (const sub of details) {
+            if (donePayload.taskId != null && sub.taskId !== donePayload.taskId) continue;
             const subPhone = sameAccount(sub);
             if (textType === "article") {
               if (
@@ -795,9 +796,10 @@ export default {
       const progress = resolvePublishProgress(payload);
       if (!progress) return;
       const target = this.findLocalPublishRecord(payload);
-      if (!target || !target.row || !target.row.id ||
+      if (!target || !target.row || !target.row.id || target.row.publishSettled === true ||
+          target.row.taskId !== payload.taskId ||
           !["publishing", "drafting", "waiting_confirmation"].includes(target.row.publishStatus)) return;
-      await dataRequest({ type: "update", fileName: "pushData", item: {
+      await dataRequest({ type: "update", fileName: "pushData", expectedTaskId: payload.taskId, item: {
         id: target.row.id, date: target.date,
         publishStatus: progress.recordStatus,
         lastPublishMessage: progress.message,
@@ -818,14 +820,17 @@ export default {
       const target = this.findLocalPublishRecord(donePayload);
       if (!target || !target.row || !target.row.id) return;
       const row = this.fillPublishStats(target.row);
+      if (row.taskId != null && (row.taskId !== donePayload.taskId || row.publishSettled === true)) return;
       if (donePayload.skipped) {
         await dataRequest({
           type: "update",
           fileName: "pushData",
+          expectedTaskId: row.taskId,
           item: {
             id: row.id,
             date: target.date,
             publishStatus: "skipped",
+            publishSettled: true,
             lastPublishMessage:
               donePayload.message || "用户关闭窗口，已跳过发布",
             lastPublishAt: Date.now(),
@@ -838,10 +843,12 @@ export default {
       const success = completion.ok;
       const isDraftMode = completion.savedAsDraft;
       if (completion.waitingConfirmation) {
-        await dataRequest({ type: "update", fileName: "pushData", item: {
+        const result = await dataRequest({ type: "update", fileName: "pushData", expectedTaskId: row.taskId, item: {
           id: row.id, date: target.date, publishStatus: completion.recordStatus,
+          publishSettled: true,
           lastPublishMessage: completion.message, lastPublishAt: Date.now(),
         } });
+        if (!result.success) { this.loadRecords(); return; }
         this.$notify({ title: "等待平台确认", message: completion.message, type: "warning", duration: 0 });
         this.loadRecords();
         return;
@@ -852,15 +859,17 @@ export default {
       // 主进程在失败/异常瞬间截了发布页的图，这里存进记录，之后可以直接回看
       const failScreenshot = this.pickFailScreenshot(donePayload, row);
       if (abnormal) {
-        await dataRequest({
+        const result = await dataRequest({
           type: "update",
           fileName: "pushData",
+          expectedTaskId: row.taskId,
           item: {
             id: row.id,
             date: target.date,
             publishAbnormalCount:
               this.normalizeCount(row.publishAbnormalCount) + 1,
             publishStatus: "abnormal",
+            publishSettled: true,
             ...(failScreenshot ? { failScreenshot } : {}),
             lastPublishMessage:
               donePayload.message ||
@@ -868,6 +877,7 @@ export default {
             lastPublishAt: Date.now(),
           },
         });
+        if (!result.success) { this.loadRecords(); return; }
         this.$notify({
           title: "发布异常",
           message:
@@ -879,9 +889,10 @@ export default {
         this.loadRecords();
         return;
       }
-      await dataRequest({
+      const result = await dataRequest({
         type: "update",
         fileName: "pushData",
+        expectedTaskId: row.taskId,
         item: {
           id: row.id,
           date: target.date,
@@ -893,6 +904,7 @@ export default {
             : row.publishFailCount + 1,
           publishMode: isDraftMode ? "draft" : row.publishMode || "publish",
           publishStatus: completion.recordStatus,
+          publishSettled: true,
           // 成功/存草稿时清掉旧截图，避免把上一次失败的画面留在成功记录上
           failScreenshot: success ? "" : failScreenshot,
           lastPublishMessage:
@@ -905,6 +917,7 @@ export default {
           lastPublishAt: Date.now(),
         },
       });
+      if (!result.success) { this.loadRecords(); return; }
       if (donePayload.needsAttention) {
         this.$notify({
           title: "发布任务需要处理",

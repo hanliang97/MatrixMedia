@@ -109,6 +109,7 @@
 | `fileName` | 数据文件夹名，如 `account`、`pushData`；只允许字母 / 数字 / 下划线 / 短横线（1-64 位），含路径分隔符或 `.` / `..` 一律返回 `success:false` |
 | `type`     | 操作类型：`add` / `update` / `delete` / `get` / `config` |
 | `item`     | 具体数据项，结构随 `fileName` 与 `type` 变化；`item.date` 必须是 `YYYY-MM-DD` |
+| `expectedTaskId` | 可选，仅 `pushData` 的 `update` 支持；必须匹配记录当前 `taskId` 且该任务未 `publishSettled`，否则返回 `success:false, code:stale_publish_task`，不写入。用于防止迟到回执覆盖新任务或终态，不替代现有请求权限校验 |
 
 ## POST /publish
 

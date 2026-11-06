@@ -688,6 +688,8 @@ export default {
               type: "add",
               fileName: "pushData",
               item: this.buildPushRecord(article, p, partition, currentDate, {
+                taskId,
+                publishSettled: false,
                 scheduledTask: true,
                 scheduledPublishAt: scheduledAtMs,
                 scheduledPublishAtText: scheduledAtText,
@@ -737,6 +739,8 @@ export default {
               category: article.data.category,
               summary: article.data.summary,
               publishAttemptCount: oldAttempt + 1,
+              taskId,
+              publishSettled: false,
               republishCount: oldRepublish + 1,
               publishMode: "publish",
               publishStatus: "publishing",
@@ -750,7 +754,7 @@ export default {
           dataRequest({
             type: "add",
             fileName: "pushData",
-            item: this.buildPushRecord(article, p, partition, currentDate),
+            item: this.buildPushRecord(article, p, partition, currentDate, { taskId, publishSettled: false }),
           });
         }
       }

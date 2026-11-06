@@ -16,6 +16,7 @@ const date = new Date().toLocaleDateString("en-CA");
 const dataDir = path.join(temp, "Documents/MatrixMedia/data/pushData");
 fs.mkdirSync(dataDir, { recursive: true });
 const record = { id: "waiting-gui", textType: "local", pt: "抖音", phone: "fixture",
+  taskId: "gui-task", publishSettled: false,
   partition: "persist:fixture抖音", textOtherName: "等待状态测试", selectedFile: "synthetic.mp4",
   bt: "等待状态测试", publishStatus: "publishing", publishAttemptCount: 1,
   publishSuccessCount: 0, publishFailCount: 0, date };
@@ -60,11 +61,23 @@ async function main() {
     assert.ok(historyMenu, "应能从应用菜单进入视频管理");
     await historyMenu.click();
     await page.waitForFunction(() => document.body.textContent.includes("等待状态测试"));
+    const request = body => page.evaluate(async body => {
+      const token = await require("electron").ipcRenderer.invoke("matrix:server-token");
+      const response = await fetch("http://localhost:30088/changeData", {
+        method: "POST", headers: { "Content-Type": "application/json", "X-Matrix-Token": token },
+        body: JSON.stringify(body),
+      });
+      return response.json();
+    }, body);
     const emit = (channel, fields) => page.evaluate(({ channel, fields }) => {
       require("electron").ipcRenderer.emit(channel, {}, fields);
     }, { channel, fields: { ...record, taskId: "gui-task", ...fields } });
     const hasStatus = text => page.waitForFunction(text => [...document.querySelectorAll(".el-tag")]
       .some(el => el.textContent.trim() === text), { timeout: 4000 }, text);
+    await emit("puppeteerFile-progress", { taskId: "old-task", phase: "waiting_confirmation" });
+    await page.waitForNetworkIdle({ idleTime: 150, timeout: 3000 });
+    assert.equal(await page.evaluate(() => [...document.querySelectorAll(".el-tag")]
+      .some(el => el.textContent.trim() === "等待确认")), false, "其他任务的进度必须忽略");
     await emit("puppeteerFile-progress", { phase: "waiting_confirmation", message: "请扫码确认" });
     try {
       await hasStatus("等待确认");
@@ -76,22 +89,38 @@ async function main() {
     await hasStatus("发布中");
     await emit("puppeteerFile-done", { status: true, outcome: "waiting_confirmation", needsAttention: true, message: "请到平台完成确认" });
     await hasStatus("等待确认");
-    const rows = await page.evaluate(async () => {
-      const token = await require("electron").ipcRenderer.invoke("matrix:server-token");
-      const response = await fetch("http://localhost:30088/changeData", {
-        method: "POST", headers: { "Content-Type": "application/json", "X-Matrix-Token": token },
-        body: JSON.stringify({ fileName: "pushData", type: "get", item: { page: 1, pageSize: 100 } }),
-      });
-      return (await response.json()).data;
-    });
+    await emit("puppeteerFile-progress", { phase: "verifying" });
+    await emit("puppeteerFile-done", { status: true });
+    await page.waitForNetworkIdle({ idleTime: 150, timeout: 3000 });
+    await hasStatus("等待确认");
+    const stale = await request({ fileName: "pushData", type: "update", expectedTaskId: "gui-task",
+      item: { id: record.id, date, publishStatus: "publishing" } });
+    assert.equal(stale.success, false, "终结后的 HTTP 写入也必须被存储边界拒绝");
+    assert.equal(stale.code, "stale_publish_task");
+    const rows = (await request({ fileName: "pushData", type: "get", item: { page: 1, pageSize: 100 } })).data;
     const items = Object.values(rows).flat().flatMap(row => row.showAlltype || [row]);
     assert.equal(items.length, 1);
     assert.equal(items[0].publishStatus, "waiting_confirmation");
     assert.equal(items[0].publishSuccessCount, 0);
     assert.equal(items[0].publishFailCount, 0);
+    const race = { ...record, id: "race", taskId: "race-task", textOtherName: "交错事件", selectedFile: "race.mp4" };
+    assert.equal((await request({ fileName: "pushData", type: "add", item: race })).success, true);
+    const [terminal, progress] = await Promise.all([
+      request({ fileName: "pushData", type: "update", expectedTaskId: race.taskId,
+        item: { id: race.id, date, publishStatus: "waiting_confirmation", publishSettled: true } }),
+      request({ fileName: "pushData", type: "update", expectedTaskId: race.taskId,
+        item: { id: race.id, date, publishStatus: "publishing" } }),
+    ]);
+    assert.equal(terminal.success, true);
+    assert.ok(progress.success || progress.code === "stale_publish_task");
+    const afterRace = (await request({ fileName: "pushData", type: "get", item: {} })).data;
+    const raceRow = Object.values(afterRace).flat().find(row => row.id === race.id);
+    assert.equal(raceRow.publishStatus, "waiting_confirmation", "交错的进度和终结写入不能降级终态");
+    assert.equal(raceRow.publishSettled, true);
+    await request({ fileName: "pushData", type: "delete", item: { id: race.id, date } });
     await page.screenshot({ path: path.join(cache, "gui-waiting-confirmation.png"), fullPage: true });
     fs.writeFileSync(path.join(cache, "gui-result.json"), JSON.stringify({ status: items[0].publishStatus,
-      successCount: items[0].publishSuccessCount, failCount: items[0].publishFailCount, records: items.length }));
+      successCount: items[0].publishSuccessCount, failCount: items[0].publishFailCount, records: items.length, concurrentTerminalProtected: true }));
     console.log("GUI waiting_confirmation / zero success / one record: passed");
   } catch (error) {
     if (page && !page.isClosed()) {

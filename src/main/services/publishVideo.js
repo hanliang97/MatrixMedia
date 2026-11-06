@@ -213,6 +213,8 @@ async function runSingleFilePublishInner(
     ? guessFileNameFromUrl(sourceFile)
     : path.basename(resolvedFile);
   const recordItem = {
+    taskId,
+    publishSettled: false,
     bookName,
     textOtherName: stem,
     textType: "local",
@@ -342,7 +344,7 @@ async function runSingleFilePublishInner(
     console.error("MatrixMedia: 写入 pushData 初始记录失败:", e && e.message);
   }
 
-  const updateRecord = (status, message) => {
+  const updateRecord = (status, message, isFinal = true) => {
     if (!recordId) return;
     try {
       changeData({
@@ -352,6 +354,7 @@ async function runSingleFilePublishInner(
           id: recordId,
           date: recordDate,
           publishStatus: status,
+          publishSettled: isFinal,
           publishSuccessCount:
             status === "success" || status === "draft" ? 1 : 0,
           // login_required 也是「本次没发出去」，必须计失败次数：
@@ -401,7 +404,7 @@ async function runSingleFilePublishInner(
           if (!payload || payload.taskId !== taskId) return;
           const progress = resolvePublishProgress(payload);
           if (!progress) return;
-          updateRecord(progress.recordStatus, progress.message);
+          updateRecord(progress.recordStatus, progress.message, false);
           if (typeof options.onProgress === "function") {
             try { options.onProgress(payload); }
             catch (error) { console.error("MatrixMedia: 发布进度回调失败:", error && error.message); }
@@ -428,7 +431,7 @@ async function runSingleFilePublishInner(
             status: completion.status,
             message: completion.message,
             id: recordId,
-            publishMode: completion.savedAsDraft ? "draft" : "publish",
+            publishMode: completion.savedAsDraft || taskPayload.publishMode === "draft" ? "draft" : "publish",
             outcome: payload && payload.outcome,
             needsAttention: completion.needsAttention,
             // 草稿保存结果校验字段（#42），供 CLI JSON 透传给 e2e/脚本消费；

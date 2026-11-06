@@ -7,6 +7,7 @@
 - `puppeteerFile-progress` 的 `waiting_confirmation` 只更新原记录，成功/失败计数不增长，CLI 继续等待；`verifying` 继续核验。
 - 最终仍需确认时保留 `outcome: waiting_confirmation`、原发表/草稿意图和消息，退出 4，不触发重试。无消息时也不能显示上传成功。
 - 即时、定时、目录批量和 GUI 共用结果/进度转换。主进程按 taskId 隔离任务，终结后忽略重复或迟到回执。
+- GUI/任务登记持久绑定 `taskId`；`publishSettled` 区分暂时等待和最终待确认。GUI 通过 `expectedTaskId` 在同一主进程的同步存储边界比较当前代次和终结标记后写入，旧任务、迟到/重复回执返回 `stale_publish_task`，不覆盖新任务或终态。旧历史仍可只读；重新发布时建立新代次。
 - GUI 视频管理、`cli history` 的中英文筛选、CSV 和 MCP 历史枚举均识别等待确认。MCP 不再把所有退出码 4 强制解释为草稿保存。
 
 ## 实际验证
@@ -40,6 +41,10 @@ git diff --check
 
 ## 未验证与回退
 
-仓库要求的 `node e2e/run.js -p dy --yes` 已尝试：首次因缺少 ffmpeg 在生成视频时退出 2；真实 CLI `accounts --json` 返回空列表（0 个账号），没有可用登录态。真实平台草稿验证尚未通过，不能将受控 GUI/CLI/MCP 测试冒充真实平台证据。真实扫码平台页面、Windows/打包安装未验证；根包类型/lint 未配置（N/A），MCP 类型检查由构建覆盖。本轮仅跑受影响检查，不宣称全仓 CI 或完整平台门禁通过。
+仓库要求的 `node e2e/run.js -p dy --yes` 已尝试：首次因缺少 ffmpeg 在生成视频时退出 2；补齐本地 ffmpeg 并生成合成视频后重跑，runner 退出 1，平台分类 ERROR、CLI 退出 2，诊断为缺少 `--phone` 或完整 `--partition`，`draftVerified=N/A`。真实 CLI `accounts --json` 返回空列表（0 个账号），没有可用登录态；没有实际平台上传。报告位于忽略目录 `e2e/artifacts/20261106-024001/report.md`。真实平台草稿验证尚未通过，不能将受控 GUI/CLI/MCP 测试冒充真实平台证据。真实扫码平台页面、Windows/打包安装未验证；根包类型/lint 未配置（N/A），MCP 类型检查由构建覆盖。本轮仅跑受影响检查，不宣称全仓 CI 或完整平台门禁通过。
+
+## 审查修复
+
+Standards 与 Spec 均发现草稿等待回执丢失原意图，以及 GUI 缺少任务关联/终结写入保护；Standards 另指出目录草稿计数与其他入口分叉。均以对外 CLI 或真实 Electron/HTTP 旅程重现后修复：草稿等待原先返回 publish，现保留 draft；其他任务的等待事件原先改变当前记录，现忽略；终结后的迟到进度/重复回执被拒绝，并验证 HTTP 交错终结/进度写入；目录草稿成功计数原先 0，现为 1。复审及干净 PR 分支验证在固定修复提交后继续运行，不将进行中的验证算通过。
 
 没有 schema 迁移、账号清理或发布重试策略变更；没有新增独立状态机，现有共享回执模块是唯一状态转换边界，无新增 ADR 系列。回退保留历史 `waiting_confirmation` 及原消息，禁止把这些记录当成功或自动重新发布；应停受影响任务并到平台核对原内容。当前原稿中的公众号配置/登录能力未随此修复交付。

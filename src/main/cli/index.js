@@ -385,6 +385,8 @@ async function runBatchDirPublish(v, cfg) {
 
     const selectedFile = path.basename(resolvedFile);
     const recordItem = {
+      taskId,
+      publishSettled: false,
       bookName,
       textOtherName: stem,
       textType: "local",
@@ -446,7 +448,7 @@ async function runBatchDirPublish(v, cfg) {
       );
     }
 
-    const updateRecord = (status, message) => {
+    const updateRecord = (status, message, isFinal = true) => {
       if (!recordId) return;
       try {
         changeData({
@@ -456,7 +458,8 @@ async function runBatchDirPublish(v, cfg) {
             id: recordId,
             date: recordDate,
             publishStatus: status,
-            publishSuccessCount: status === "success" ? 1 : 0,
+            publishSettled: isFinal,
+            publishSuccessCount: ["success", "draft"].includes(status) ? 1 : 0,
             publishFailCount: status === "failed" ? 1 : 0,
             publishAbnormalCount: status === "abnormal" ? 1 : 0,
             lastPublishMessage: message || "",
@@ -510,7 +513,7 @@ async function runBatchDirPublish(v, cfg) {
             if (!payload || payload.taskId !== taskId) return;
             const progress = resolvePublishProgress(payload);
             if (!progress) return;
-            updateRecord(progress.recordStatus, progress.message);
+            updateRecord(progress.recordStatus, progress.message, false);
           } else if (channel === "puppeteerFile-done") {
             if (payload && payload.taskId != null && payload.taskId !== taskId)
               return;

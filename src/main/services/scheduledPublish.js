@@ -159,7 +159,7 @@ export function buildTaskPayloadFromRecord(record) {
   };
 }
 
-function updateRecord(record, patch) {
+function updateRecord(record, patch, isFinal = true) {
   if (!record || !record.id || !record.date) return;
   changeData({
     fileName: "pushData",
@@ -167,6 +167,7 @@ function updateRecord(record, patch) {
     item: {
       id: record.id,
       date: record.date,
+      publishSettled: isFinal,
       ...patch,
     },
   });
@@ -201,6 +202,7 @@ function finishScheduledRecord(record, payload) {
   if (payload && payload.skipped) {
     updateRecord(record, {
       publishStatus: "skipped",
+      publishSettled: true,
       publishSuccessCount: 0,
       publishFailCount: 0,
       lastPublishMessage:
@@ -216,6 +218,7 @@ function finishScheduledRecord(record, payload) {
     (payload && payload.failScreenshot) || record.failScreenshot;
   updateRecord(record, {
     publishStatus: completion.recordStatus,
+    publishSettled: true,
     publishSuccessCount: succeeded ? 1 : 0,
     publishFailCount: ["failed", "login_required"].includes(completion.recordStatus) ? 1 : 0,
     publishAbnormalCount: completion.recordStatus === "abnormal" ? 1 : 0,
@@ -302,6 +305,8 @@ async function executeScheduledRecordAsync(record) {
     const taskId = taskPayload.taskId;
     updateRecord(record, {
       publishStatus: "publishing",
+      taskId,
+      publishSettled: false,
       lastPublishMessage: "定时任务开始发布",
       lastPublishAt: Date.now(),
     });
@@ -326,7 +331,7 @@ async function executeScheduledRecordAsync(record) {
               publishStatus: progress.recordStatus,
               lastPublishMessage: progress.message,
               lastPublishAt: Date.now(),
-            });
+            }, false);
           } else if (channel === "puppeteerFile-done") {
             finishScheduledRecord(record, payload);
             finish();
@@ -334,6 +339,7 @@ async function executeScheduledRecordAsync(record) {
             // 登录失效单独标状态：任务本身没错，补扫码后可重新排期
             updateRecord(record, {
               publishStatus: "login_required",
+              publishSettled: true,
               publishFailCount: Number(record.publishFailCount || 0) + 1,
               lastPublishMessage:
                 "登录态失效，需重新扫码登录后重排（本次未发布）",
