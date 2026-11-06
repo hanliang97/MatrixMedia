@@ -42,6 +42,7 @@ import {
   pickDaily,
   pickWeekly,
   pickMonthly,
+  isCollected,
   STATS_METRICS,
 } from "../statsUtils";
 
@@ -65,14 +66,18 @@ export default {
   },
   computed: {
     cards() {
-      const latest = this.rows[this.rows.length - 1] || {};
-      const prev = this.rows[this.rows.length - 2] || latest;
-      return STATS_METRICS.map((m) => ({
-        key: m.key,
-        label: m.label,
-        value: latest[m.key] || 0,
-        delta: (latest[m.key] || 0) - (prev[m.key] || 0),
-      }));
+      // 只跟"真正采集过"的上一日比：缺日会把 delta 放大成一整天的假增长
+      const collected = this.rows.filter(isCollected);
+      return STATS_METRICS.map((m) => {
+        const latest = collected[collected.length - 1] || {};
+        const prev = collected[collected.length - 2] || latest;
+        return {
+          key: m.key,
+          label: m.label,
+          value: latest[m.key] || 0,
+          delta: (latest[m.key] || 0) - (prev[m.key] || 0),
+        };
+      });
     },
     viewRows() {
       if (this.granularity === "week") return pickWeekly(this.rows, 13);
@@ -87,7 +92,8 @@ export default {
         key: m.key,
         name: m.label,
         color: m.color,
-        values: this.viewRows.map((r) => r[m.key] || 0),
+        values: this.viewRows.map((r) => (r.__missing ? null : r[m.key] || 0)),
+        filled: this.viewRows.map((r) => !!r.__filled),
       }));
     },
     rangeHint() {
