@@ -134,8 +134,12 @@ matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\video.mp4 -t "标题
 | 1   | 未捕获异常                                     |
 | 2   | 参数错误                                       |
 | 3   | 任务失败（如上传失败、填写失败）               |
-| 4   | 视频号链接添加失败，视频已转存草稿，需人工检查 |
+| 4   | 需人工处理：等待平台确认、发表结果未核验，或已转存草稿需检查 |
 | 5   | 登录态失效，需重新扫码登录后再重跑             |
+
+等待扫码或安全确认时，`puppeteerFile-progress` 只更新原任务为 `waiting_confirmation`，不结算成功、不新建记录、不结束等待中的 CLI。后续 `verifying` 恢复显示发布中。最终回执仍需确认时返回 `resultStatus: needs_attention`、`outcome: waiting_confirmation`、退出码 `4`，`publishMode` 保持原发表/草稿意图，不能据此认定已转存草稿或重新上传。目录批量模式同样保留各行结果，并在汇总增加 `needsAttention` 数量；存在需人工处理的行时退出 `4`，其余批量退出码约定保持不变。
+
+`cli history --status waiting_confirmation`（或 `--status 等待确认`）查询等待确认记录；GUI 视频管理和导出 CSV 同样显示「等待确认」，不被旧成功计数兜底为成功。
 
 视频号商品上架并保存草稿：
 

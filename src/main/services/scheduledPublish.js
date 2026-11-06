@@ -10,6 +10,7 @@ import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
 import { isRemotePublishFile, resolvePublishFile } from "./resolvePublishFile";
 import { normalizeVideoRecordMetadata } from "../../shared/videoMetadata.js";
 import { scheduledKey } from "./scheduledDedupe.js";
+import { resolvePublishCompletion, resolvePublishProgress } from "../../shared/publishResult.js";
 
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 1000;
@@ -208,19 +209,18 @@ function finishScheduledRecord(record, payload) {
     });
     return;
   }
-  const ok = payload && payload.status === true;
-  const abnormal = ok && payload.publishAbnormal === true;
+  const completion = resolvePublishCompletion(payload);
+  const succeeded = ["success", "draft"].includes(completion.recordStatus);
   // 失败/异常时主进程已在发布页截了图，落库后视频管理里可点开回看
   const failScreenshot =
     (payload && payload.failScreenshot) || record.failScreenshot;
   updateRecord(record, {
-    publishStatus: abnormal ? "abnormal" : ok ? "success" : "failed",
-    publishSuccessCount: ok && !abnormal ? 1 : 0,
-    publishFailCount: ok ? 0 : 1,
-    publishAbnormalCount: abnormal ? 1 : 0,
-    ...(ok && !abnormal ? {} : { failScreenshot }),
-    lastPublishMessage:
-      (payload && payload.message) || (ok ? "发布成功" : "发布失败"),
+    publishStatus: completion.recordStatus,
+    publishSuccessCount: succeeded ? 1 : 0,
+    publishFailCount: ["failed", "login_required"].includes(completion.recordStatus) ? 1 : 0,
+    publishAbnormalCount: completion.recordStatus === "abnormal" ? 1 : 0,
+    ...(succeeded ? {} : { failScreenshot }),
+    lastPublishMessage: completion.message,
     lastPublishAt: Date.now(),
   });
 }
@@ -315,9 +315,19 @@ async function executeScheduledRecordAsync(record) {
       };
       const transport = {
         reply(channel, payload) {
+          if (publishSettled) return;
           if (payload && payload.taskId != null && payload.taskId !== taskId)
             return;
-          if (channel === "puppeteerFile-done") {
+          if (channel === "puppeteerFile-progress") {
+            if (!payload || payload.taskId !== taskId) return;
+            const progress = resolvePublishProgress(payload);
+            if (!progress) return;
+            updateRecord(record, {
+              publishStatus: progress.recordStatus,
+              lastPublishMessage: progress.message,
+              lastPublishAt: Date.now(),
+            });
+          } else if (channel === "puppeteerFile-done") {
             finishScheduledRecord(record, payload);
             finish();
           } else if (channel === "puppeteer-noLogin") {

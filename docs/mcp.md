@@ -160,6 +160,8 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 
 当 `platform` 不是 `sph` 时，`sphProductId` / `sphDramaId` / `sphSeriesId` / `sphLink` 会被忽略。若商品、短剧或剧集添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
 
+等待平台扫码/安全确认时，`publish_video` 同样返回 `status: needs_attention`、`outcome: waiting_confirmation`，保留 CLI 返回的 `publishMode` 和消息；不能把所有退出码 `4` 都解释为草稿已保存。此时先核对原任务，不重新调用发布。`list_history` 的 `status` 支持 `waiting_confirmation`，与 GUI 和 CLI 共用原记录。
+
 ### publish_article
 
 | 参数        | 必填   | 说明                   |

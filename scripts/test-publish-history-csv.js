@@ -26,6 +26,7 @@ assert.ok(csv.includes('"发布异常"'));
 assert.ok(!csv.includes("DO_NOT_EXPORT") && !csv.includes("PRIVATE_FILE_PATH"));
 assert.ok(csv.endsWith("\r\n"));
 assert.strictEqual(buildPublishHistoryCsv().recordCount, 0);
+assert.ok(buildPublishHistoryCsv({day:[{publishStatus:"waiting_confirmation"}]}).csv.includes("等待确认"));
 const single = buildPublishHistoryCsv({ "2026-10-01": [{ bt: "独立记录", pt: "抖音",
   publishAttemptCount: -1, lastPublishAt: 1 }] });
 assert.strictEqual(single.recordCount, 1);

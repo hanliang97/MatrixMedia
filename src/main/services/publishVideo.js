@@ -16,7 +16,7 @@ import {
 } from "./resolvePublishFile";
 import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 import { resolveTaskPartition } from "./accountLookup.js";
-import { resolvePublishCompletion } from "../../shared/publishResult.js";
+import { resolvePublishCompletion, resolvePublishProgress } from "../../shared/publishResult.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 
 /** 读取全部 pushData 记录（跨日期平铺），用于定时任务查重 */
@@ -396,7 +396,17 @@ async function runSingleFilePublishInner(
 
     const transport = {
       reply(channel, payload) {
-        if (channel === "puppeteerFile-done") {
+        if (settled) return;
+        if (channel === "puppeteerFile-progress") {
+          if (!payload || payload.taskId !== taskId) return;
+          const progress = resolvePublishProgress(payload);
+          if (!progress) return;
+          updateRecord(progress.recordStatus, progress.message);
+          if (typeof options.onProgress === "function") {
+            try { options.onProgress(payload); }
+            catch (error) { console.error("MatrixMedia: 发布进度回调失败:", error && error.message); }
+          }
+        } else if (channel === "puppeteerFile-done") {
           if (payload && payload.taskId != null && payload.taskId !== taskId) {
             return;
           }
@@ -420,7 +430,7 @@ async function runSingleFilePublishInner(
             id: recordId,
             publishMode: completion.savedAsDraft ? "draft" : "publish",
             outcome: payload && payload.outcome,
-            needsAttention: completion.fallbackDraft,
+            needsAttention: completion.needsAttention,
             // 草稿保存结果校验字段（#42），供 CLI JSON 透传给 e2e/脚本消费；
             // undefined 时 JSON.stringify 自动省略，保持老版本输出兼容
             draftVerified: payload && payload.draftVerified,

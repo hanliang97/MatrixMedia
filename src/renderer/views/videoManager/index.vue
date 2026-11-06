@@ -205,6 +205,7 @@ import {
   recordGroupOf,
 } from "../../../shared/accountIdentity.js";
 import { buildPublishHistoryCsv } from "../../../shared/publishHistoryCsv.js";
+import { resolvePublishCompletion, resolvePublishProgress } from "../../../shared/publishResult.js";
 
 export default {
   name: "VideoManager",
@@ -243,9 +244,12 @@ export default {
       }
     };
     ipcRenderer.on("puppeteerFile-done", this._onPuppeteerDone);
+    this._onPuppeteerProgress = (event, data) => this.syncPublishPhase(data);
+    ipcRenderer.on("puppeteerFile-progress", this._onPuppeteerProgress);
   },
   beforeDestroy() {
     ipcRenderer.removeListener("puppeteerFile-done", this._onPuppeteerDone);
+    ipcRenderer.removeListener("puppeteerFile-progress", this._onPuppeteerProgress);
   },
   activated() {
     this.loadRecords();
@@ -461,6 +465,7 @@ export default {
       if (status === "expired") return "任务过期";
       if (status === "draft") return "已保存草稿";
       if (status === "drafting") return "保存草稿中";
+      if (status === "waiting_confirmation") return "等待确认";
       if (status === "login_required") return "需重新登录";
       return "发布中";
     },
@@ -784,6 +789,22 @@ export default {
       }
       return null;
     },
+    async syncPublishPhase(payload) {
+      if (!payload || payload.taskId == null ||
+          !["local", "article"].includes(payload.textType)) return;
+      const progress = resolvePublishProgress(payload);
+      if (!progress) return;
+      const target = this.findLocalPublishRecord(payload);
+      if (!target || !target.row || !target.row.id ||
+          !["publishing", "drafting", "waiting_confirmation"].includes(target.row.publishStatus)) return;
+      await dataRequest({ type: "update", fileName: "pushData", item: {
+        id: target.row.id, date: target.date,
+        publishStatus: progress.recordStatus,
+        lastPublishMessage: progress.message,
+        lastPublishAt: Date.now(),
+      } });
+      this.loadRecords();
+    },
     async syncPublishProgress(donePayload) {
       if (!donePayload || !["local", "article"].includes(donePayload.textType))
         return;
@@ -813,13 +834,21 @@ export default {
         this.loadRecords();
         return;
       }
-      const success = !!donePayload.status;
-      const isDraftMode =
-        donePayload.publishMode === "draft" ||
-        donePayload.publishToDraft === true;
+      const completion = resolvePublishCompletion(donePayload);
+      const success = completion.ok;
+      const isDraftMode = completion.savedAsDraft;
+      if (completion.waitingConfirmation) {
+        await dataRequest({ type: "update", fileName: "pushData", item: {
+          id: row.id, date: target.date, publishStatus: completion.recordStatus,
+          lastPublishMessage: completion.message, lastPublishAt: Date.now(),
+        } });
+        this.$notify({ title: "等待平台确认", message: completion.message, type: "warning", duration: 0 });
+        this.loadRecords();
+        return;
+      }
       // 发布成功后平台会自动跳成功页；5 秒后地址没变说明疑似没发出去，
       // 主进程用 publishAbnormal 标记，这里单独记为「发布异常」而不是成功。
-      const abnormal = success && donePayload.publishAbnormal === true;
+      const abnormal = completion.recordStatus === "abnormal";
       // 主进程在失败/异常瞬间截了发布页的图，这里存进记录，之后可以直接回看
       const failScreenshot = this.pickFailScreenshot(donePayload, row);
       if (abnormal) {
@@ -863,11 +892,7 @@ export default {
             ? row.publishFailCount
             : row.publishFailCount + 1,
           publishMode: isDraftMode ? "draft" : row.publishMode || "publish",
-          publishStatus: success
-            ? isDraftMode
-              ? "draft"
-              : "success"
-            : "failed",
+          publishStatus: completion.recordStatus,
           // 成功/存草稿时清掉旧截图，避免把上一次失败的画面留在成功记录上
           failScreenshot: success ? "" : failScreenshot,
           lastPublishMessage:

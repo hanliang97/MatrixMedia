@@ -36,6 +36,7 @@ const KNOWN_STATUSES = new Set([
   "abnormal",
   "skipped",
   "login_required",
+  "waiting_confirmation",
 ]);
 
 export function normalizeStatus(item) {
@@ -57,6 +58,7 @@ function statusLabel(s) {
   if (s === "abnormal") return "发布异常";
   if (s === "skipped") return "已跳过";
   if (s === "login_required") return "需重新登录";
+  if (s === "waiting_confirmation") return "等待确认";
   return "发布中";
 }
 

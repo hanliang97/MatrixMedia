@@ -248,7 +248,7 @@ export async function handlePublishVideo(
   if (result.exitCode === 4) {
     return JSON.stringify({
       status: "needs_attention",
-      publishMode: "draft",
+      publishMode: (result.lastJson as any)?.publishMode ?? "draft",
       outcome: (result.lastJson as any)?.outcome ?? "draft_saved",
       needsAttention: true,
       message:

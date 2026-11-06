@@ -6,6 +6,7 @@ const STATUS_TEXT = {
   success: "成功", failed: "失败", fail: "失败", abnormal: "发布异常",
   publishing: "发布中", drafting: "保存草稿中", draft: "已保存草稿",
   scheduled: "等待定时发布", expired: "任务过期", skipped: "已跳过",
+  waiting_confirmation: "等待确认",
 };
 
 function csvCell(value) {

@@ -69,6 +69,7 @@ try {
     path.join(dir, `${date}.json`),
     JSON.stringify([
       { id: "draft", pt: "抖音", publishStatus: "draft", publishSuccessCount: 1 },
+      { id: "waiting", pt: "抖音", publishStatus: "waiting_confirmation", publishSuccessCount: 1 },
       { id: "drafting", pt: "抖音", publishStatus: "drafting" },
       { id: "abnormal", pt: "快手", publishStatus: "abnormal", publishSuccessCount: 1 },
       { id: "skipped", pt: "快手", publishStatus: "skipped", publishSuccessCount: 1 },
@@ -80,12 +81,17 @@ try {
   const byId = Object.fromEntries(run([]).map((r) => [r.id, r.status]));
   assert.deepStrictEqual(byId, {
     draft: "draft",
+    waiting: "waiting_confirmation",
     drafting: "drafting",
     abnormal: "abnormal",
     skipped: "skipped",
     ok: "success",
     legacy: "success",
   });
+
+  for (const status of ["waiting_confirmation", "等待确认"]) {
+    assert.deepStrictEqual(run(["-s", status]).map(r => r.id), ["waiting"]);
+  }
 
   // 草稿不能出现在 success 筛选里
   assert.deepStrictEqual(run(["-s", "success"]).map((r) => r.id).sort(), ["legacy", "ok"]);

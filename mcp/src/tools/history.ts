@@ -17,7 +17,7 @@ export const listHistoryTool: Tool = {
       },
       status: {
         type: 'string',
-        enum: ['success', 'failed', 'publishing', 'scheduled'],
+        enum: ['success', 'failed', 'publishing', 'scheduled', 'waiting_confirmation'],
       },
       all: {
         type: 'boolean',
