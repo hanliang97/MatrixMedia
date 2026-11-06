@@ -56,14 +56,18 @@
           stroke-linecap="round"
         />
         <g v-for="ds in visibleDatasets" :key="'pts' + ds.key">
-          <circle
-            v-for="(v, i) in ds.values"
-            :key="i"
-            :cx="xPos(i)"
-            :cy="yPos(v)"
-            :r="hoverIndex === i ? 4 : 2"
-            :fill="ds.color"
-          />
+          <template v-for="(v, i) in ds.values">
+            <circle
+              v-if="v != null"
+              :key="i"
+              :cx="xPos(i)"
+              :cy="yPos(v)"
+              :r="hoverIndex === i ? 4 : 2"
+              :fill="ds.filled && ds.filled[i] ? 'transparent' : ds.color"
+              :stroke="ds.filled && ds.filled[i] ? ds.color : 'none'"
+              stroke-width="1.5"
+            />
+          </template>
         </g>
         <line
           v-if="hoverIndex >= 0"
@@ -87,7 +91,12 @@
         >
           <i class="legend-dot" :style="{ background: ds.color }"></i>
           <span class="tip-name">{{ ds.name }}</span>
-          <span class="tip-value">{{ formatNumber(ds.values[hoverIndex]) }}</span>
+          <span class="tip-value">{{
+            ds.values[hoverIndex] == null
+              ? "—"
+              : (ds.filled && ds.filled[hoverIndex] ? "≈" : "") +
+                formatNumber(ds.values[hoverIndex])
+          }}</span>
         </div>
       </div>
     </div>
@@ -202,10 +211,19 @@ export default {
       return this.padT + this.innerH * (1 - (v || 0) / this.yMax);
     },
     linePath(ds) {
-      const pts = ds.values
-        .map((v, i) => `${this.xPos(i).toFixed(1)},${this.yPos(v).toFixed(1)}`)
-        .join(" ");
-      return pts ? `M${pts.replace(/ /g, " L")}` : "";
+      // null = 该日未采集（见 statsUtils.pickDaily）：在此断开折线，不要把缺日画成 0
+      const segments = [];
+      let cur = [];
+      ds.values.forEach((v, i) => {
+        if (v == null) {
+          if (cur.length > 1) segments.push(cur);
+          cur = [];
+        } else {
+          cur.push(`${this.xPos(i).toFixed(1)},${this.yPos(v).toFixed(1)}`);
+        }
+      });
+      if (cur.length > 1) segments.push(cur);
+      return segments.map((seg) => `M${seg.join(" L")}`).join(" ");
     },
     onMove(e) {
       const rect = e.currentTarget.getBoundingClientRect();

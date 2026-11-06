@@ -50,3 +50,5 @@ jobs:
           yarn test:puppeteer-cancel
           # 数据统计（头条作品列表一次拉全 + 评论数累加）
           yarn test:toutiao-stats
+          # 数据趋势日视图：缺日补齐（前一日数值 + 空心点标记）
+          yarn test:stats-trend
