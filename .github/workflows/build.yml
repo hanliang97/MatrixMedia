@@ -22,11 +22,14 @@ jobs:
           echo "owner-name=$OWNER_NAME" >> $GITHUB_OUTPUT
           echo "repo-name=$REPO_NAME" >> $GITHUB_OUTPUT
         shell: bash
+      - name: Rewrite lockfile to official registry
+        # yarn v1 优先按 yarn.lock 的 resolved URL 下载（本地生成时写死了
+        # npmmirror），海外 runner 访问该镜像不稳定（ESOCKETTIMEDOUT/502），
+        # 安装前统一改写为官方源；仓库内 lockfile 保持 npmmirror 不动
+        shell: bash
+        run: sed -i.bak 's|https://registry.npmmirror.com|https://registry.npmjs.org|g' yarn.lock
       - name: Install dependencies
-        # 覆盖仓库 .yarnrc 里的 npmmirror 源：GitHub Actions runner 在海外，
-        # 访问国内镜像不稳定（ESOCKETTIMEDOUT），CI 统一走官方源
         env:
-          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (Windows)
@@ -45,9 +48,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "20.15.1"
+      - name: Rewrite lockfile to official registry
+        shell: bash
+        run: sed -i.bak 's|https://registry.npmmirror.com|https://registry.npmjs.org|g' yarn.lock
       - name: Install dependencies
         env:
-          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (macOS x64 + arm64)
@@ -70,9 +75,11 @@ jobs:
         uses: actions/setup-node@v5
         with:
           node-version: "20.15.1"
+      - name: Rewrite lockfile to official registry
+        shell: bash
+        run: sed -i.bak 's|https://registry.npmmirror.com|https://registry.npmjs.org|g' yarn.lock
       - name: Install dependencies
         env:
-          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (Linux x64 + arm64, all targets)
