@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { normalizeCoverForUpload } from "../coverCompat.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
 import { attachDyProductLink } from "./dyProductLink.js";
 import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
@@ -58,6 +59,8 @@ async function uploadDyCustomCover(page, coverPath) {
   if (!fs.existsSync(coverPath)) {
     throw new Error(`封面文件不存在: ${coverPath}`);
   }
+  // 封面归一：非 3:4 源图居中裁切成 1080×1440 jpg（失败回退原图，不阻断发布）
+  coverPath = await normalizeCoverForUpload(coverPath);
 
   // 记录设置前封面槽位的 img src：平台自动截帧的默认封面本来就在抖音 CDN 域名下，
   // 只判「槽位出现 douyin 图」会让上传失败也通过校验；必须对比前后 src 变化（同 ks/sph）

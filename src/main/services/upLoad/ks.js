@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { normalizeCoverForUpload } from "../coverCompat.js";
 import {
   readPageUrl,
   replyPublishFailure,
@@ -138,6 +139,8 @@ async function uploadKsCustomCover(page, coverPath) {
   if (!fs.existsSync(coverPath)) {
     throw new Error(`封面文件不存在: ${coverPath}`);
   }
+  // 封面归一：非 3:4 源图居中裁切成 1080×1440 jpg（失败回退原图，不阻断发布）
+  coverPath = await normalizeCoverForUpload(coverPath);
 
   await page
     .waitForFunction(

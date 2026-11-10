@@ -1,5 +1,6 @@
 import path from "path";
 import fs from "fs";
+import { normalizeCoverForUpload } from "../coverCompat.js";
 import maybeClosePublishWindow from "./closeWindow.js";
 import { head, matchesHead, replaceAllText } from "./textReadback.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
@@ -164,6 +165,9 @@ async function uploadSphCustomCover(page, coverPath) {
   if (!fs.existsSync(coverPath)) {
     throw new Error(`封面文件不存在: ${coverPath}`);
   }
+  // 封面归一：视频号 file input 只收 jpeg/jpg/png，非 3:4 源图居中裁切成
+  // 1080×1440 jpg（失败回退原图，不阻断发布）
+  coverPath = await normalizeCoverForUpload(coverPath);
 
   const srcBefore = await page.evaluate(() => {
     const app = document.querySelector("wujie-app.wujie_iframe");
