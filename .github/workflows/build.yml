@@ -9,9 +9,9 @@ jobs:
   build-windows:
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20.15.1"
       - name: Extract repository name
@@ -23,6 +23,11 @@ jobs:
           echo "repo-name=$REPO_NAME" >> $GITHUB_OUTPUT
         shell: bash
       - name: Install dependencies
+        # 覆盖仓库 .yarnrc 里的 npmmirror 源：GitHub Actions runner 在海外，
+        # 访问国内镜像不稳定（ESOCKETTIMEDOUT），CI 统一走官方源
+        env:
+          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (Windows)
         run: yarn build
@@ -35,12 +40,15 @@ jobs:
   build-mac:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20.15.1"
       - name: Install dependencies
+        env:
+          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (macOS x64 + arm64)
         env:
@@ -57,12 +65,15 @@ jobs:
     # （v0.13.5 起挂，deb/AppImage 不受影响）；改 ASCII 路径会影响存量 rpm/deb 升级，另行处理
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Set up Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: "20.15.1"
       - name: Install dependencies
+        env:
+          YARN_CONFIG_REGISTRY: https://registry.npmjs.org
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
         run: yarn
       - name: Build Electron app (Linux x64 + arm64, all targets)
         # CI 负责 macOS 本地打不了的产物：deb / rpm，以及 arm64 全部格式
@@ -83,7 +94,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           fetch-tags: true
