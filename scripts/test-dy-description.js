@@ -31,7 +31,7 @@ buildSync({
   external: ["electron"],
 });
 
-const { fillDyDescription, DY_EDITOR_SELECTOR } = require(outfile);
+const { fillDyDescription, DY_EDITOR_SELECTOR, checkDescriptionOnce } = require(outfile);
 
 // 创作声明新旧文案兼容（shared 模块单独打包）
 const csOutfile = path.join(outDir, "creativeStatement.cjs");
@@ -215,6 +215,83 @@ function createFakePage({
     await fillDyDescription(page, "", false);
     assert.strictEqual(editor.text, "", "空简介也应清掉旧内容");
     assert.strictEqual(calls.typeCount, 0, "空简介不应触发键盘输入");
+  }
+
+  // ---------- 8. checkDescriptionOnce：话题胶囊改写场景 ----------
+  // 注：前 12 字用纯文本（无 #），让话题 # 落在 suffix 窗口，才是胶囊改写的真实命中路径。
+
+  // 8a. 话题 # 被胶囊吃掉后仍判定成功（landed 里 # 消失）
+  {
+    const expected = "这是一段较长的简介文案用来测试话题胶囊场景 #标签A #标签B";
+    // 抖音胶囊化后 # 消失
+    const landed = "这是一段较长的简介文案用来测试话题胶囊场景 标签A 标签B";
+    assert.ok(
+      checkDescriptionOnce(landed, expected),
+      "话题胶囊去掉 # 后仍应判定为成功"
+    );
+  }
+
+  // 8b. 胶囊导致空格从一个变成两个，仍判定成功
+  {
+    const expected = "这是一段较长的简介文案用来测试话题胶囊场景 #标签A #标签B";
+    const landed = "这是一段较长的简介文案用来测试话题胶囊场景  标签A  标签B";
+    assert.ok(
+      checkDescriptionOnce(landed, expected),
+      "胶囊导致的空格变化仍应判定为成功"
+    );
+  }
+
+  // 8c. 真实的残留叠加（前残留 + 本次文案）仍判定失败
+  {
+    const expected = "这是一段较长的简介文案用来测试话题胶囊场景 #标签A #标签B";
+    // 旧草稿残留在前面
+    const landed = "上次旧草稿内容这是一段较长的简介文案用来测试话题胶囊场景 #标签A #标签B";
+    assert.ok(
+      !checkDescriptionOnce(landed, expected),
+      "前残留叠加仍应判定为失败"
+    );
+  }
+
+  // 8d. 只写了一半仍判定失败
+  {
+    const expected = "这是一段较长的简介文案用来测试话题胶囊场景 #标签A #标签B";
+    const landed = "这是一段较长的简介";
+    assert.ok(
+      !checkDescriptionOnce(landed, expected),
+      "只写一半仍应判定为失败"
+    );
+  }
+
+  // 8e. 话题 # 落在前 12 字窗口内：prefix 锚点同样必须容忍胶囊改写
+  // （slice(0,12) 可能正好切到「#标签」，胶囊吃掉 # 后 startsWith 在原始文本上必然失败）
+  {
+    const expected = "#标签A 这是一段较长的简介文案用来测试前段话题场景";
+    const landed = "标签A 这是一段较长的简介文案用来测试前段话题场景";
+    assert.ok(
+      checkDescriptionOnce(landed, expected),
+      "前 12 字内含话题胶囊时仍应判定为成功"
+    );
+  }
+
+  // 8f. 前段话题胶囊场景下，前残留叠加仍必须拦（归一不能变成什么都放行）
+  {
+    const expected = "#标签A 这是一段较长的简介文案用来测试前段话题场景";
+    const landed = "旧残留内容标签A 这是一段较长的简介文案用来测试前段话题场景";
+    assert.ok(
+      !checkDescriptionOnce(landed, expected),
+      "前段话题胶囊场景下前残留叠加仍应判定为失败"
+    );
+  }
+
+  // 8g. 前段话题胶囊场景下，同文案叠加成双仍必须拦
+  {
+    const expected = "#标签A 这是一段较长的简介文案用来测试前段话题场景";
+    const landed =
+      "标签A 这是一段较长的简介文案用来测试前段话题场景标签A 这是一段较长的简介文案用来测试前段话题场景";
+    assert.ok(
+      !checkDescriptionOnce(landed, expected),
+      "前段话题胶囊场景下同文案叠加成双仍应判定为失败"
+    );
   }
 
   console.log("dy-description: 全部断言通过");

@@ -43,6 +43,10 @@ export function joinDescriptionAndTags(description, tags) {
  */
 export const PLATFORM_TAG_LIMITS = {
   快手: 4,
+  // 抖音：编辑器内每个 #话题 均为独立 chip，实测第 5 个起平台弹出「最多添加4个话题」
+  // 并阻断发布（发布按钮点击被吞，页面停在发布页）。同一账号裁到 4 个后立即发布成功。
+  // 此为平台硬限制，实测确认。
+  抖音: 4,
 };
 
 export function formatTagsForPlatform(platform, tags) {

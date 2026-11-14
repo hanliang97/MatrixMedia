@@ -222,13 +222,31 @@ async function selectDyCreativeStatement(page, data) {
     return false;
   });
   if (!opened) {
-    throw new Error("未找到抖音「请选择自主声明」入口");
+    const e = new Error(
+      "未找到抖音「请选择自主声明」入口（确定性失败：页面上无此入口元素，无需重试）"
+    );
+    e.dyDeterministic = true;
+    throw e;
   }
 
-  await page.waitForSelector(".semi-modal-body .semi-radio-addon", {
-    visible: true,
-    timeout: WAIT_SELECTOR_APPEAR_MS,
-  });
+  // 等待弹窗及选项出现；超时 = 下拉未真正打开，属确定性失败
+  try {
+    await page.waitForSelector(".semi-modal-body .semi-radio-addon", {
+      visible: true,
+      timeout: WAIT_SELECTOR_APPEAR_MS,
+    });
+  } catch (_waitErr) {
+    const modalOpen = await page
+      .evaluate(() => Boolean(document.querySelector(".semi-modal-body")))
+      .catch(() => false);
+    const e = new Error(
+      modalOpen
+        ? `抖音自主声明弹窗已出现但选项未加载（期望选项：${label}，确定性失败，不重试）`
+        : `抖音自主声明下拉/弹窗未打开（期望选项：${label}，确定性失败，不重试）`
+    );
+    e.dyDeterministic = true;
+    throw e;
+  }
 
   const picked = await page.evaluate((text) => {
     const modal = document.querySelector(".semi-modal-body");
@@ -245,7 +263,11 @@ async function selectDyCreativeStatement(page, data) {
   }, label);
 
   if (!picked) {
-    throw new Error(`未找到抖音自主声明选项: ${label}`);
+    const e = new Error(
+      `抖音自主声明弹窗中无目标选项「${label}」（确定性失败：弹窗里没有此选项文案，无需重试）`
+    );
+    e.dyDeterministic = true;
+    throw e;
   }
   await page.waitForTimeout(400);
 
@@ -268,15 +290,28 @@ async function selectDyCreativeStatement(page, data) {
 }
 
 async function selectDyCreativeStatementWithRetry(page, data, maxMs = 60000) {
-  const deadline = Date.now() + maxMs;
+  // 确定性失败（入口不存在、弹窗未打开、选项不在弹窗里）不重试，直接抛出。
+  // 只有瞬时失败（页面仍在加载导致弹窗短暂不可得）才有限重试，最多 3 次。
+  const MAX_TRANSIENT_RETRIES = 3;
+  const RETRY_INTERVAL_MS = 2000;
+  let attempt = 0;
   let lastErr = null;
+  const deadline = Date.now() + maxMs;
   while (Date.now() < deadline) {
     try {
       await selectDyCreativeStatement(page, data);
       return;
     } catch (e) {
+      if (e.dyDeterministic) {
+        // 确定性失败：立即上抛，不再重试
+        throw e;
+      }
       lastErr = e;
-      await page.waitForTimeout(2000);
+      attempt += 1;
+      if (attempt >= MAX_TRANSIENT_RETRIES) {
+        throw lastErr;
+      }
+      await page.waitForTimeout(RETRY_INTERVAL_MS);
     }
   }
   throw lastErr || new Error("抖音自主声明选择失败");
@@ -331,9 +366,26 @@ export function checkDescriptionOnce(landed, expected) {
   if (!landed) return false;
   const prefix = expected.slice(0, 12);
   const suffix = expected.length > 12 ? expected.slice(-12) : "";
-  if (prefix && !landed.startsWith(prefix)) return false;
-  if (prefix && landed.indexOf(prefix, 1) !== -1) return false;
-  if (suffix && !landed.includes(suffix)) return false;
+  // 话题 # 转胶囊后 # 会消失、空白被吃掉，因此锚点比对同时看「原始」和「归一后」两种视图。
+  // normalizeDyEditorText 只抹掉改写差异（去 # / 去空白），不放宽内容本身。
+  const normLanded = normalizeDyEditorText(landed);
+  const normPrefix = normalizeDyEditorText(prefix);
+  const normSuffix = normalizeDyEditorText(suffix);
+  // ① 前缀锚定：锚在位置 0，原始或归一后命中其一即可（防前残留叠加）
+  if (prefix && !landed.startsWith(prefix) && !(normPrefix && normLanded.startsWith(normPrefix))) {
+    return false;
+  }
+  // ② 前缀不得二次出现：任一视图检测到二次出现即拦（防同文案叠加成双）
+  if (
+    prefix &&
+    (landed.indexOf(prefix, 1) !== -1 ||
+      (normPrefix && normLanded.indexOf(normPrefix, 1) !== -1))
+  ) {
+    return false;
+  }
+  // ③ 尾部锚点：同样在归一后文本上比对（防只写了一半）
+  if (normSuffix && !normLanded.includes(normSuffix)) return false;
+  // ④ 长度窗口：下限防只写一半，上限防成双
   if (landed.length < expected.length - 12) return false;
   return landed.length <= Math.ceil(expected.length * 1.3) + 8;
 }

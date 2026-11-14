@@ -4,7 +4,7 @@
  * 验证视频元数据文本拼接的话题上限处理：
  * 1. 快手超过 4 个话题时裁到 4 个（平台硬限制，超出会导致本次发布被拒）
  * 2. 快手 <= 4 个话题时原样保留，不影响正常链路
- * 3. 其它平台不受该上限影响（抖音/视频号/小红书维持原有行为）
+ * 3. 抖音同样受 4 个话题上限约束（实测第 5 个起平台阻断发布），视频号/小红书不受影响
  * 4. 哔哩哔哩仍然不带 # 前缀
  */
 
@@ -71,14 +71,28 @@ const fiveTags = ["贰臣传", "历史", "明清史", "衣冠所向", "历史冷
     assert.strictEqual(text.description, "只有正文");
   }
 
-  // 4. 抖音 5 个话题 → 不受快手上限影响（本次只约束快手）
+  // 4. 抖音 5 个话题 → 裁到 4 个（平台硬限制），第 5 个被丢弃并记入 warn
   {
+    const warnMessages = [];
+    const origWarn = console.warn;
+    console.warn = (...args) => warnMessages.push(args.join(" "));
     const text = buildPlatformVideoText("抖音", {
       title: "标题",
       description: "正文",
       tags: fiveTags,
     });
-    assert.strictEqual(countTopics(text.description), 5);
+    console.warn = origWarn;
+
+    assert.strictEqual(countTopics(text.description), 4, "抖音描述最多 4 个话题");
+    assert.ok(
+      !text.description.includes("#历史冷知识"),
+      "第 5 个话题超出抖音上限，不应拼进描述"
+    );
+    assert.ok(warnMessages.length > 0, "超出抖音上限时必须 console.warn");
+    assert.ok(
+      warnMessages.some((m) => m.includes("历史冷知识")),
+      "warn 信息必须包含被丢弃的话题名「历史冷知识」"
+    );
   }
 
   // 5. 视频号 / 小红书同样保持原行为
@@ -106,6 +120,7 @@ const fiveTags = ["贰臣传", "历史", "明清史", "衣冠所向", "历史冷
 
   // 7. 上限表本身：只登记已实测的硬限制平台
   assert.strictEqual(PLATFORM_TAG_LIMITS["快手"], 4);
+  assert.strictEqual(PLATFORM_TAG_LIMITS["抖音"], 4);
 
   console.log("test-video-metadata-tags: 全部断言通过");
 })().catch((e) => {
