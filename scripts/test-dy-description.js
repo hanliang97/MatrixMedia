@@ -10,6 +10,9 @@
  * 5. 编辑器缺失 → waitForSelector 抛错
  * 6. description 为空：只清空不写入也不报错
  * 7. ks 创作声明新旧文案兼容：「内容为AI生成」仍解析为 ai_generated，「含AI生成内容」为现行文案
+ * 8. 假清空回归（Slate state 残留）：绝不允许「旧+新」/「新+新」叠加成双
+ * 9. looksLikeDoubledLanding：叠加成双检测
+ * 10. fiber 不可得：verifyDyEditorEmpty 双视图判定 + 端到端不无限失败、不叠加
  */
 
 const path = require("path");
@@ -31,7 +34,13 @@ buildSync({
   external: ["electron"],
 });
 
-const { fillDyDescription, DY_EDITOR_SELECTOR, checkDescriptionOnce } = require(outfile);
+const {
+  fillDyDescription,
+  DY_EDITOR_SELECTOR,
+  checkDescriptionOnce,
+  looksLikeDoubledLanding,
+  verifyDyEditorEmpty,
+} = require(outfile);
 
 // 创作声明新旧文案兼容（shared 模块单独打包）
 const csOutfile = path.join(outDir, "creativeStatement.cjs");
@@ -69,16 +78,46 @@ function createFakePage({
   execCommandLands = true,
   editorPresent = true,
   restoredDraft = "",
+  // Slate fiber 模拟：
+  //   undefined = 默认提供，且随 DOM 同步（绝大多数用例）
+  //   null      = 拿不到 fiber（Windows 部分机器），验证「未验证清空」分支
+  //   { staleText: true } = DOM 已空但 Slate state 仍是旧值（假清空回归场景）
+  slateBehavior = undefined,
 } = {}) {
   const editor = {
     text: restoredDraft,
+    // Slate 内部 state（与 DOM 的 editor.text 分离，可故意不同步）
+    slateText: restoredDraft,
+    slateExtra: [],
     get textContent() {
       return this.text;
     },
+    // dySlateOp / forceOverwriteClear 用 DOM 元素方法定位内层 contenteditable；
+    // mock 里 editor 自身就是 contenteditable 节点
+    matches: (s) => s === '[contenteditable="true"]',
+    querySelector: () => null,
     focus() {},
   };
   const calls = { typeCount: 0, execCommands: [], keyPresses: [] };
   const kbd = { mod: null, selectedAll: false };
+  // 键盘全选+Backspace 只删 DOM、Slate state 不动 —— 这正是线上假清空的成因。
+  // staleText 显式模拟；null（拿不到 fiber 的 Windows 机器）同类机器同样命中。
+  const keyboardClearLeavesStale =
+    Boolean(slateBehavior && slateBehavior.staleText) || slateBehavior === null;
+  // Slate 以内部 state 为准：输入经 Slate 管线写入 state，再重渲染 DOM。
+  // DOM 被「假清空」后与 state 不一致，下一次输入会把旧 state 渲染回来 → 叠加成双。
+  const slateRender = () => {
+    editor.text = editor.slateText;
+  };
+  const slateType = (t) => {
+    editor.slateText += t;
+    slateRender();
+  };
+  const slateClear = () => {
+    editor.slateText = "";
+    editor.slateExtra = [];
+    editor.text = "";
+  };
   const fakeWindow = {
     getSelection: () => ({
       selectAllChildren: () => {},
@@ -93,22 +132,64 @@ function createFakePage({
     execCommand: (cmd, _a, text) => {
       calls.execCommands.push(cmd);
       if (cmd === "delete") {
-        // Windows 后台窗口场景：execCommand 依赖文档焦点，静默 no-op
-        if (execCommandDeleteWorks) editor.text = "";
-        return execCommandDeleteWorks;
+        // Windows 后台窗口场景：execCommand 依赖文档焦点，静默 no-op；
+        // 生效时走 Slate 编辑管线，state 与 DOM 一起清
+        if (!execCommandDeleteWorks) return false;
+        slateClear();
+        return true;
       }
-      if (cmd === "insertText" && execCommandLands) {
-        editor.text = String(text || "");
+      if (cmd === "selectAll") {
+        return true;
+      }
+      if (cmd === "insertText") {
+        if (!execCommandLands) return false;
+        editor.slateText = String(text || "");
+        editor.slateExtra = [];
+        slateRender();
         return true;
       }
       return false;
     },
   };
+  // React fiber：挂在 editor 上，供 readDySlateState / dySlateOp 向上遍历命中。
+  // 注意必须可枚举（真实 React fiber 就是普通可枚举属性），否则 Object.keys 找不到。
+  // memoizedProps.text/textExtra 用 getter 反映「当前」state；onChange 真实生效。
+  if (slateBehavior !== null) {
+    editor.__reactFiber$fake = {
+      memoizedProps: {},
+      return: {
+        memoizedProps: {
+          get text() {
+            return editor.slateText;
+          },
+          get textExtra() {
+            return editor.slateExtra;
+          },
+          onChange: (...args) => {
+            if (args[0] && typeof args[0] === "object") {
+              // onChange({text, textExtra})
+              editor.slateText = String(args[0].text ?? "");
+              editor.slateExtra = Array.isArray(args[0].textExtra)
+                ? args[0].textExtra
+                : [];
+            } else {
+              // onChange("") / onChange("", [])
+              editor.slateText = String(args[0] ?? "");
+              editor.slateExtra =
+                args.length > 1 && Array.isArray(args[1]) ? args[1] : [];
+            }
+            slateRender();
+          },
+        },
+        return: null,
+      },
+    };
+  }
   const page = {
     keyboard: {
       type: async (t) => {
         calls.typeCount += 1;
-        if (typeLands) editor.text += t;
+        if (typeLands) slateType(t);
       },
       down: async (key) => {
         kbd.mod = key;
@@ -121,12 +202,17 @@ function createFakePage({
         if (key === "a" && kbd.mod) kbd.selectedAll = true;
         if (key === "Backspace") {
           if (kbd.selectedAll) {
-            editor.text = "";
             kbd.selectedAll = false;
+            if (keyboardClearLeavesStale) {
+              editor.text = ""; // 假清空：只删 DOM，Slate state 保留旧值
+            } else {
+              slateClear();
+            }
           }
         }
       },
     },
+    async waitForTimeout() {},
     async click(sel) {
       if (sel === DY_EDITOR_SELECTOR && !editorPresent)
         throw new Error("no such element");
@@ -292,6 +378,100 @@ function createFakePage({
       !checkDescriptionOnce(landed, expected),
       "前段话题胶囊场景下同文案叠加成双仍应判定为失败"
     );
+  }
+
+  // ---------- 9. 假清空回归：Slate state 残留时绝不允许叠加成双 ----------
+  {
+    const { page, editor } = createFakePage({
+      slateBehavior: { staleText: true },
+      restoredDraft: "旧简介内容",
+    });
+    await fillDyDescription(page, "新简介", false);
+    assert.strictEqual(
+      editor.text,
+      "新简介",
+      "假清空场景下最终必须只写入新简介"
+    );
+    assert.ok(!editor.text.includes("旧简介"), "旧内容不得残留");
+    assert.ok(
+      !looksLikeDoubledLanding(editor.text, "新简介"),
+      "绝不允许出现「旧+新」或「新+新」的双份"
+    );
+  }
+
+  // ---------- 10. looksLikeDoubledLanding：叠加成双检测 ----------
+  {
+    assert.strictEqual(
+      looksLikeDoubledLanding("新简介新简介", "新简介"),
+      true,
+      "同文案连续出现两次应判定为叠加成双"
+    );
+    assert.strictEqual(
+      looksLikeDoubledLanding("新简介", "新简介"),
+      false,
+      "恰好等于期望文案不是叠加"
+    );
+    assert.strictEqual(
+      looksLikeDoubledLanding("完全不同的内容", "新简介"),
+      false,
+      "完全不同的内容不是叠加"
+    );
+  }
+
+  // ---------- 11. fiber 不可得：双视图判定 + 不无限失败、不叠加 ----------
+  // 11a. DOM 空但拿不到 Slate fiber → cleared:true / verified:false
+  {
+    const { page, editor } = createFakePage({
+      slateBehavior: null,
+      restoredDraft: "旧内容",
+    });
+    editor.text = "";
+    const r = await verifyDyEditorEmpty(page);
+    assert.strictEqual(r.cleared, true, "DOM 空应判定 cleared:true");
+    assert.strictEqual(
+      r.verified,
+      false,
+      "拿不到 fiber 时不得宣称 verified:true"
+    );
+  }
+  // 11b. DOM 空但 Slate state 残留（假清空）→ 不得判定 cleared
+  {
+    const { page, editor } = createFakePage({
+      slateBehavior: { staleText: true },
+      restoredDraft: "旧内容",
+    });
+    editor.text = ""; // 键盘全选只清 DOM
+    const r = await verifyDyEditorEmpty(page);
+    assert.strictEqual(
+      r.cleared,
+      false,
+      "Slate state 仍残留旧值时必须判未清空（假清空拦截）"
+    );
+  }
+  // 11c. 双视图都空 → cleared:true / verified:true
+  {
+    const { page, editor } = createFakePage({});
+    editor.text = "";
+    editor.slateText = "";
+    editor.slateExtra = [];
+    assert.deepStrictEqual(
+      await verifyDyEditorEmpty(page),
+      { cleared: true, verified: true }
+    );
+  }
+  // 11d. 端到端：拿不到 fiber 时不得无限失败，也不得叠加成双
+  {
+    const { page, editor } = createFakePage({
+      slateBehavior: null,
+      restoredDraft: "旧简介内容",
+    });
+    await fillDyDescription(page, DESC, false);
+    assert.strictEqual(
+      editor.text,
+      DESC,
+      "fiber 不可得的机器也必须能正常写入新简介"
+    );
+    assert.ok(!editor.text.includes("旧简介"), "旧内容不得残留");
   }
 
   console.log("dy-description: 全部断言通过");

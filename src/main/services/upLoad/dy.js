@@ -391,16 +391,16 @@ export function checkDescriptionOnce(landed, expected) {
 }
 
 /**
- * 尝试用抖音简介编辑器的 Slate onChange 直接重置状态。
- * mode: object → onChange({text:"",textExtra:[]})（现网生效）；
- *       emptyArray → onChange("",[])；empty → onChange("")（兼容旧实现）。
- * 只返回“调用是否成功”，是否真正清空由 clearDyEditor 回读判定。
+ * 页面上下文内共用的 Slate fiber 探测：向上最多 60 层找带 text + onChange 的
+ * memoizedProps。op="read" 读 Slate state；op="clear" 按 mode 重置 state。
+ * 单独抽出来是因为 page.evaluate 的函数会被序列化、拿不到外部闭包，
+ * readDySlateState 与 trySlateClear 只能共用这一份遍历逻辑。
  */
-async function trySlateClear(page, mode) {
+async function dySlateOp(page, { op = "read", mode } = {}) {
   return page
-    .evaluate(({ sel, mode }) => {
+    .evaluate(({ sel, op, mode }) => {
       const root = document.querySelector(sel);
-      if (!root) return { ok: false, reason: "no-root" };
+      if (!root) return { available: false, reason: "no-root" };
       const editable = root.matches('[contenteditable="true"]')
         ? root
         : root.querySelector('[contenteditable="true"]');
@@ -410,7 +410,7 @@ async function trySlateClear(page, mode) {
           k.startsWith("__reactFiber$") ||
           k.startsWith("__reactInternalInstance$")
       );
-      if (!key) return { ok: false, reason: "no-fiber" };
+      if (!key) return { available: false, reason: "no-fiber" };
       let slate = null;
       for (let fiber = node[key], i = 0; fiber && i < 60; i++, fiber = fiber.return) {
         const p = fiber.memoizedProps || {};
@@ -419,7 +419,13 @@ async function trySlateClear(page, mode) {
           break;
         }
       }
-      if (!slate) return { ok: false, reason: "no-editor-props" };
+      if (!slate) return { available: false, reason: "no-editor-props" };
+      const state = {
+        available: true,
+        text: String(slate.text ?? ""),
+        textExtraLen: Array.isArray(slate.textExtra) ? slate.textExtra.length : -1,
+      };
+      if (op !== "clear") return state;
       const info = {
         textType: typeof slate.text,
         textPreview: String(slate.text || "").slice(0, 40),
@@ -431,13 +437,114 @@ async function trySlateClear(page, mode) {
         if (mode === "empty") slate.onChange("");
         else if (mode === "emptyArray") slate.onChange("", []);
         else if (mode === "object") slate.onChange({ text: "", textExtra: [] });
-        else return { ok: false, reason: "bad-mode" };
+        else return { available: true, ok: false, reason: "bad-mode", info };
       } catch (e) {
-        return { ok: false, reason: String(e && e.message), info };
+        return { available: true, ok: false, reason: String(e && e.message), info };
       }
-      return { ok: true, info, mode };
-    }, { sel: DY_EDITOR_SELECTOR, mode })
-    .catch((e) => ({ ok: false, reason: String(e && e.message) }));
+      return { available: true, ok: true, info, mode };
+    }, { sel: DY_EDITOR_SELECTOR, op, mode })
+    .catch((e) => ({ available: false, reason: String(e && e.message) }));
+}
+
+/**
+ * 判定回读是否「叠加成双」：expected 连续出现两次，或长度接近两倍。
+ * 命中说明清空失效（Slate 旧 state 被重渲染），此时应重清而不是继续写。
+ *
+ * 注意：**不能**只看长度比例。3 字文案 + 3 字前残留也正好是 2 倍，
+ * 那是「残留」不是「双份」，误判会跳过本该生效的 insertText 兜底。
+ * 因此长度比例只在「文本确有重复痕迹」时才算数：要求首尾都命中 expected。
+ */
+export function looksLikeDoubledLanding(landed, expected) {
+  const l = normalizeDyEditorText(landed || "");
+  const e = normalizeDyEditorText(expected || "");
+  if (!l || !e) return false;
+  if (l.includes(e + e)) return true;
+  // 胶囊改写可能让 e+e 对不上，但必须同时满足：以 expected 开头 且 以 expected 结尾
+  // （即首尾各一份，中间被吃掉），且总长度落在两倍附近。
+  const headTailDoubled =
+    l.startsWith(e) &&
+    l.endsWith(e) &&
+    l.length >= e.length * 1.8 &&
+    l.length <= e.length * 2.2;
+  return headTailDoubled && l.length >= e.length * 2 - 2;
+}
+
+/**
+ * 尝试用抖音简介编辑器的 Slate onChange 直接重置状态。
+ * mode: object → onChange({text:"",textExtra:[]})（现网生效）；
+ *       emptyArray → onChange("",[])；empty → onChange("")（兼容旧实现）。
+ * 只返回“调用是否成功”，是否真正清空由 clearDyEditor 双视图回读判定。
+ */
+async function trySlateClear(page, mode) {
+  const r = await dySlateOp(page, { op: "clear", mode });
+  if (r && r.ok) return r;
+  return {
+    ok: false,
+    reason: (r && r.reason) || "unknown",
+    info: r && r.info,
+  };
+}
+
+/**
+ * 读取 Slate 内部 state（DOM textContent 之外的第二个视图）。
+ * 拿不到 fiber 时返回 {available:false}——Windows 上常见，调用方不得据此
+ * 认为“清空确定成功”。
+ */
+async function readDySlateState(page) {
+  const r = await dySlateOp(page, { op: "read" });
+  if (!r || !r.available) return { available: false };
+  return {
+    available: true,
+    text: String(r.text ?? ""),
+    textExtraLen: typeof r.textExtraLen === "number" ? r.textExtraLen : -1,
+  };
+}
+
+/**
+ * 双视图清空判定：DOM 回读为空 且（Slate 可得时）Slate state 也空。
+ * 只看 DOM 会把「键盘全选只删 DOM、Slate state 仍保留旧值」误判为已清空，
+ * 随后 type 会被 Slate 基于旧 state 重渲染成双份。
+ * Slate 不可得时只能凭 DOM 判定，返回 verified=false（清空未验证）。
+ */
+export async function verifyDyEditorEmpty(page) {
+  const domEmpty = !normalizeDyEditorText(await readDyEditorText(page));
+  if (!domEmpty) return { cleared: false, verified: false };
+  const slate = await readDySlateState(page);
+  if (!slate.available) return { cleared: true, verified: false };
+  const slateEmpty =
+    !normalizeDyEditorText(slate.text) && slate.textExtraLen <= 0;
+  return slateEmpty
+    ? { cleared: true, verified: true }
+    : { cleared: false, verified: false };
+}
+
+/**
+ * 强制全选覆盖清空：execCommand selectAll + delete + insertText("") 能穿透到
+ * Slate state，是键盘全选（只删 DOM 节点）失效时的兜底。
+ */
+async function forceOverwriteClearDyEditor(page) {
+  const ran = await page
+    .evaluate((sel) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      el.focus();
+      const editable = el.matches('[contenteditable="true"]')
+        ? el
+        : el.querySelector('[contenteditable="true"]') || el;
+      editable.focus();
+      try {
+        if (!document.execCommand) return false;
+        document.execCommand("selectAll");
+        document.execCommand("delete");
+        document.execCommand("insertText", false, "");
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }, DY_EDITOR_SELECTOR)
+    .catch(() => false);
+  if (!ran) return { cleared: false, verified: false };
+  return verifyDyEditorEmpty(page);
 }
 
 /**
@@ -461,7 +568,7 @@ async function clearDyEditorLegacy(page) {
       }
     }, DY_EDITOR_SELECTOR)
     .catch(() => {});
-  return !normalizeDyEditorText(await readDyEditorText(page));
+  return verifyDyEditorEmpty(page);
 }
 
 /**
@@ -493,7 +600,7 @@ async function clearDyEditor(page) {
     }
     if (cleared) {
       console.log(`[dy] 简介编辑器已清空（Slate onChange ${mode}）`);
-      return true;
+      return verifyDyEditorEmpty(page);
     }
   }
   console.log(
@@ -502,9 +609,10 @@ async function clearDyEditor(page) {
   );
 
   // 2) v0.13.5 实证手法：selection API + execCommand("delete")
-  if (await clearDyEditorLegacy(page)) {
+  const legacy = await clearDyEditorLegacy(page);
+  if (legacy.cleared) {
     console.log("[dy] 简介编辑器已通过 selectAllChildren+execCommand 清空");
-    return true;
+    return legacy;
   }
 
   // 3) 键盘兜底：点容器聚焦 → 全选 → 退格
@@ -519,9 +627,10 @@ async function clearDyEditor(page) {
   try {
     await page.keyboard.press("Backspace");
   } catch (_) {}
-  if (!normalizeDyEditorText(await readDyEditorText(page))) {
+  const keyboardCleared = await verifyDyEditorEmpty(page);
+  if (keyboardCleared.cleared) {
     console.log("[dy] 简介编辑器已通过键盘全选清空");
-    return true;
+    return keyboardCleared;
   }
 
   // 4) 换 Control 再试（部分 Chromium 构建把全选映射到 Ctrl）
@@ -532,7 +641,7 @@ async function clearDyEditor(page) {
     await page.keyboard.up("Control");
     await page.keyboard.press("Backspace");
   } catch (_) {}
-  return !normalizeDyEditorText(await readDyEditorText(page));
+  return verifyDyEditorEmpty(page);
 }
 
 /**
@@ -565,7 +674,7 @@ export async function fillDyDescription(
     } catch (_) {
       /* click 偶发失败不致命，clearDyEditor 内有 focus 兜底 */
     }
-    let cleared = true;
+    let cleared = { cleared: true, verified: true };
     if (legacyPath) {
       // B 流（v0.13.5 原版）：focus + selectAllChildren + execCommand 清空
       cleared = await clearDyEditorLegacy(page);
@@ -573,11 +682,25 @@ export async function fillDyDescription(
       // A 流：Slate 状态重置优先 → v0.13.5 手法 → 键盘全选兜底
       cleared = await clearDyEditor(page);
     }
-    if (!cleared) {
+    if (!cleared.cleared) {
       console.warn(
         `[dy] 第 ${attempt} 次清空简介编辑器失败（旧内容仍在），重试`
       );
       continue;
+    }
+    // 双视图判定：DOM 空但 Slate state 未知时，先做「强制全选覆盖」——
+    // execCommand selectAll+delete 走 Slate 编辑管线，能把 state 也清掉。
+    // 强制覆盖后只要 DOM 空就放行输入：拿不到 fiber 的 Windows 机器 verified
+    // 恒为 false，若因此跳过输入会永远发不出简介；残留叠加风险由回读 +
+    // looksLikeDoubledLanding 兜底拦截（命中即跳过 insertText、换手法重试）。
+    if (!cleared.verified) {
+      const forced = await forceOverwriteClearDyEditor(page);
+      if (!forced.cleared) {
+        console.warn(
+          `[dy] 第 ${attempt} 次清空未验证（Slate state 未知），强制覆盖后 DOM 仍非空，重试`
+        );
+        continue;
+      }
     }
     if (description) {
       await page.keyboard.type(description, { delay: 50 });
@@ -592,6 +715,14 @@ export async function fillDyDescription(
     if (landedOk(landed)) {
       if (attempt > 1) console.log(`[dy] 简介已在第 ${attempt} 次尝试写入`);
       return;
+    }
+    // 叠加成双 = 清空失效（Slate 旧 state 被重渲染）。此时 insertText 兜底是基于
+    // 旧选区/旧 state 写入，只会继续叠加，必须跳过兜底、直接换更强的清空手法重试。
+    if (looksLikeDoubledLanding(landed, expected)) {
+      console.warn(
+        `[dy] 第 ${attempt} 次简介叠加成双（期望 ${expected.length} 字，回读 ${landed.length} 字），判定为清空失效：跳过 insertText 兜底，改用强制覆盖清空后重试`
+      );
+      continue;
     }
     console.warn(
       `[dy] 第 ${attempt} 次简介未落地（期望 ${expected.length} 字，回读 ${landed.length} 字：「${landed.slice(0, 60)}」），execCommand insertText 兜底重写`
