@@ -8,7 +8,66 @@
       width="800px"
       @close="handleMetaClose"
     >
-      <p class="file-line"><strong>已选文件：</strong>{{ displayFileName }}</p>
+      <!-- 选视频行：小方块缩略图 + 文件名同行；方块/行内可直接拖入替换，
+           点击方块预览播放，点「替换」弹系统文件框（#72） -->
+      <div
+        class="file-field-row"
+        @dragover.prevent
+        @drop.prevent="onFileLineDrop"
+      >
+        <div
+          class="file-thumb"
+          :title="localFilePath ? '点击预览播放' : '点击选择或拖入视频文件'"
+          @click="localFilePath ? (previewVisible = true) : reselectVideoFile()"
+        >
+          <video
+            v-if="localFilePath"
+            :src="localFileUrl"
+            class="file-thumb-video"
+            muted
+            preload="metadata"
+          />
+          <i v-else class="el-icon-upload" />
+        </div>
+        <div class="file-meta">
+          <div class="file-name">
+            <template v-if="localFilePath">
+              <strong>已选文件：</strong>{{ displayFileName }}
+            </template>
+            <template v-else>点击选择或拖入视频文件</template>
+          </div>
+          <div class="file-tip" v-if="!localFilePath">
+            支持 mp4 / mov / mkv / avi / webm / m4v，选中后自动填入名称
+          </div>
+          <div class="file-actions" v-else>
+            <el-button type="text" size="mini" @click="reselectVideoFile"
+              >替换</el-button
+            >
+            <el-button
+              type="text"
+              size="mini"
+              @click="previewVisible = true"
+              >预览播放</el-button
+            >
+          </div>
+        </div>
+      </div>
+
+      <!-- 视频预览播放 -->
+      <el-dialog
+        title="视频预览"
+        :visible.sync="previewVisible"
+        width="640px"
+        append-to-body
+      >
+        <video
+          v-if="previewVisible && localFilePath"
+          :src="localFileUrl"
+          controls
+          autoplay
+          style="width: 100%; max-height: 70vh; background: #000"
+        />
+      </el-dialog>
       <el-form label-width="88px" class="meta-form">
         <el-form-item label="名称">
           <el-input
@@ -711,6 +770,7 @@ export default {
       metaVisible: false,
       platformVisible: false,
       attrsVisible: false,
+      previewVisible: false,
       localFilePath: "",
       bqTags: [],
       bqComposing: false,
@@ -768,6 +828,13 @@ export default {
   computed: {
     displayFileName() {
       return fileBaseName(this.localFilePath);
+    },
+    // 本地视频 file:// 地址（webSecurity:false 下渲染进程可直接播放）；
+    // 路径逐段 encode，避免文件名里的 #/& 等字符破坏 URL
+    localFileUrl() {
+      if (!this.localFilePath) return "";
+      const p = String(this.localFilePath).replace(/\\/g, "/");
+      return "file://" + p.split("/").map(encodeURIComponent).join("/");
     },
     coverFileName() {
       return this.form.coverPath ? fileBaseName(this.form.coverPath) : "";
@@ -963,9 +1030,9 @@ export default {
       }
       return "";
     },
+    // filePath 为空时直接弹窗、由拖入区选文件；有值则带入并重置表单
     open(filePath) {
-      if (!filePath) return;
-      this.localFilePath = filePath;
+      this.localFilePath = filePath || "";
       const defaultTitle = fileStem(filePath);
       this.bqTags = [];
       this.bqComposing = false;
@@ -986,6 +1053,26 @@ export default {
       this.republishContext = null;
       this.republishTextOtherName = "";
       this.metaVisible = true;
+    },
+    // 上一步：回到选文件环节，弹系统文件框换一个视频；换文件后按新文件重置表单
+    async reselectVideoFile() {
+      const path = await ipcRenderer.invoke("dialog:openVideoFile");
+      if (!path) return;
+      this.open(path);
+    },
+    // 已选文件行支持直接拖入视频文件替换（#72）
+    onFileLineDrop(e) {
+      const file =
+        (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ||
+        null;
+      if (!file) return;
+      const path = file.path || "";
+      const ext = path.split(".").pop().toLowerCase();
+      if (!["mp4", "mov", "mkv", "avi", "webm", "m4v"].includes(ext)) {
+        this.$message.warning("请拖入视频文件（支持 mp4/mov/mkv/avi/webm/m4v）");
+        return;
+      }
+      this.open(path);
     },
     openRepublish(payload = {}) {
       const filePath = payload.filePath || "";
@@ -1191,6 +1278,16 @@ export default {
         value: old.type === type ? String(old.value || "") : "",
         shortTitle: old.type === type ? String(old.shortTitle || "") : "",
       });
+      // 快手商品挂载尚未经真实账号实机验收（#31），选中商品时提醒用户去 QQ 群反馈
+      if (
+        String(type || "") === VIDEO_LINK_TYPES.PRODUCT &&
+        String(platform || "").includes("快手") &&
+        this.$message
+      ) {
+        this.$message.warning(
+          "快手商品挂载暂未经过真实账号完整测试，如遇挂载失败或异常，请加入作者QQ群反馈问题"
+        );
+      }
     },
     setPlatformVideoLinkValue(nodeId, platform, value) {
       this.$set(this.platformVideoLinks, nodeId, {
@@ -1628,6 +1725,10 @@ export default {
     },
 
     onMetaNext() {
+      if (!this.localFilePath) {
+        this.$message.warning("请先点击选择或拖入视频文件");
+        return;
+      }
       if (!this.form.bt1 || !this.form.bt1.trim()) {
         this.$message.warning("请填写标题");
         return;
@@ -2623,9 +2724,58 @@ export default {
   flex: 1;
   min-width: 0;
 }
-.file-line {
+.file-field-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
   margin-bottom: 16px;
+}
+.file-thumb {
+  flex: 0 0 112px;
+  width: 112px;
+  height: 112px;
+  border: 1px solid #dcdfe6;
+  border-radius: 4px;
+  background: #fafafa;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+}
+.file-thumb:hover {
+  border-color: #409eff;
+}
+.file-thumb .el-icon-upload {
+  font-size: 48px;
+  color: #c0c4cc;
+}
+.file-thumb-video {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  background: #000;
+  pointer-events: none;
+}
+.file-meta {
+  min-width: 0;
+}
+.file-name {
+  font-size: 14px;
+  color: #303133;
   word-break: break-all;
+}
+.file-tip {
+  margin-top: 4px;
+  font-size: 12px;
+  color: #909399;
+}
+.file-actions {
+  margin-top: 4px;
+}
+.file-actions .el-button {
+  padding: 0;
+  margin-right: 12px;
 }
 .cover-field-row {
   display: flex;

@@ -28,7 +28,14 @@ function pageFor(failurePhase, reason) {
         if (arg.phase === "selected") return { ok: true, value: arg.target };
         return { ok: true };
       }
-      events.push(["submit", arg]);
+      // main 演进后 ks.js 在挂车前还有描述填写等 evaluate：只有最终发布按钮
+      // （#setting-tours + div + 文案参数）才算「点了发布/取消」。
+      const src = String(fn && fn.toString ? fn.toString() : fn);
+      if (src.includes("#setting-tours + div")) {
+        events.push(["submit", arg]);
+        return { ok: true, via: "offline-harness" };
+      }
+      if (src.includes("#work-description-edit")) return "";
       return { ok: true, via: "offline-harness" };
     },
   };
@@ -149,6 +156,7 @@ async function main() {
   // 原样执行 ks.js 的发布分支，只替换外部系统依赖；挂车模块使用真实实现。
   const imports = {
     "./ksProductLink.js": url(moduleSource),
+    "../coverCompat.js": url(`export const normalizeCoverForUpload=async(p)=>p;`),
     "./publishOutcome.js": url(`
       export const readPageUrl=()=>"https://offline.invalid/publish";
       export async function replyPublishFailure(data){globalThis.__ksProductTest.push({kind:"failure",...data});}

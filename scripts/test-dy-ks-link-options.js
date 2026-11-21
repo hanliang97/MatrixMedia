@@ -57,6 +57,8 @@ async function main() {
   const importedNames = [...vue.matchAll(/^import\s+([\s\S]*?)\s+from\s+["'][^"']+["'];/gm)]
     .flatMap((match) => match[1].replace(/[{}]/g, "").split(",").map((x) => x.trim().split(/\s+as\s+/).pop()).filter(Boolean));
   const stubs = Object.fromEntries(importedNames.map((name) => [name, () => { throw new Error(`Unexpected unrelated dependency: ${name}`); }]));
+  // main 的账号分组改造后 loadPlatformWindowProducts 会构造 partition，给个确定性 stub
+  stubs.buildAccountPartitionOf = () => "test-partition";
   const context = vm.createContext({ ...stubs, ...links });
   vm.runInContext(script, context);
   const state = { platformVideoLinks: {}, $set: (o, k, v) => { o[k] = v; } };

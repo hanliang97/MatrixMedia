@@ -1,8 +1,14 @@
 <template>
-  <div class="page-shell video-manager-page">
+  <div
+    class="page-shell video-manager-page"
+    @dragover.prevent
+    @drop.prevent="onDropVideoFile"
+  >
     <div class="page-header">
       <h1 class="page-title">视频管理</h1>
-      <p class="page-desc">选择视频或目录发布，查看本地发布记录与审核状态</p>
+      <p class="page-desc">
+        选择视频或目录发布，也可直接把视频文件拖到本页发布；查看本地发布记录与审核状态
+      </p>
     </div>
 
     <div class="toolbar section-card el-card is-never-shadow">
@@ -290,11 +296,13 @@ export default {
       if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
       const isJuejinArticle = (item) =>
         item && item.textType === "article" && item.pt === "掘金";
-      // 只处理还没有拿到作品链接的记录：拉取该平台作品列表，按标题匹配命中即发布成功
+      // 只处理「还没拿到作品链接」或「状态仍是发布中」的记录：
+      // 拉取该平台作品列表，按标题匹配命中即发布成功（#71：已有链接但状态
+      // 卡在「发布中」的记录允许再次核对，否则手动补救路径不存在）
       const targets = (row.showAlltype || []).filter(
         (item) =>
           item &&
-          !item.videoLink &&
+          (!item.videoLink || item.publishStatus === "publishing") &&
           (item.textType !== "article" || isJuejinArticle(item))
       );
       if (!targets.length) {
@@ -332,6 +340,14 @@ export default {
               ...payload,
               status: true,
               videoLink: m.url || fallbackUrl,
+              // 命中即发布成功：与 syncPublishProgress 成功分支对齐，
+              // 否则标签渲染取 publishStatus 永远停在「发布中」（#71）
+              publishStatus:
+                item.publishMode === "draft" ? "draft" : "success",
+              publishSuccessCount:
+                this.normalizeCount(item.publishSuccessCount) + 1,
+              lastPublishMessage: "已通过作品列表确认发布",
+              lastPublishAt: Date.now(),
             },
           });
           okCount++;
@@ -691,6 +707,18 @@ export default {
         copyRow.publishAbnormalCount
       );
       copyRow.publishStatus = copyRow.publishStatus || "publishing";
+      // 「发布中」超过 10 分钟未收敛的记录标记为待核对，不能无限挂着（#71）；
+      // 只改展示层数据，底层记录仍可被「获取状态」重新确认
+      if (
+        copyRow.publishStatus === "publishing" &&
+        copyRow.lastPublishAt &&
+        Date.now() - Number(copyRow.lastPublishAt) > 10 * 60 * 1000
+      ) {
+        copyRow.publishStatus = "abnormal";
+        copyRow.lastPublishMessage =
+          copyRow.lastPublishMessage ||
+          "发布状态超过 10 分钟未确认，请点「获取状态」人工核对";
+      }
       return copyRow;
     },
     recordValue(value) {
@@ -796,7 +824,22 @@ export default {
       )
         return;
       const target = this.findLocalPublishRecord(donePayload);
-      if (!target || !target.row || !target.row.id) return;
+      if (!target || !target.row || !target.row.id) {
+        // 静默丢弃会导致记录永久停在「发布中」且无法排查（#71），打日志留痕
+        console.warn(
+          "[videoManager] 发布回执未匹配到本地记录，请核对标题/文件名/账号是否被改动:",
+          JSON.stringify({
+            pt: donePayload.pt,
+            textType: donePayload.textType,
+            textOtherName: donePayload.textOtherName,
+            selectedFile:
+              donePayload.selectedFile || this.getFileName(donePayload.filePath),
+            partition: donePayload.partition,
+            accountKey: recordAccountKeyOf(donePayload),
+          })
+        );
+        return;
+      }
       const row = this.fillPublishStats(target.row);
       if (donePayload.skipped) {
         await dataRequest({
@@ -906,11 +949,23 @@ export default {
     openGitHubStar() {
       window.open("https://github.com/hanliang97/MatrixMedia", "_blank");
     },
-    async selectVideoFile() {
-      const path = await ipcRenderer.invoke("dialog:openVideoFile");
-      if (path) {
-        this.$refs.localPublishRef.open(path);
+    selectVideoFile() {
+      // 直接弹发布弹窗，弹窗内拖入区/点击选择视频；不再先弹系统文件框
+      this.$refs.localPublishRef.open();
+    },
+    onDropVideoFile(e) {
+      // 拖拽视频文件到页面即可进入发布流程（#72），与「选择视频发布」同入口
+      const file =
+        (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) ||
+        null;
+      if (!file) return;
+      const path = file.path || "";
+      const ext = path.split(".").pop().toLowerCase();
+      if (!["mp4", "mov", "mkv", "avi", "webm", "m4v"].includes(ext)) {
+        this.$message.warning("请拖入视频文件（支持 mp4/mov/mkv/avi/webm/m4v）");
+        return;
       }
+      this.$refs.localPublishRef.open(path);
     },
     async openDirectoryPublish() {
       this.$refs.localPublishRef.openDirectory();

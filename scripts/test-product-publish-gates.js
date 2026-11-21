@@ -75,13 +75,17 @@ function makeHarness(platform, options = {}) {
       return "测试";
     },
   });
+  let typedText = "";
   const page = {
     async waitForSelector(selector) { return handle(selector); },
     async $(selector) { return handle(selector); },
     async $$(selector) { return [handle(selector)]; },
     async click() {},
-    async type() {},
-    keyboard: { async press() {}, async type() {} },
+    async type(_selector, text) { typedText += String(text || ""); },
+    keyboard: {
+      async press() {},
+      async type(text) { typedText += String(text || ""); },
+    },
     async waitForFunction() { return true; },
     async waitForTimeout() {},
     async evaluate(callback, ...args) {
@@ -98,8 +102,12 @@ function makeHarness(platform, options = {}) {
         return { ok: true, info: {}, mode: arg0.mode }; // trySlateClear
       }
       if (typeof arg0 === "string") {
+        // 快手描述编辑器回读：返回键盘输入累积的文本（readKsDescription）
+        if (arg0.includes("#work-description-edit")) return typedText;
         // 声明弹窗选点（sel 为 .semi-modal-body 相关字符串）返回真值；
+        // 强制覆盖清空（execCommand selectAll/delete/insertText）返回真值；
         // 简介编辑器文本回读（DY_EDITOR_SELECTOR）必须返回空串
+        if (src.includes("execCommand")) return true;
         return src.includes("semi-modal") || src.includes("semi-radio") ? true : "";
       }
       if (src.includes("我知道了")) return 0; // 引导弹窗探针：无弹窗

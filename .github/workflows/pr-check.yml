@@ -45,6 +45,14 @@ jobs:
           yarn test:sph-video-drama
           yarn test:sph-video-series
           yarn test:sph-entity-options
+          # 抖快商品挂载（#31）与视频管理「获取状态」回写（#71）
+          yarn test:dy-link-options
+          yarn test:dy-ks-link-options
+          yarn test:dy-product-link
+          yarn test:dy-product-input
+          yarn test:ks-product-link
+          yarn test:product-publish-gates
+          yarn test:get-status-publish-status
           # 截图与取消
           yarn test:fail-screenshot
           yarn test:fail-screenshot-timeout
