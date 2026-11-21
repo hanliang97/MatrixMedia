@@ -440,7 +440,7 @@
       </el-table>
 
       <p v-if="attrsHasProductLink" class="bt2-tip">
-        抖音需填写完整商品链接和 1-10 字商品短标题。商品无法匹配或挂载失败时停止发布，请人工检查后重试。
+        抖音需填写商品链接和短标题；快手商品须先加入货架，并填写完整原名。商品无法唯一匹配或挂载失败时停止发布，请人工检查后重试。
       </p>
       <p v-if="attrsHasEntityLink" class="bt2-tip">
         挂载失败时不会直接发布：视频处理完成后会自动转存草稿并提示「需要处理」，请到视频号后台手动确认。
@@ -1378,7 +1378,7 @@ export default {
       const info = this.getPlatformVideoLinkTypeInfo(data);
       return Boolean(info && info.inputKind !== "none");
     },
-    /** 只有视频号商品使用橱窗接口；抖音商品链接独立填写（快手待校验后合入）。 */
+    /** 只有视频号商品使用橱窗接口；抖音 URL / 快手完整商品名独立填写。 */
     platformVideoLinkIsProduct(data) {
       const info = this.getPlatformVideoLinkTypeInfo(data);
       return Boolean(info && info.selectionMode === "product_id");

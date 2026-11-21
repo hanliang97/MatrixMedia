@@ -15,8 +15,7 @@ export const VIDEO_LINK_TYPES = {
 /**
  * 平台链接能力表。
  * platformAvailable 表示平台页面存在该能力；automationSupported 表示已提供自动化实现。
- * 抖音商品流程仍需有权限的账号实机验收；无法唯一确认挂载时停止发布。
- * 快手商品挂载（#31）暂缓合入，待有权限账号实测校验后再进入能力表。
+ * 抖音 / 快手商品流程仍需有权限的账号实机验收；无法唯一确认挂载时停止发布。
  * 会员专区不进入工具能力表；小游戏仍仅预留结构，未验证前不向用户开放。
  * 小程序短剧 / 视频号剧集已按同款流程实现（见 main/services/upLoad/sphDrama.js 与 sphSeries.js），
  * 但平台 DOM 存在版本差异，失败时会由 sphLink 兜底转存草稿并返回 needs_attention，不会误报成功。
@@ -27,6 +26,13 @@ const VIDEO_LINK_CAPABILITIES = {
     types: [
       { type: VIDEO_LINK_TYPES.NONE, label: "无", inputKind: "none", placeholder: "", maxLength: 0, platformAvailable: true, automationSupported: true, selectionMode: "none" },
       { type: VIDEO_LINK_TYPES.PRODUCT, label: "商品", inputKind: "url", placeholder: "粘贴完整商品链接", maxLength: 2048, platformAvailable: true, automationSupported: true, selectionMode: "product_url", requiresShortTitle: true },
+    ],
+  },
+  快手: {
+    platformKey: "ks", maxItems: 1,
+    types: [
+      { type: VIDEO_LINK_TYPES.NONE, label: "无", inputKind: "none", placeholder: "", maxLength: 0, platformAvailable: true, automationSupported: true, selectionMode: "none" },
+      { type: VIDEO_LINK_TYPES.PRODUCT, label: "商品", inputKind: "product_name", placeholder: "填写已在货架中的商品完整名称", maxLength: 200, platformAvailable: true, automationSupported: true, selectionMode: "exact_product_name" },
     ],
   },
   视频号: {

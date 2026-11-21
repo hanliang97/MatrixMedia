@@ -7,6 +7,11 @@
       "file": "customer-dy-selected.html",
       "sha256": "edf4d8def5fa5c574243fe3545ad65cffe2fe80192674edcc64ce03d117630ea",
       "transformation": "Only normalize CRLF to LF and add final newline; HTML unchanged."
+    },
+    {
+      "file": "customer-ks-unselected.html",
+      "sha256": "3da2ceb1f9496faa237b95b80bca866aecda163c79196872798adfe3f15218ef",
+      "transformation": "Only normalize CRLF to LF and add final newline; HTML unchanged."
     }
   ],
   "limits": [
@@ -16,6 +21,5 @@
     "All requests are aborted; remote image URLs in evidence are never downloaded.",
     "No login, video upload, draft save or publication is performed."
   ],
-  "engine": "Real isolated Chromium DOM via Playwright; no mock querySelector/geometry/visibility methods.",
-  "note": "快手 fixture（customer-ks-unselected.html）随快手挂载部分一并在 #31 合入。"
+  "engine": "Real isolated Chromium DOM via Playwright; no mock querySelector/geometry/visibility methods."
 }

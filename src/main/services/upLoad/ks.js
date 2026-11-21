@@ -11,6 +11,8 @@ import {
   resolveKsCreativeStatementLabel,
 } from "../../../shared/creativeStatement.js";
 import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
+import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
+import { attachKsProductLink } from "./ksProductLink.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -632,6 +634,7 @@ export default async function (page, data, window, event) {
     console.warn("快手创作声明选择未完成（本次未请求声明）:", detail);
   }
 
+  let productAttachmentPending = false;
   try {
     // 用 pollPageUntil 替代 waitForSelector，避免 puppeteer 默认 protocolTimeout
     // (约 180s) 在大文件/弱网下把单次 Runtime.callFunctionOn 砍掉。
@@ -656,6 +659,13 @@ export default async function (page, data, window, event) {
       await ensureKsDownloadDisabled(page);
     }
 
+    // 必须先确认商品选中，再进入发布/草稿按钮分支；任何失败都由本 try 的失败回执结束。
+    const link = resolveVideoLinkOption("快手", data.publishOptions);
+    if (link && link.enabled === true) {
+      productAttachmentPending = true;
+      await attachKsProductLink(page, link);
+      productAttachmentPending = false;
+    }
     await page.waitForFunction(
       (text) => {
         const bar = document.querySelector("#setting-tours + div");
@@ -736,7 +746,12 @@ export default async function (page, data, window, event) {
       data,
       window,
       event,
-      message: detail.length > 200 ? `${detail.slice(0, 200)}…` : detail,
+      message: productAttachmentPending
+        ? `快手挂车失败，已停止发布：${e && e.message ? e.message : "无法确认商品状态"}`
+        : detail.length > 200 ? `${detail.slice(0, 200)}…` : detail,
+      ...(productAttachmentPending ? {
+        extraPayload: { outcome: "product_link_failed", needsAttention: true },
+      } : {}),
     });
     console.error("❌ 发布失败", e);
   }
