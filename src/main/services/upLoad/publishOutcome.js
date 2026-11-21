@@ -574,3 +574,19 @@ export async function replyPublishFailure({
   }
   if (closeWindow) maybeClosePublishWindow(data, window);
 }
+
+/** 原生排期回执：平台证据不足时保持待核对，不以失败触发队列重新上传。 */
+export async function replyNativeScheduleOutcome({ page, data, window, event, verified, message }) {
+  const payload = {
+    ...data, status: true, nativeScheduleVerified: verified === true,
+    needsAttention: verified !== true,
+    outcome: verified === true ? "native_scheduled" : "native_schedule_unverified",
+    message,
+  };
+  if (!verified) {
+    const shot = await capturePublishFailureScreenshot(page, data, { window });
+    if (shot) payload.failScreenshot = shot;
+  }
+  event.reply("puppeteerFile-done", payload);
+  maybeClosePublishWindow(data, window);
+}

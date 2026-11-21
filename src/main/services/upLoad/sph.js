@@ -473,6 +473,13 @@ async function fallbackLinkFailureToDraft(page, data, window, event, error) {
 }
 
 export default async function (page, data, window, event, onFinish) {
+  if (data.nativeScheduleAt || data.scheduleMode === "native") {
+    await replyPublishFailure({
+      page, data, window, event,
+      message: "视频号原生定时尚未启用，已停止任务，避免立即发布",
+    });
+    return;
+  }
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
 

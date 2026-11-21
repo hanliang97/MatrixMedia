@@ -171,6 +171,9 @@
             active-text="定时"
             inactive-text="立即"
           />
+          <el-checkbox v-if="scheduledPublish" v-model="preferNativeSchedule" style="margin-left: 16px">
+            优先原生定时
+          </el-checkbox>
         </el-form-item>
         <el-form-item v-if="scheduledPublish" label="发布时间">
           <el-date-picker
@@ -181,7 +184,7 @@
             style="width: 260px"
           />
           <p class="bt2-tip">
-            定时任务会立即进入发布历史，到点后自动发布；如果程序关闭错过时间，会显示任务过期。
+            按本机时区选择时间，原生定时请将秒设为 00。勾选后抖音立即上传并在平台排期（2小时后至14天内）；其他平台仍需软件运行到发布时间。排期未确认会提示核对，不会改为立即发布。
           </p>
         </el-form-item>
       </el-form>
@@ -648,6 +651,9 @@
             active-text="定时"
             inactive-text="立即"
           />
+          <el-checkbox v-if="scheduledPublish" v-model="preferNativeSchedule" style="margin-left: 16px">
+            优先原生定时
+          </el-checkbox>
         </el-form-item>
         <el-form-item v-if="scheduledPublish" label="发布时间">
           <el-date-picker
@@ -657,6 +663,7 @@
             placeholder="选择年月日时分秒"
             style="width: 260px"
           />
+          <p class="bt2-tip">按本机时区选择时间，原生定时请将秒设为 00。抖音立即上传并在平台排期（2小时后至14天内）；其他平台使用软件定时。</p>
         </el-form-item>
       </el-form>
 
@@ -726,6 +733,7 @@ import {
   validateVideohaoBt2 as validateVideohaoBt2Value,
 } from "@/utils/localVideoPublishBt2";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
+import { resolveVideoSchedule } from "../../shared/videoSchedule.js";
 import AiGenerateButton from "@/components/ai/AiGenerateButton.vue";
 
 function fileBaseName(p) {
@@ -805,6 +813,7 @@ export default {
       thisShow: false,
       closeWindow: true,
       scheduledPublish: false,
+      preferNativeSchedule: false,
       publishAt: "",
       republishContext: null,
       republishTextOtherName: "",
@@ -1049,6 +1058,7 @@ export default {
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
+      this.preferNativeSchedule = false;
       this.publishAt = "";
       this.republishContext = null;
       this.republishTextOtherName = "";
@@ -1097,6 +1107,7 @@ export default {
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
+      this.preferNativeSchedule = false;
       this.publishAt = "";
       this.republishTextOtherName = payload.textOtherName || fileStem(filePath);
       this.republishContext = {
@@ -1694,6 +1705,21 @@ export default {
       if (!dt.isAfter(moment())) return "定时发布时间必须是未来时间";
       return "";
     },
+    scheduleForPlatform(platform, isDraftMode) {
+      return resolveVideoSchedule({
+        platform: platform.pt,
+        publishAt: this.scheduledPublish ? this.publishAt : null,
+        preferNativeSchedule: this.scheduledPublish && this.preferNativeSchedule,
+        draft: resolveEffectivePublishMode(isDraftMode, platform).publishToDraft,
+      });
+    },
+    validatePlatformSchedules(platforms, isDraftMode) {
+      for (const platform of platforms) {
+        const schedule = this.scheduleForPlatform(platform, isDraftMode);
+        if (!schedule.ok) return schedule.error;
+      }
+      return "";
+    },
     validateVideohaoBt2(value) {
       return validateVideohaoBt2Value(value);
     },
@@ -1819,6 +1845,7 @@ export default {
       this.thisShow = false;
       this.closeWindow = true;
       this.scheduledPublish = false;
+      this.preferNativeSchedule = false;
       this.publishAt = "";
       this.republishContext = null;
       this.republishTextOtherName = "";
@@ -2027,6 +2054,8 @@ export default {
       const scheduledAtMs = this.scheduledPublish
         ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf()
         : null;
+      const scheduleError = this.validatePlatformSchedules(platforms, isDraftMode);
+      if (scheduleError) return this.$message.warning(scheduleError);
       let submitted = 0;
       let draftSubmitted = 0;
       let scheduledSubmitted = 0;
@@ -2047,7 +2076,8 @@ export default {
           : true;
         const video = this.buildPlatformVideoPayload(p, baseVideo);
         const effectiveMode = resolveEffectivePublishMode(isDraftMode, p);
-        if (this.scheduledPublish && !effectiveMode.publishToDraft) {
+        const schedule = this.scheduleForPlatform(p, isDraftMode);
+        if (schedule.mode === "local") {
           scheduledWriteTasks.push(
             dataRequest({
               type: "add",
@@ -2110,6 +2140,7 @@ export default {
           ...p,
           taskId,
           ...video,
+          ...schedule.fields,
           textOtherName: video.data.textOtherName,
           selectedFile,
           publishMode: effectiveMode.publishMode,
@@ -2122,19 +2153,19 @@ export default {
           filePath: this.localFilePath,
           date: currentDate,
         });
-        ipcRenderer.send(
-          "puppeteerFile",
-          JSON.parse(JSON.stringify(publishPayload))
+        if (schedule.mode !== "native") ipcRenderer.send(
+          "puppeteerFile", JSON.parse(JSON.stringify(publishPayload))
         );
 
         const republishRecord = this.findRepublishRecord(p.pt, p);
+        let recordWrite;
         if (republishRecord && republishRecord.id && republishRecord.date) {
           const oldAttempt = Number(republishRecord.publishAttemptCount) || 1;
           let oldRepublish = Number(republishRecord.republishCount);
           if (!Number.isFinite(oldRepublish) || oldRepublish < 0) {
             oldRepublish = Math.max(0, oldAttempt - 1);
           }
-          dataRequest({
+          recordWrite = dataRequest({
             type: "update",
             fileName: "pushData",
             item: {
@@ -2155,6 +2186,7 @@ export default {
               creativeStatement: video.data.creativeStatement,
               noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
+              ...schedule.fields,
               coverPath: video.data.coverPath || "",
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
@@ -2171,7 +2203,7 @@ export default {
             },
           });
         } else {
-          dataRequest({
+          recordWrite = dataRequest({
             type: "add",
             fileName: "pushData",
             item: {
@@ -2192,6 +2224,7 @@ export default {
               creativeStatement: video.data.creativeStatement,
               noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
+              ...schedule.fields,
               coverPath: video.data.coverPath || "",
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,
@@ -2220,6 +2253,14 @@ export default {
           });
         }
 
+        if (schedule.mode === "native") {
+          const saved = await recordWrite;
+          if (!saved || !saved.success) {
+            this.$message.error("原生排期历史记录写入失败，已停止上传");
+            continue;
+          }
+          ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify(publishPayload)));
+        }
         if (isXhsPlatform(p.pt)) {
           await sleep(getXhsPlatformStaggerDelayMs());
         } else if (p.pt === "视频号") {
@@ -2256,6 +2297,7 @@ export default {
       this.dirXlsxError = "";
       this.resetPlatformVideoLinks();
       this.scheduledPublish = false;
+      this.preferNativeSchedule = false;
       this.publishAt = "";
       this.dirPublishVisible = true;
     },
@@ -2460,6 +2502,8 @@ export default {
       const scheduledAtMs = this.scheduledPublish
         ? moment(scheduledAtText, "YYYY-MM-DD HH:mm:ss", true).valueOf()
         : null;
+      const scheduleError = this.validatePlatformSchedules(platforms, isDraftMode);
+      if (scheduleError) return this.$message.warning(scheduleError);
 
       const path = require("path");
       let submitted = 0;
@@ -2516,6 +2560,7 @@ export default {
             : true;
           const creativeStatement = this.getPlatformStatement(p.id);
           const effectiveMode = resolveEffectivePublishMode(isDraftMode, p);
+          const schedule = this.scheduleForPlatform(p, isDraftMode);
 
           // Format bq for this platform
           const hashtagPlatforms = new Set(["视频号", "抖音", "快手"]);
@@ -2537,7 +2582,7 @@ export default {
             p.pt
           );
 
-          if (this.scheduledPublish && !effectiveMode.publishToDraft) {
+          if (schedule.mode === "local") {
             scheduledWriteTasks.push(
               dataRequest({
                 type: "add",
@@ -2597,6 +2642,7 @@ export default {
 
           const publishPayload = applyXhsConservativePublishOptions({
             ...p,
+            ...schedule.fields,
             taskId,
             bookName,
             textType: "local",
@@ -2624,12 +2670,11 @@ export default {
             filePath,
             date: currentDate,
           });
-          ipcRenderer.send(
-            "puppeteerFile",
-            JSON.parse(JSON.stringify(publishPayload))
+          if (schedule.mode !== "native") ipcRenderer.send(
+            "puppeteerFile", JSON.parse(JSON.stringify(publishPayload))
           );
 
-          dataRequest({
+          const recordWrite = dataRequest({
             type: "add",
             fileName: "pushData",
             item: {
@@ -2659,6 +2704,7 @@ export default {
               uploadUrl: this.ptConfig[p.pt].upload,
               date: currentDate,
               useRealBrowser: Boolean(p.useRealBrowser),
+              ...schedule.fields,
               publishMode: effectiveMode.publishMode,
               publishToDraft: effectiveMode.publishToDraft,
               // 重发开始即清掉上次失败截图，避免显示的是上一轮的旧画面
@@ -2677,6 +2723,14 @@ export default {
             },
           });
 
+          if (schedule.mode === "native") {
+            const saved = await recordWrite;
+            if (!saved || !saved.success) {
+              this.$message.error("原生排期历史记录写入失败，已停止上传");
+              continue;
+            }
+            ipcRenderer.send("puppeteerFile", JSON.parse(JSON.stringify(publishPayload)));
+          }
           submitted++;
           if (isXhsPlatform(p.pt)) {
             await sleep(getXhsPlatformStaggerDelayMs());

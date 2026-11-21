@@ -25,6 +25,7 @@ import {
 import { canonicalAccountPartition } from "../../shared/accountPartition.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 import { capturePublishFailureScreenshot } from "./upLoad/failureScreenshot.js";
+import { reserveNativeScheduleTask, finishNativeScheduleTask } from "./nativeScheduleGuard.js";
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -287,6 +288,22 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     String(data.pt || "").replace(/状态$/, "")
   );
   const isXhsTask = isXhsPlatform(data.pt);
+  if (data.nativeScheduleAt || data.scheduleMode === "native") {
+    try {
+      const reservation = reserveNativeScheduleTask(data, path.join(app.getPath("userData"), "native-schedule-attempts"));
+      if (!reservation.ok) {
+        transport.reply("puppeteerFile-done", { ...data, status: true, needsAttention: true,
+          duplicate: true, nativeScheduleVerified: false, message: reservation.message });
+        if (queueDone) queueDone();
+        return;
+      }
+    } catch (error) {
+      transport.reply("puppeteerFile-done", { ...data, status: false,
+        message: `无法建立原生排期防重记录，已停止上传：${error.message}` });
+      if (queueDone) queueDone();
+      return;
+    }
+  }
   const maxRetries = getPublishAttemptLimit(data, 5);
   let currentAttempt = 0;
   let finished = false;
@@ -330,6 +347,8 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
   const finishOnce = () => {
     if (finished) return;
     finished = true;
+    try { finishNativeScheduleTask(data); }
+    catch (error) { console.warn("原生排期防重记录保留，需人工核对：", error.message); }
     cleanupTaskResources();
     if (queueDone) queueDone();
   };

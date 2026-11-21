@@ -211,6 +211,7 @@ import {
   recordGroupOf,
 } from "../../../shared/accountIdentity.js";
 import { buildPublishHistoryCsv } from "../../../shared/publishHistoryCsv.js";
+import { resolvePublishCompletion } from "../../../shared/publishResult.js";
 
 export default {
   name: "VideoManager",
@@ -296,17 +297,23 @@ export default {
       if (!this.canGetStatus(row) || this.isStatusLoading(row)) return;
       const isJuejinArticle = (item) =>
         item && item.textType === "article" && item.pt === "掘金";
+      const isNativeSchedule = (item) =>
+        item && (item.scheduleMode === "native" || item.nativeScheduleAt);
       // 只处理「还没拿到作品链接」或「状态仍是发布中」的记录：
       // 拉取该平台作品列表，按标题匹配命中即发布成功（#71：已有链接但状态
       // 卡在「发布中」的记录允许再次核对，否则手动补救路径不存在）
       const targets = (row.showAlltype || []).filter(
         (item) =>
           item &&
+          // 普通标题匹配不含 timer / 公开状态证据，不能把平台排期升级成已发布。
+          !isNativeSchedule(item) &&
           (!item.videoLink || item.publishStatus === "publishing") &&
           (item.textType !== "article" || isJuejinArticle(item))
       );
       if (!targets.length) {
-        this.$message.info("没有需要获取状态的记录");
+        this.$message.info((row.showAlltype || []).some(isNativeSchedule)
+          ? "原生排期请到平台核对排期及公开状态"
+          : "没有需要获取状态的记录");
         return;
       }
       const key = this.getStatusRowKey(row);
@@ -462,7 +469,7 @@ export default {
         status === "abnormal"
       )
         return "danger";
-      if (status === "scheduled" || status === "skipped") return "info";
+      if (status === "scheduled" || status === "native_scheduled" || status === "skipped") return "info";
       if (status === "draft") return "info";
       // 登录失效要人工扫码才能恢复，用 danger 让它在列表里显眼（文案见 publishStatusText）
       if (status === "login_required") return "danger";
@@ -473,6 +480,7 @@ export default {
       if (status === "fail" || status === "failed") return "失败";
       if (status === "abnormal") return "发布异常";
       if (status === "scheduled") return "等待定时发布";
+      if (status === "native_scheduled") return "平台已排期";
       if (status === "skipped") return "已跳过";
       if (status === "expired") return "任务过期";
       if (status === "draft") return "已保存草稿";
@@ -816,14 +824,20 @@ export default {
     async syncPublishProgress(donePayload) {
       if (!donePayload || !["local", "article"].includes(donePayload.textType))
         return;
-      if (donePayload.interrupted) return;
+      if (donePayload.interrupted && !donePayload.nativeSubmitAttempted) return;
       if (
         !donePayload.pt ||
         String(donePayload.pt).includes("状态") ||
         String(donePayload.pt).includes("登录")
       )
         return;
-      const target = this.findLocalPublishRecord(donePayload);
+      let target = this.findLocalPublishRecord(donePayload);
+      // 防重回执可以先于列表刷新返回：从已持久化历史补读，不能丢掉终态。
+      if (!target && donePayload.nativeScheduleAt) {
+        const result = await dataRequest({ type: "get", fileName: "pushData" });
+        this.initDataFiltered(result.data || {});
+        target = this.findLocalPublishRecord(donePayload);
+      }
       if (!target || !target.row || !target.row.id) {
         // 静默丢弃会导致记录永久停在「发布中」且无法排查（#71），打日志留痕
         console.warn(
@@ -841,7 +855,7 @@ export default {
         return;
       }
       const row = this.fillPublishStats(target.row);
-      if (donePayload.skipped) {
+      if (donePayload.skipped && !donePayload.nativeSubmitAttempted) {
         await dataRequest({
           type: "update",
           fileName: "pushData",
@@ -866,6 +880,34 @@ export default {
       const abnormal = success && donePayload.publishAbnormal === true;
       // 主进程在失败/异常瞬间截了发布页的图，这里存进记录，之后可以直接回看
       const failScreenshot = this.pickFailScreenshot(donePayload, row);
+      const nativeScheduleAt = donePayload.nativeScheduleAt ||
+        (row.scheduleMode === "native" && row.nativeScheduleAt);
+      if (nativeScheduleAt) {
+        const completion = resolvePublishCompletion({ ...donePayload, nativeScheduleAt });
+        const verified = completion.nativeScheduled === true;
+        await dataRequest({
+          type: "update", fileName: "pushData",
+          item: {
+            id: row.id, date: target.date,
+            scheduledTask: false,
+            scheduleMode: "native",
+            nativeScheduleAt,
+            nativeScheduleVerified: verified,
+            publishStatus: completion.recordStatus,
+            publishFailCount: row.publishFailCount +
+              (["failed", "login_required"].includes(completion.recordStatus) ? 1 : 0),
+            publishAbnormalCount: this.normalizeCount(row.publishAbnormalCount) +
+              (completion.recordStatus === "abnormal" ? 1 : 0),
+            outcome: donePayload.outcome,
+            lastPublishMessage: donePayload.message || "请到平台核对排期结果",
+            lastPublishAt: Date.now(),
+            failScreenshot: verified ? "" : failScreenshot,
+          },
+        });
+        if (!verified) this.$notify({ title: "排期需确认", message: completion.message, type: "warning", duration: 0 });
+        this.loadRecords();
+        return;
+      }
       if (abnormal) {
         await dataRequest({
           type: "update",

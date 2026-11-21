@@ -1,5 +1,8 @@
 import path from "path";
 import fs from "fs";
+import { BrowserWindow } from "electron";
+import pie from "puppeteer-in-electron";
+import { markNativeScheduleSubmitting } from "../nativeScheduleGuard.js";
 import { normalizeCoverForUpload } from "../coverCompat.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
 import { attachDyProductLink } from "./dyProductLink.js";
@@ -8,7 +11,14 @@ import {
   readPageUrl,
   replyPublishFailure,
   replyPublishOutcome,
+  replyNativeScheduleOutcome,
 } from "./publishOutcome.js";
+import {
+  prepareDyNativeSchedule,
+  assertDyNativeSchedule,
+  verifyDyNativeScheduled,
+  readDyWorkList,
+} from "./dyNativeSchedule.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -822,9 +832,39 @@ async function verifyDyDescriptionBeforePublish(page, text, data) {
   await ensureDyTitleIntact(page, text.title, { context: "发布前复核重填后" });
 }
 
+// 提交前只读拍一份作品列表，排除同名旧作品；与发布窗共用实际 session。
+export async function readExistingDyWorkIds(page, window, useragent) {
+  const probe = new BrowserWindow({ show: false, webPreferences: {
+    session: window.webContents.session, contextIsolation: true, nodeIntegration: false,
+  } });
+  try {
+    if (useragent) probe.webContents.setUserAgent(useragent);
+    const listPage = await pie.getPage(page.browser(), probe);
+    const items = await readDyWorkList(listPage, () => probe.loadURL(
+      "https://creator.douyin.com/creator-micro/content/manage"));
+    if (!items || items.some(item => typeof item.aweme_id !== "string")) {
+      throw new Error("无法读取抖音提交前作品列表，已停止排期，请稍后重试");
+    }
+    return items.map(item => item.aweme_id);
+  } finally {
+    if (!probe.isDestroyed()) probe.destroy();
+  }
+}
+
 export default async function (page, data, window, event) {
+  const nativeSchedule = Boolean(data.nativeScheduleAt || data.scheduleMode === "native");
+  let nativeSubmitAttempted = false;
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
+  if (nativeSchedule) {
+    try {
+      if (isDraftMode) throw new Error("原生定时不能同时保存为草稿");
+      await prepareDyNativeSchedule(page, data.nativeScheduleAt);
+    } catch (error) {
+      await replyPublishFailure({ page, data, window, event, message: error.message });
+      return;
+    }
+  }
   // 文案在顶部解析：简介填写与发布前复核（第二个 try 块）都要用
   const text = buildPlatformVideoText("抖音", data.data);
 
@@ -996,7 +1036,21 @@ export default async function (page, data, window, event) {
     await verifyDyDescriptionBeforePublish(page, text, data);
 
     const urlBefore = readPageUrl(page);
+    let excludedIds = [];
+    if (nativeSchedule) {
+      excludedIds = await readExistingDyWorkIds(page, window, data.useragent);
+      await assertDyNativeSchedule(page, data.nativeScheduleAt);
+      markNativeScheduleSubmitting(data);
+      nativeSubmitAttempted = true;
+    }
     await clickDyPublish(page, isDraftMode);
+    if (nativeSchedule) {
+      const verified = await verifyDyNativeScheduled(page, text.title, data.nativeScheduleAt, { excludedIds });
+      console.log(`[publish] 抖音原生定时 verified=${verified}，目标时间=${data.nativeScheduleAt}`);
+      await replyNativeScheduleOutcome({ page, data, window, event, verified,
+        message: verified ? "抖音平台已确认原生定时排期" : "已提交抖音原生定时，尚未核验到后台排期记录，请人工核对后再重试" });
+      return;
+    }
     // 抖音网页端没有草稿箱：点击成功 ≠ 草稿已留底，回执必须如实标注（P1-4）
     console.log(
       isDraftMode
@@ -1017,6 +1071,11 @@ export default async function (page, data, window, event) {
     });
   } catch (e) {
     const detail = (e && e.message) || String(e);
+    if (nativeSchedule && nativeSubmitAttempted) {
+      await replyNativeScheduleOutcome({ page, data, window, event, verified: false,
+        message: `抖音排期提交结果不明，请到平台核对后再重试：${detail.slice(0, 200)}` });
+      return;
+    }
     await replyPublishFailure({
       page,
       data,

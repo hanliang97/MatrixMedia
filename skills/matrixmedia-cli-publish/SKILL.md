@@ -151,6 +151,7 @@ Map user intent to CLI args:
 - `--tags`, `--bq`: video tags（space-separated; `#` prefix semantics vary per platform)
 - `--address`: location field (Baidu use case)
 - `--publish-at`: one-time scheduled publish time, format `YYYY-MM-DD HH:mm:ss`
+- `--prefer-native-schedule`: with `--publish-at`, upload to Douyin now and schedule on the platform (2 hours to 14 days ahead, seconds 00); other platforms keep software scheduling
 - `--show`: show automation window
 - `--no-close-window`: keep window open when `--show` is enabled
 
@@ -172,6 +173,7 @@ matrixmedia cli publish \
 
 Rules:
 
+0. With `--prefer-native-schedule`, only Douyin uses native scheduling. Input is system local time; the uploader converts to Beijing time. Confirmed native scheduling returns `native_scheduled` and `nativeScheduleVerified=true`; software need not stay running. Exit 4 or unverified scheduling requires checking the platform before retrying; never resubmit automatically. Other platforms retain rules 2-4 below.
 1. Only explicit year-month-day hour-minute-second is supported. Do not generate daily, weekly, monthly, or cron-style schedules.
 2. The scheduled task is written to publish history immediately with status `scheduled`.
 3. If MatrixMedia is closed and misses the time, the next startup marks the task as `expired`; do not auto-republish expired tasks.
