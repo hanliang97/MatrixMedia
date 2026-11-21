@@ -63,6 +63,30 @@ function harness(autoReply) {
 }
 
 (async () => {
+  for (const draft of [false, true]) {
+    const h = harness({ status: true, publishMode: draft ? "draft" : "publish" });
+    const r = await h.api.runSingleFilePublish({
+      ...request, publishAt: null, preferNativeSchedule: false, draft,
+    });
+    assert.equal(r.status, draft ? "draft" : "success");
+    const previous = { scheduleMode: "native", nativeScheduleAt: 123,
+      nativeScheduleVerified: true, scheduledPublishAt: 123, scheduledPublishAtText: "旧排期" };
+    const merged = { ...previous, ...h.records[0] };
+    assert.equal(merged.scheduleMode, "immediate", "合并同素材历史后不能遗留原生排期模式");
+    assert.equal(merged.nativeScheduleAt, null);
+    assert.equal(merged.nativeScheduleVerified, false);
+    assert.equal(merged.scheduledPublishAt, null);
+    assert.equal(merged.scheduledPublishAtText, "");
+    assert.equal(h.tasks[0].data.nativeScheduleAt, null);
+  }
+  {
+    const h = harness();
+    const r = await h.api.runSingleFilePublish({ ...request, preferNativeSchedule: false });
+    assert.equal(r.status, "scheduled");
+    assert.equal(h.records[0].scheduleMode, "local");
+    assert.equal(h.records[0].nativeScheduleAt, null);
+    assert.equal(h.records[0].nativeScheduleVerified, false);
+  }
   for (const reply of [
     { status: true },
     { status: true, nativeScheduleVerified: true, publishAbnormal: true },

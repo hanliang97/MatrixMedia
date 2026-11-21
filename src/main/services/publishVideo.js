@@ -184,7 +184,7 @@ async function runSingleFilePublishInner(
   if (!schedule.ok) return { exitCode: 2, status: "failed", message: schedule.error };
 
   const taskPayload = {
-    ...(schedule.mode === "native" ? schedule.fields : {}),
+    ...schedule.fields,
     taskId: Date.now() + Math.random(),
     bookName,
     textType: "local",
@@ -221,7 +221,8 @@ async function runSingleFilePublishInner(
     ? guessFileNameFromUrl(sourceFile)
     : path.basename(resolvedFile);
   const recordItem = {
-    ...(schedule.mode === "native" ? schedule.fields : {}),
+    // 同素材历史会合并旧记录；立即发布/草稿必须显式清掉上次原生排期字段。
+    ...schedule.fields,
     bookName,
     textOtherName: stem,
     textType: "local",
