@@ -2,6 +2,8 @@
 
 验证日期：2026-11-21（北京时间）。关联 #40，本次仅提供抖音部分，视频号原生定时未实现、未验收。
 
+已跟进上游 `c945d68`；保留新增的视频预览、拖拽、商品挂载和回执诊断。
+
 ## 实现范围
 
 - GUI 单视频、目录批量入口增加「优先原生定时」，CLI / HTTP / MCP 同步透传。
@@ -10,6 +12,7 @@
 - `native_scheduled` 只表示平台接收了排期，不表示审核通过或最终公开。原生任务不进入本地到期发布调度。
 - 结果不明返回退出码 4；跨进程占位记录阻止同账号、素材、时刻的自动重复上传。
 - 同素材转为立即发布或草稿时显式清空旧原生排期字段，避免历史合并后误用上次时间。
+- 「获取状态」的普通标题匹配缺少排期及公开状态证据，因此原生排期记录不走该匹配，避免将尚未公开的作品改为成功。
 
 ## 真实平台证据及边界
 
@@ -73,9 +76,12 @@ history-status          history-args
 publish-history-csv     publish-draft-args
 dy-description          scheduled-dedupe
 pushdata-dedupe
+get-status-sets-publish-status  dy-ks-link-options
 ```
 
 `yarn --cwd mcp build` 通过；`node --test mcp/tests/nativeSchedule.test.mjs` **4/4 通过**。未将 MCP 全量测试报告为通过：其 Windows shebang 测试夹具存在 `ENOENT`，本次未修复。
+
+附加尝试的 `product-customer-dom` 因本机没有外置 Playwright 而启动失败（`MODULE_NOT_FOUND`）；`ks-customer-dom` 未运行。这两项不计入通过。上游合并后的 `product-publish-gates` 已通过 26 个 handler 场景及重试范围检查。
 
 真实草稿 e2e 使用明确构建后再运行的方式（Windows 上 runner 自动调用 yarn 失败，所以使用 `--skip-build`）：
 
@@ -84,7 +90,7 @@ yarn build:dir
 node e2e/run.js -p dy --yes --force --skip-build --phone <已授权账号> --video <测试视频绝对路径>
 ```
 
-最新源码验证 run `20261121-093417`：构建成功，`PASS_VERIFIED`、退出码 **0**、`draftVerified=true`。实际诊断：
+最新源码验证 run `20261121-094507`（已合入上游 `c945d68`）：构建成功，`PASS_VERIFIED`、退出码 **0**、`draftVerified=true`。实际诊断：
 
 ```text
 [dy] 已点击存草稿按钮 (#popover-tip-container+button)

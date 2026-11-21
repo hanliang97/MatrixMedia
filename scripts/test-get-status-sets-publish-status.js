@@ -102,13 +102,19 @@ async function main() {
         publishStatus: "success",
         videoLink: "https://www.bilibili.com/video/BVold",
       },
+      {
+        textType: "local", pt: "抖音", title: "定时视频",
+        selectedFile: "scheduled.mp4", scheduleMode: "native",
+        nativeScheduleAt: Date.now() + 86400000,
+        publishStatus: "native_scheduled", publishSuccessCount: 0,
+      },
     ],
   };
   updates.length = 0;
   invokeCalls.length = 0;
   await state.handleGetStatus(rowA);
   assert.equal(invokeCalls.length, 1, "只调一次 match-works");
-  assert.equal(invokeCalls[0].args.tasks.length, 1, "已成功记录不重复核对");
+  assert.equal(invokeCalls[0].args.tasks.length, 1, "已成功及原生排期记录不参与普通标题核对");
   assert.equal(invokeCalls[0].args.tasks[0].title, "视频A");
   assert.equal(updates.length, 1, "命中记录回写一次");
   assert.equal(updates[0].publishStatus, "success", "命中必须回写 publishStatus");
@@ -138,6 +144,23 @@ async function main() {
   assert.equal(updates.length, 1);
   assert.equal(updates[0].publishStatus, "draft", "草稿模式回写 draft");
   assert.equal(updates[0].publishSuccessCount, 3);
+
+  // 原生排期或结果待核对时，标题出现在列表也不能证明已公开。
+  for (const fields of [
+    { scheduleMode: "native", publishStatus: "native_scheduled" },
+    { nativeScheduleAt: Date.now() + 86400000, publishStatus: "abnormal" },
+  ]) {
+    updates.length = 0;
+    invokeCalls.length = 0;
+    messages.length = 0;
+    await state.handleGetStatus({ textType: "local", showAlltype: [{
+      textType: "local", pt: "抖音", title: "定时视频", selectedFile: "scheduled.mp4",
+      publishSuccessCount: 0, ...fields,
+    }] });
+    assert.equal(invokeCalls.length, 0, "原生排期不走缺少时间证据的标题匹配");
+    assert.equal(updates.length, 0, "不能覆写排期状态或递增公开成功数");
+    assert.ok(messages.some(([, message]) => message.includes("平台核对")));
+  }
 
   // 场景 3：未命中 → 不改状态，只提示
   context.ipcRenderer = {
