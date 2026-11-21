@@ -18,6 +18,7 @@ import { resolveAccountPublishMode } from "./accountPublishSettingsResolver.js";
 import { resolveTaskPartition } from "./accountLookup.js";
 import { resolvePublishCompletion } from "../../shared/publishResult.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
+import { resolveVideoSchedule } from "../../shared/videoSchedule.js";
 
 /** 读取全部 pushData 记录（跨日期平铺），用于定时任务查重 */
 function listPushDataRecords() {
@@ -105,6 +106,8 @@ export async function runSingleFilePublish(
   }
 
   const sourceFile = String(v.file || "").trim();
+  const requestedSchedule = resolveVideoSchedule(v);
+  if (!requestedSchedule.ok) return { exitCode: 2, status: "failed", message: requestedSchedule.error };
   const stem = fileStemFromSource(sourceFile);
   const metadata = normalizeVideoMetadata(v, v.platform);
   const bookName = (v.bookName && String(v.bookName).trim()) || stem;
@@ -119,7 +122,7 @@ export async function runSingleFilePublish(
   let cleanupDownload = null;
   let resolvedFile = sourceFile;
   const deferRemoteDownload =
-    !fileContext && v.publishAt && isRemotePublishFile(sourceFile);
+    !fileContext && requestedSchedule.mode === "local" && isRemotePublishFile(sourceFile);
 
   if (fileContext) {
     resolvedFile = fileContext.resolvedFile;
@@ -177,8 +180,11 @@ async function runSingleFilePublishInner(
     partition: v.partition,
     requestDraftMode: Boolean(v.draft),
   });
+  const schedule = resolveVideoSchedule({ ...v, draft: effectivePublishMode.publishToDraft });
+  if (!schedule.ok) return { exitCode: 2, status: "failed", message: schedule.error };
 
   const taskPayload = {
+    ...(schedule.mode === "native" ? schedule.fields : {}),
     taskId: Date.now() + Math.random(),
     bookName,
     textType: "local",
@@ -204,6 +210,7 @@ async function runSingleFilePublishInner(
     partition: v.partition,
     phone: derivePhoneForRecord(v),
     filePath: resolvedFile,
+    remoteFileUrl: isRemotePublishFile(sourceFile) ? sourceFile : "",
     pt: v.platform,
     useRealBrowser: Boolean(v.useRealBrowser),
   };
@@ -214,6 +221,7 @@ async function runSingleFilePublishInner(
     ? guessFileNameFromUrl(sourceFile)
     : path.basename(resolvedFile);
   const recordItem = {
+    ...(schedule.mode === "native" ? schedule.fields : {}),
     bookName,
     textOtherName: stem,
     textType: "local",
@@ -255,7 +263,7 @@ async function runSingleFilePublishInner(
     lastPublishAt: Date.now(),
   };
 
-  if (v.publishAt) {
+  if (schedule.mode === "local") {
     let scheduledRecord;
     try {
       scheduledRecord = createScheduledRecord(recordItem, v.publishAt);
@@ -344,7 +352,7 @@ async function runSingleFilePublishInner(
     console.error("MatrixMedia: 写入 pushData 初始记录失败:", e && e.message);
   }
 
-  const updateRecord = (status, message) => {
+  const updateRecord = (status, message, extra = {}) => {
     if (!recordId) return;
     try {
       changeData({
@@ -364,6 +372,7 @@ async function runSingleFilePublishInner(
           publishAbnormalCount: status === "abnormal" ? 1 : 0,
           lastPublishMessage: message || "",
           lastPublishAt: Date.now(),
+          ...extra,
         },
       });
     } catch (e) {
@@ -390,6 +399,15 @@ async function runSingleFilePublishInner(
 
     const timer = setTimeout(() => {
       const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
+      if (schedule.mode === "native") {
+        const message = `原生排期超时（${min} 分钟），请到平台核对结果后再重试`;
+        updateRecord("abnormal", message, { nativeScheduleVerified: false });
+        finish({ exitCode: 4, status: "needs_attention", message, id: recordId,
+          needsAttention: true, nativeScheduled: false, nativeScheduleVerified: false,
+          publishAt: schedule.fields.scheduledPublishAtText,
+          scheduledPublishAt: schedule.fields.scheduledPublishAt });
+        return;
+      }
       const message = `发布超时（${min} 分钟），请检查网络或登录态`;
       console.error(message);
       updateRecord("failed", message);
@@ -398,11 +416,12 @@ async function runSingleFilePublishInner(
 
     const transport = {
       reply(channel, payload) {
+        if (settled) return;
         if (channel === "puppeteerFile-done") {
           if (payload && payload.taskId != null && payload.taskId !== taskId) {
             return;
           }
-          if (payload && payload.skipped) {
+          if (payload && payload.skipped && !payload.nativeSubmitAttempted) {
             const message = payload.message || "用户关闭窗口，已跳过发布";
             updateRecord("skipped", message);
             finish({
@@ -413,8 +432,16 @@ async function runSingleFilePublishInner(
             });
             return;
           }
-          const completion = resolvePublishCompletion(payload);
-          updateRecord(completion.recordStatus, completion.message);
+          // 排期模式以请求为准：普通成功回执缺少排期字段时也不能当成发布成功。
+          const completion = resolvePublishCompletion({ ...payload,
+            ...(schedule.mode === "native" ? { nativeScheduleAt: schedule.fields.nativeScheduleAt } : {}),
+          });
+          updateRecord(completion.recordStatus, completion.message, {
+            ...(schedule.mode === "native" ? {
+              nativeScheduleVerified: completion.nativeScheduled === true,
+              outcome: payload && payload.outcome,
+            } : {}),
+          });
           finish({
             exitCode: completion.exitCode,
             status: completion.status,
@@ -422,7 +449,14 @@ async function runSingleFilePublishInner(
             id: recordId,
             publishMode: completion.savedAsDraft ? "draft" : "publish",
             outcome: payload && payload.outcome,
-            needsAttention: completion.fallbackDraft,
+            needsAttention: Boolean(completion.needsAttention || completion.fallbackDraft || completion.publishAbnormal),
+            nativeScheduleVerified: schedule.mode === "native"
+              ? completion.nativeScheduled === true : undefined,
+            nativeScheduled: completion.nativeScheduled,
+            ...(schedule.mode === "native" ? {
+              publishAt: schedule.fields.scheduledPublishAtText,
+              scheduledPublishAt: schedule.fields.scheduledPublishAt,
+            } : {}),
             // 草稿保存结果校验字段（#42），供 CLI JSON 透传给 e2e/脚本消费；
             // undefined 时 JSON.stringify 自动省略，保持老版本输出兼容
             draftVerified: payload && payload.draftVerified,
@@ -488,6 +522,7 @@ export async function runMultiPlatformPublish(parsedList) {
   if (parsedList.length === 1) {
     const result = await runSingleFilePublish(parsedList[0]);
     return {
+      ...result,
       success: result.exitCode === 0,
       exitCode: result.exitCode,
       status: result.status || (result.exitCode === 0 ? "success" : "failed"),
@@ -500,6 +535,7 @@ export async function runMultiPlatformPublish(parsedList) {
       failed: result.exitCode === 0 ? 0 : 1,
       results: [
         {
+          ...result,
           platform: parsedList[0].platform,
           phone: parsedList[0].phone || "",
           creativeStatement: parsedList[0].creativeStatement || "none",
@@ -516,7 +552,7 @@ export async function runMultiPlatformPublish(parsedList) {
   }
 
   const sourceFile = String(parsedList[0].file || "").trim();
-  const allScheduled = parsedList.every((item) => item.publishAt);
+  const allScheduled = parsedList.every((item) => resolveVideoSchedule(item).mode === "local");
   const deferRemoteDownload = allScheduled && isRemotePublishFile(sourceFile);
 
   let cleanupDownload = null;
@@ -546,6 +582,7 @@ export async function runMultiPlatformPublish(parsedList) {
 
   const results = [];
   let pendingCleanupCount = parsedList.length;
+  let startedCount = 0;
   const releaseSharedDownload = () => {
     pendingCleanupCount -= 1;
     if (pendingCleanupCount <= 0 && cleanupDownload) {
@@ -556,11 +593,28 @@ export async function runMultiPlatformPublish(parsedList) {
 
   try {
     for (const item of sortPublishPlatforms(parsedList)) {
-      const result = await runSingleFilePublish(item, fileContext, {
-        waitForResult: false,
-        onDone: releaseSharedDownload,
-      });
+      // 本地定时和前置校验失败不会进入上传队列，必须同样释放引用。
+      // onDone 也可能同步触发，因此每个平台的释放回调只允许生效一次。
+      let released = false;
+      const release = () => {
+        if (released) return;
+        released = true;
+        releaseSharedDownload();
+      };
+      startedCount += 1;
+      let result;
+      try {
+        result = await runSingleFilePublish(item, fileContext, {
+          waitForResult: false,
+          onDone: release,
+        });
+      } catch (error) {
+        release();
+        throw error;
+      }
+      if (result.status !== "submitted") release();
       results.push({
+        ...result,
         platform: item.platform,
         phone: item.phone || "",
         creativeStatement: item.creativeStatement || "none",
@@ -577,17 +631,19 @@ export async function runMultiPlatformPublish(parsedList) {
       }
     }
   } finally {
-    if (results.length === 0 && cleanupDownload) cleanupDownload();
+    // 入口抛错时，仅释放尚未启动的平台；已入队任务仍持有文件直至回执。
+    for (; startedCount < parsedList.length; startedCount += 1) releaseSharedDownload();
   }
 
+  const rejected = results.filter((result) => !result.success).length;
   return {
-    success: true,
-    exitCode: 0,
-    status: "submitted",
-    message: `已提交 ${results.length} 个平台发布`,
+    success: rejected === 0,
+    exitCode: rejected ? 3 : 0,
+    status: rejected ? "failed" : "submitted",
+    message: `已提交 ${results.length - rejected} 个平台发布${rejected ? `，${rejected} 个提交失败` : ""}`,
     total: results.length,
     succeeded: 0,
-    failed: 0,
+    failed: rejected,
     results,
   };
 }

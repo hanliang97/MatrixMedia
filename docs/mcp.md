@@ -88,7 +88,7 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | ---------- | ---- | ------------------------------------------------- |
 | `days`     | 否   | 最近 N 天，默认 7                                 |
 | `platform` | 否   | 平台过滤                                          |
-| `status`   | 否   | `success` / `failed` / `publishing` / `scheduled` |
+| `status`   | 否   | `success` / `failed` / `publishing` / `scheduled` / `native_scheduled` 等发布记录状态 |
 | `all`      | 否   | 为 `true` 时返回全部历史                          |
 
 ### publish_video
@@ -107,6 +107,7 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | `tags`         | 否   | 标签字符串                                                    |
 | `address`      | 否   | 地址（百家号等）                                              |
 | `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm:ss`                               |
+| `preferNativeSchedule` | 否 | 配合 `publishAt` 优先原生定时；目前支持抖音（2小时后至14天内，秒为00），其他平台仍使用软件定时。输入为本机时区，抖音页面转换为北京时间 |
 | `show`         | 否   | 是否显示底层浏览器窗口                                        |
 | `draft`             | 否   | `true` 时保存到草稿箱，不直接发布                             |
 | `cover`             | 否   | 自定义封面图片路径（抖音 / 快手 / 视频号；竖封面 3:4 比例最佳，抖音横封面基于竖封面自动生成；视频号仅收 jpg/png） |

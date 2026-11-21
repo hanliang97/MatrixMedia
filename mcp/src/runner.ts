@@ -124,14 +124,12 @@ export function resolveMatrixmediaCommand(): ResolvedCommand | null {
 
   const dir = process.env.MATRIXMEDIA_DIR ?? inferRepoRoot();
   if (dir) {
-    const electronBin = path.join(
-      dir,
-      'node_modules',
-      '.bin',
-      process.platform === 'win32' ? 'electron.cmd' : 'electron'
-    );
+    // Windows 直接调用 exe，避免 cmd 将带空格的发布时间/标题再次拆参。
+    const electronBin = process.platform === 'win32'
+      ? path.join(dir, 'node_modules', 'electron', 'dist', 'electron.exe')
+      : path.join(dir, 'node_modules', '.bin', 'electron');
     if (fs.existsSync(electronBin)) {
-      env.ELECTRON_RUN_AS_NODE = '';
+      delete env.ELECTRON_RUN_AS_NODE;
       return {
         command: electronBin,
         prefixArgs: ['.', 'cli'],

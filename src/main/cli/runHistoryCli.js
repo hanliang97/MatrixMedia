@@ -30,6 +30,7 @@ const KNOWN_STATUSES = new Set([
   "failed",
   "publishing",
   "scheduled",
+  "native_scheduled",
   "expired",
   "draft",
   "drafting",
@@ -51,6 +52,7 @@ function statusLabel(s) {
   if (s === "success") return "成功";
   if (s === "failed") return "失败";
   if (s === "scheduled") return "等待定时发布";
+  if (s === "native_scheduled") return "平台已排期";
   if (s === "expired") return "任务过期";
   if (s === "draft") return "已保存草稿";
   if (s === "drafting") return "保存草稿中";
@@ -128,6 +130,10 @@ export function runHistoryCli(options) {
         title: item.bt || item.data?.bt1 || item.bookName || "",
         bookName: item.bookName || "",
         status,
+        scheduleMode: item.scheduleMode,
+        publishAt: item.scheduledPublishAtText || null,
+        scheduledPublishAt: item.scheduledPublishAt || null,
+        nativeScheduleVerified: item.nativeScheduleVerified,
         attemptCount: Number(item.publishAttemptCount) || 1,
         successCount: Number(item.publishSuccessCount) || 0,
         failCount: Number(item.publishFailCount) || 0,
@@ -178,6 +184,7 @@ export function runHistoryCli(options) {
   const scheduledN = rows.filter(r => r.status === "scheduled").length;
   const expiredN = rows.filter(r => r.status === "expired").length;
   const extra = [
+    ["native_scheduled", "平台已排期"],
     ["draft", "已保存草稿"],
     ["drafting", "保存草稿中"],
     ["abnormal", "发布异常"],

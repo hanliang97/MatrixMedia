@@ -20,6 +20,8 @@ export function applyXhsConservativePublishOptions(payload) {
 }
 
 export function getPublishAttemptLimit(data, defaultLimit = 5) {
+  // 原生排期提交可能已被平台受理，不能因超时或页面异常重复排期。
+  if (data && (data.nativeScheduleAt || data.scheduleMode === "native")) return 1;
   if (isXhsPlatform(data && data.pt)) return 1;
   const platform = String((data && data.pt) || "");
   const link = data && data.publishOptions && data.publishOptions.link;

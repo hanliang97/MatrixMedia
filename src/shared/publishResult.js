@@ -27,6 +27,14 @@ export function resolvePublishCompletion(payload) {
   // 登录态失效：不是内容/流程失败，需要人重新扫码。单独给一个状态和退出码，
   // 让流水线能区分「该重试/该补登录」和「内容有问题」。
   const loginRequired = Boolean(payload && payload.loginRequired === true);
+  const nativeSchedule = Boolean(payload && payload.nativeScheduleAt &&
+    (ok || payload.nativeSubmitAttempted === true));
+  const nativeScheduled = Boolean(
+    ok && nativeSchedule && payload.nativeScheduleVerified === true &&
+    !publishAbnormal && !savedAsDraft && !loginRequired && !payload.needsAttention
+  );
+  const nativeUnverified = nativeSchedule && !nativeScheduled;
+  const needsAttention = fallbackDraft || publishAbnormal || nativeUnverified;
   return {
     ok,
     message,
@@ -37,8 +45,11 @@ export function resolvePublishCompletion(payload) {
     // 这里不降级成失败（不触发自动重试，避免重复发布），只把语义说清楚。
     draftUnverified,
     loginRequired,
+    ...(nativeSchedule ? { nativeScheduled, needsAttention } : {}),
     recordStatus: loginRequired
       ? "login_required"
+      : nativeSchedule
+        ? nativeScheduled ? "native_scheduled" : "abnormal"
       : publishAbnormal
         ? "abnormal"
         : savedAsDraft
@@ -48,6 +59,8 @@ export function resolvePublishCompletion(payload) {
             : "failed",
     status: loginRequired
       ? "login_required"
+      : nativeSchedule
+        ? nativeScheduled ? "native_scheduled" : "needs_attention"
       : publishAbnormal
         ? "publish_abnormal"
         : fallbackDraft
@@ -59,6 +72,8 @@ export function resolvePublishCompletion(payload) {
               : "failed",
     exitCode: loginRequired
       ? 5
+      : nativeUnverified
+        ? 4
       : publishAbnormal
         ? 4
         : fallbackDraft
