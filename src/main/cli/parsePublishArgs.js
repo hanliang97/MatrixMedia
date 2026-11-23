@@ -686,7 +686,7 @@ export function publishHelpText() {
                             • 百家号/头条：当前代码不消费 bq，无需填。
       --publish-at <t>  一次性定时发布，格式 "YYYY-MM-DD HH:mm:ss"。创建后立即写入发布历史，
                             到点后由应用主进程调度执行；不支持每日/每周/每月循环。
-      --prefer-native-schedule  配合 --publish-at，抖音立即上传并由平台定时；
+      --prefer-native-schedule  配合 --publish-at，抖音和视频号立即上传并由平台定时；
                             时间使用本机时区，秒数须为 00。其他平台仍走软件定时。
                             原生设置未确认时停止，不退回立即发布。不能与草稿模式同时使用。
       --show            （已忽略）CLI 不显示自动化窗口

@@ -45,23 +45,26 @@ test('native schedule is exposed in publish and history schemas', () => {
   assert.ok(listHistoryTool.inputSchema.properties.status.enum.includes('native_scheduled'));
 });
 
-test('MCP forwards native scheduling and preserves the confirmed receipt', async () => {
-  await withCliReceipt({
-    resultStatus: 'native_scheduled', nativeScheduled: true,
-    nativeScheduleVerified: true, publishAt: args.publishAt, message: '平台已排期',
-  }, 0, async readArgs => {
-    const result = JSON.parse(await handlePublishVideo(args));
-    assert.equal(result.status, 'native_scheduled');
-    assert.equal(result.nativeScheduled, true);
-    assert.equal(result.nativeScheduleVerified, true);
-    assert.equal(result.publishAt, args.publishAt);
-    const argv = await readArgs();
-    assert.ok(argv.includes('--prefer-native-schedule'));
-    assert.equal(argv[argv.indexOf('--publish-at') + 1], args.publishAt);
-    assert.equal(argv[argv.indexOf('-t') + 1], args.title);
-    assert.ok(!argv.includes('--draft'));
+for (const platform of ['dy', 'sph']) {
+  test(`MCP forwards native scheduling for ${platform} and preserves the confirmed receipt`, async () => {
+    await withCliReceipt({
+      resultStatus: 'native_scheduled', nativeScheduled: true,
+      nativeScheduleVerified: true, publishAt: args.publishAt, message: '平台已排期',
+    }, 0, async readArgs => {
+      const result = JSON.parse(await handlePublishVideo({ ...args, platform }));
+      assert.equal(result.status, 'native_scheduled');
+      assert.equal(result.nativeScheduled, true);
+      assert.equal(result.nativeScheduleVerified, true);
+      assert.equal(result.publishAt, args.publishAt);
+      const argv = await readArgs();
+      assert.equal(argv[argv.indexOf('-p') + 1], platform);
+      assert.ok(argv.includes('--prefer-native-schedule'));
+      assert.equal(argv[argv.indexOf('--publish-at') + 1], args.publishAt);
+      assert.equal(argv[argv.indexOf('-t') + 1], args.title);
+      assert.ok(!argv.includes('--draft'));
+    });
   });
-});
+}
 
 test('unconfirmed native receipt stays needs_attention and is not called a draft', async () => {
   await withCliReceipt({

@@ -103,8 +103,11 @@ function harness(autoReply) {
   }
   {
     const h = harness({ status: true, nativeScheduleVerified: true });
-    const r = await h.api.runMultiPlatformPublish([{ ...request }]);
+    const sph = { ...request, platform: "视频号", partition: "persist:unit视频号" };
+    const r = await h.api.runMultiPlatformPublish([sph]);
     assert.equal(r.status, "native_scheduled");
+    assert.equal(h.tasks[0].data.pt, sph.platform);
+    assert.equal(h.tasks[0].data.scheduledTask, false);
     for (const result of [r, r.results[0]]) {
       assert.equal(result.nativeScheduleVerified, true);
       assert.equal(result.nativeScheduled, true);

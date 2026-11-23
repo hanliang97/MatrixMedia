@@ -57,11 +57,11 @@ export const publishVideoTool: Tool = {
       publishAt: {
         type: "string",
         description:
-          'Optional one-time scheduled publish time in the system local timezone, format "YYYY-MM-DD HH:mm:ss". MatrixMedia must be running then unless preferNativeSchedule is true on Douyin.',
+          'Optional one-time scheduled publish time in the system local timezone, format "YYYY-MM-DD HH:mm:ss". MatrixMedia must be running then unless platform scheduling is enabled.',
       },
       preferNativeSchedule: {
         type: "boolean",
-        description: "Prefer platform scheduling for Douyin: upload now and schedule on the platform, 2 hours to 14 days ahead. Requires publishAt in the system local timezone with seconds 00. Other platforms keep local scheduling. Never falls back to immediate publish.",
+        description: "Upload now and schedule on Douyin or WeChat Channels. Douyin accepts times 2 hours to 14 days ahead; WeChat Channels validates the time in its own picker. Requires publishAt in the system local timezone with seconds 00. Other platforms keep local scheduling. Never falls back to immediate publish.",
       },
       show: {
         type: "boolean",

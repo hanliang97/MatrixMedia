@@ -19,7 +19,7 @@ export function parsePublishAt(value, nowMs = Date.now()) {
 }
 
 export function supportsNativeSchedule(platform) {
-  return resolvePublishPlatform(platform) === "抖音";
+  return ["抖音", "视频号"].includes(resolvePublishPlatform(platform));
 }
 
 /** 所有入口共用路由；原生排期绝不登记成会到期执行的软件任务。 */

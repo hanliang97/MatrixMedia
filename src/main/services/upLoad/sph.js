@@ -1,5 +1,7 @@
 import path from "path";
 import fs from "fs";
+import { BrowserWindow } from "electron";
+import pie from "puppeteer-in-electron";
 import { normalizeCoverForUpload } from "../coverCompat.js";
 import maybeClosePublishWindow from "./closeWindow.js";
 import { head, matchesHead, replaceAllText } from "./textReadback.js";
@@ -9,6 +11,15 @@ import {
   resolveSphCreativeStatementLabel,
 } from "../../../shared/creativeStatement.js";
 import { attachSphVideoLink } from "./sphLink.js";
+import { markNativeScheduleSubmitting } from "../nativeScheduleGuard.js";
+import {
+  inspectSphNativeSchedule,
+  prepareSphNativeSchedule,
+  readSphWorkList,
+  sphWorkId,
+  validateSphNativeScheduleAt,
+  verifySphNativeScheduled,
+} from "./sphNativeSchedule.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
@@ -18,6 +29,7 @@ import { buildPlatformVideoText } from "../../../shared/videoMetadata.js";
 import {
   readPageUrl,
   readPageText,
+  replyNativeScheduleOutcome,
   replyPublishFailure,
   replyPublishOutcome,
 } from "./publishOutcome.js";
@@ -472,14 +484,53 @@ async function fallbackLinkFailureToDraft(page, data, window, event, error) {
   }
 }
 
-export default async function (page, data, window, event, onFinish) {
-  if (data.nativeScheduleAt || data.scheduleMode === "native") {
-    await replyPublishFailure({
-      page, data, window, event,
-      message: "视频号原生定时尚未启用，已停止任务，避免立即发布",
-    });
+function buildSphVideoText(data) {
+  const text = buildPlatformVideoText("视频号", data.data);
+  // 作品列表核验与表单使用同一份短标题。
+  return { ...text, shortTitle: text.shortTitle.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, " ") };
+}
+
+export default async function (page, data, window, event) {
+  if (!(data.nativeScheduleAt || data.scheduleMode === "native")) {
+    return publishSphVideo(page, data, window, event);
+  }
+
+  const validation = validateSphNativeScheduleAt(data.nativeScheduleAt);
+  const draft = data.publishMode === "draft" || data.publishToDraft === true;
+  let probe;
+  let native;
+  try {
+    if (draft || !validation.ok) {
+      throw new Error(draft ? "原生定时不能同时保存为草稿" : validation.error);
+    }
+    const text = buildSphVideoText(data);
+    if (!text.description.trim() && !text.shortTitle.trim()) {
+      throw new Error("视频号原生定时需要简介或短标题，以便在作品列表核对");
+    }
+    // 在上传前检查同一会话的管理页。没有可用的提交前列表，就不继续排期。
+    probe = new BrowserWindow({ show: false, webPreferences: {
+      session: window.webContents.session, contextIsolation: true, nodeIntegration: false,
+    } });
+    if (data.useragent) probe.webContents.setUserAgent(data.useragent);
+    const listPage = await pie.getPage(page.browser(), probe);
+    const { items, error } = await readSphWorkList(listPage);
+    if (!items) {
+      throw new Error(`无法读取视频号作品列表（${error}），已停止排期。请先在视频号助手确认当前微信有运营权限，且能打开作品管理。`);
+    }
+    native = { listPage, text, excludedIds: new Set(items.map(sphWorkId).filter(Boolean)) };
+  } catch (err) {
+    if (probe && !probe.isDestroyed()) probe.destroy();
+    await replyPublishFailure({ page, data, window, event, message: err?.message || String(err) });
     return;
   }
+  try {
+    await publishSphVideo(page, data, window, event, native);
+  } finally {
+    if (!probe.isDestroyed()) probe.destroy();
+  }
+}
+
+async function publishSphVideo(page, data, window, event, native = null) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
 
@@ -510,8 +561,9 @@ export default async function (page, data, window, event, onFinish) {
     return;
   }
 
+  let text;
   try {
-    const text = buildPlatformVideoText("视频号", data.data);
+    text = native?.text || buildSphVideoText(data);
     const isMac = process.platform === "darwin";
 
     /** 实时查询影子树里的输入字段内容（editor 读 textContent，input 读 value） */
@@ -563,21 +615,20 @@ export default async function (page, data, window, event, onFinish) {
     if (shortTitle) {
       const sel2 =
         'input[placeholder="填写短标题有机会获得更多流量"]';
-      let newBt = shortTitle.replace(/[，。、\/,;:!?'"()\[\]{}<>]/g, " ");
       let btOk = false;
       for (let attempt = 1; attempt <= 3 && !btOk; attempt++) {
         await clickSphShadow(page, sel2, { timeout: 5000, focus: true });
         await clearAndType();
-        await page.keyboard.type(newBt, { delay: 50 });
+        await page.keyboard.type(shortTitle, { delay: 50 });
         await page.waitForTimeout(300);
-        btOk = matchesHead(await readSphField(sel2, true), newBt);
+        btOk = matchesHead(await readSphField(sel2, true), shortTitle);
         if (!btOk && attempt < 3) {
           console.warn(`[sph] 短标题第 ${attempt} 次输入未生效，重输`);
         }
       }
       if (!btOk) {
         throw new Error(
-          `短标题未写入（期望含「${head(newBt)}」，回读校验失败）`
+          `短标题未写入（期望含「${head(shortTitle)}」，回读校验失败）`
         );
       }
     } else {
@@ -609,6 +660,7 @@ export default async function (page, data, window, event, onFinish) {
         );
       } catch (linkError) {
         console.error("[sph][link] 添加链接失败:", linkError);
+        if (native) throw linkError;
         const handled = await fallbackLinkFailureToDraft(
           page,
           data,
@@ -640,6 +692,19 @@ export default async function (page, data, window, event, onFinish) {
     const coverPath = data.data && data.data.coverPath;
     if (coverPath) {
       await uploadSphCustomCover(page, coverPath);
+    }
+
+    if (native) {
+      await prepareSphNativeSchedule(page, data.nativeScheduleAt);
+      markNativeScheduleSubmitting(data);
+      const submittedAt = Date.now();
+      await inspectSphNativeSchedule(page, data.nativeScheduleAt, true);
+      const verified = await verifySphNativeScheduled(native.listPage, text, data.nativeScheduleAt,
+        { excludedIds: native.excludedIds, submittedAt });
+      await replyNativeScheduleOutcome({ page, data, window, event, verified,
+        message: verified ? "视频号平台已确认原生定时排期" :
+          "已提交视频号原生定时，尚未核验到后台排期，请人工核对后再重试" });
+      return;
     }
 
     // 所有表单项（包括商品）完成后，草稿和发布只能二选一执行。
@@ -717,6 +782,11 @@ export default async function (page, data, window, event, onFinish) {
   } catch (err) {
     const detail =
       (err && err.message) || (typeof err === "string" ? err : String(err));
+    if (native && data.nativeSubmitAttempted === true) {
+      await replyNativeScheduleOutcome({ page, data, window, event, verified: false,
+        message: `视频号排期提交结果待核对：${detail.slice(0, 200)}` });
+      return;
+    }
     console.error("❌ 视频号发布失败:", err);
     // 失败瞬间截图留证（登录过期 / 风控弹窗 / 元素改版都能一眼看出）
     await replyPublishFailure({

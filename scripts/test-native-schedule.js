@@ -17,14 +17,14 @@ const now = new Date(2030, 0, 1, 12, 0, 0).getTime();
 const publishAt = "2030-01-02 13:45:00";
 const request = { platform: "dy", publishAt, preferNativeSchedule: true };
 
-for (const platform of ["dy", "抖音"]) {
+for (const platform of ["dy", "抖音", "sph", "视频号"]) {
   const r = resolveVideoSchedule({ ...request, platform }, now);
   assert.equal(r.ok, true);
   assert.equal(r.mode, "native");
   assert.equal(r.fields.scheduledTask, false, "原生排期不能被软件调度器执行");
   assert.equal(r.fields.nativeScheduleAt, new Date(2030, 0, 2, 13, 45).getTime(), "按本机时区解析");
 }
-for (const platform of ["ks", "xhs", "blbl", "sph", "视频号"]) {
+for (const platform of ["ks", "xhs", "blbl"]) {
   const r = resolveVideoSchedule({ ...request, platform }, now);
   assert.equal(r.mode, "local");
   assert.equal(r.fields.scheduledTask, true);
@@ -48,8 +48,13 @@ assert.equal(parsePublishArgs([...args, "--prefer-native-schedule"]).ok, false);
 assert.equal(parsePublishArgs([...args, "--publish-at", future, "--prefer-native-schedule", "--draft"]).ok, false);
 const body = { platform: "dy", phone: "test", file: "./v.mp4", title: "标题", publishAt: future, preferNativeSchedule: true };
 assert.equal(parsePublishRequest(body).value.preferNativeSchedule, true);
+const sphCli = parsePublishArgs(["-p", "sph", ...args.slice(2), "--publish-at", future, "--prefer-native-schedule"]);
+assert.equal(sphCli.ok, true);
+assert.equal(sphCli.value.platform, "视频号");
+assert.equal(sphCli.value.preferNativeSchedule, true);
+assert.equal(parsePublishRequest({ ...body, platform: "sph" }).value.preferNativeSchedule, true);
 assert.equal(parsePublishRequest({ ...body, preferNativeSchedule: false }).value.preferNativeSchedule, false);
-const multi = parseMultiPublishRequest({ ...body, platform: undefined, platforms: ["dy", "ks"] });
+const multi = parseMultiPublishRequest({ ...body, platform: undefined, platforms: ["dy", "sph", "ks"] });
 assert.equal(multi.ok, true);
 assert.ok(multi.value.every(r => r.preferNativeSchedule));
 
