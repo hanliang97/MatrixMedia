@@ -90,6 +90,15 @@ router.post("/publish", async function (req, res) {
       });
     }
 
+    // GUI 进程内的 HTTP POST /publish 允许显式开启可见窗口与保留不关窗，便于人工核对或通过二次校验
+    const reqBody = req.body || {};
+    if (!parsed.multi && reqBody.show === true) {
+      parsed.value.show = true;
+      if (reqBody.closeWindowAfterPublish === false) {
+        parsed.value.closeWindowAfterPublish = false;
+      }
+    }
+
     const result = parsed.multi
       ? await publishService.runMultiPlatformPublish(parsed.value)
       : await publishService.runSingleFilePublish(parsed.value);

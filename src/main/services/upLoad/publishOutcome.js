@@ -54,12 +54,18 @@ const BLOCKING_TIP_PATTERNS = [
  * 全程顺带记录页面上的「阻断类校验提示」，供地址未变化时补充失败原因。
  * @returns {Promise<{ok: boolean, signal: string, urlAfter: string, blockHint: string}>}
  */
-async function waitForPublishSignal(page, urlBefore, timeoutMs) {
+async function waitForPublishSignal(
+  page,
+  urlBefore,
+  timeoutMs,
+  { textBefore = "" } = {}
+) {
   // 按轮次而不是墙钟计时：每轮含 1 秒等待，真实环境等价于 timeoutMs；
   // 单测里 waitForTimeout 是空实现，也不会空转 20 秒。
   const maxRounds = Math.max(2, Math.ceil(timeoutMs / 1000));
   let urlAfter = readPageUrl(page);
   let blockHint = "";
+  const preExisting = String(textBefore || "");
   for (let round = 0; round < maxRounds; round++) {
     urlAfter = readPageUrl(page);
     if (
@@ -74,6 +80,10 @@ async function waitForPublishSignal(page, urlBefore, timeoutMs) {
     if (text) {
       for (const kw of SUCCESS_TOAST_TEXTS) {
         if (text.includes(kw)) {
+          // 若点击前页面静态文案里本来就已有该词，则只有出现在弹层 overlay 里才算新成功信号
+          if (preExisting.includes(kw) && !(signals.overlay && signals.overlay.includes(kw))) {
+            continue;
+          }
           return { ok: true, signal: `toast:${kw}`, urlAfter, blockHint: "" };
         }
       }
@@ -208,9 +218,30 @@ async function readPageTextSignals(page) {
         ].join(",");
         const acc = [];
         const overlays = [];
+        const visibleTextOf = (root) => {
+          // 优先使用 innerText（自动排除 <script>/<style>/display:none 隐藏文本，
+          // 避免把内联脚本里的 "发布成功" 误判成 Toast）；ShadowRoot 无 innerText，
+          // 用 TreeWalker 跳过 SCRIPT/STYLE/NOSCRIPT/TEMPLATE。
+          if (typeof root.innerText === "string") {
+            return root.innerText;
+          }
+          const parts = [];
+          const SKIP = new Set(["SCRIPT", "STYLE", "NOSCRIPT", "TEMPLATE"]);
+          const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+          let node = walker.nextNode();
+          while (node) {
+            const p = node.parentElement;
+            if (!p || !SKIP.has(p.tagName)) {
+              const s = String(node.nodeValue || "").trim();
+              if (s) parts.push(s);
+            }
+            node = walker.nextNode();
+          }
+          return parts.join(" ");
+        };
         const visit = (root) => {
           try {
-            const t = String(root.textContent || "");
+            const t = String(visibleTextOf(root) || "");
             if (t) acc.push(t);
           } catch (_) {
             /* 单个 root 读取失败不阻断 */
@@ -223,7 +254,7 @@ async function readPageTextSignals(page) {
           }
           for (const el of hits) {
             try {
-              const t = String(el.textContent || "").trim();
+              const t = String(visibleTextOf(el) || "").trim();
               if (t) overlays.push(t);
             } catch (_) {
               /* 单个弹层读取失败不阻断 */
@@ -398,6 +429,7 @@ export async function replyPublishOutcome({
   window,
   event,
   urlBefore,
+  textBefore = "",
   isDraftMode = false,
   successMessage = "上传成功",
   extraPayload = {},
@@ -484,7 +516,12 @@ export async function replyPublishOutcome({
   }
 
   // 发布模式判定窗口用 20 秒信号轮询；waitMs 仅约束草稿模式（存稿 5 秒足够）
-  const verdict = await waitForPublishSignal(page, urlBefore, PUBLISH_VERDICT_TIMEOUT_MS);
+  const verdict = await waitForPublishSignal(
+    page,
+    urlBefore,
+    PUBLISH_VERDICT_TIMEOUT_MS,
+    { textBefore }
+  );
   const urlAfter = verdict.urlAfter;
   // 读不到地址（窗口已关/页面销毁）时 abnormal 为 false，不误报异常
   const abnormal = !verdict.ok && !!verdict.urlAfter;

@@ -44,6 +44,7 @@ export function parsePublishArgs(subArgv) {
     dir: null,
     config: null,
     cover: null,
+    horizontalCover: null,
     creativeStatement: null,
     draft: false,
     noDownload: false,
@@ -90,6 +91,8 @@ export function parsePublishArgs(subArgv) {
       out.config = args[++i];
     } else if (a === "--cover") {
       out.cover = args[++i];
+    } else if (a === "--horizontal-cover" || a === "--cover-horizontal") {
+      out.horizontalCover = args[++i];
     } else if (a === "--creative-statement" || a === "--cs") {
       out.creativeStatement = args[++i];
     } else if (a === "--draft") {
@@ -438,6 +441,10 @@ export function publishBodyToArgv(body) {
     "--creative-statement"
   );
   pushPair(["cover", "coverPath", "cover-path"], "--cover");
+  pushPair(
+    ["horizontalCover", "coverHorizontal", "horizontal-cover", "cover-horizontal"],
+    "--horizontal-cover"
+  );
   const sphLink =
     (body.sphLink && typeof body.sphLink === "object" && body.sphLink) ||
     (body.platformOptions &&
@@ -552,6 +559,10 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "cover",
   "coverPath",
   "cover-path",
+  "horizontalCover",
+  "coverHorizontal",
+  "horizontal-cover",
+  "cover-horizontal",
   "show",
   "closeWindowAfterPublish",
   "draft",
