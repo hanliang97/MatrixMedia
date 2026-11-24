@@ -40,6 +40,7 @@ const {
   checkDescriptionOnce,
   looksLikeDoubledLanding,
   verifyDyEditorEmpty,
+  hardClearDyEditor,
 } = require(outfile);
 
 // 创作声明新旧文案兼容（shared 模块单独打包）
@@ -472,6 +473,70 @@ function createFakePage({
       "fiber 不可得的机器也必须能正常写入新简介"
     );
     assert.ok(!editor.text.includes("旧简介"), "旧内容不得残留");
+  }
+
+  // ---------- 12. hardClearDyEditor：发布前硬清空 ----------
+  // 抖音创作页同分区会恢复上次未提交的简介；清不干净时输入新文案会叠加成双。
+  // 12a. 页面预置「双份残留」→ 硬清空后必须为空
+  {
+    const { page, editor } = createFakePage({
+      restoredDraft: "11月20日三国志水友赛11月20日三国志水友赛",
+    });
+    const r = await hardClearDyEditor(page);
+    assert.strictEqual(r.cleared, true, "双份残留必须能被硬清空");
+    assert.strictEqual(editor.text, "", "硬清空后 DOM 必须为空");
+  }
+
+  // 12b. 硬清空后写入单份文案 → 不得是双份
+  {
+    const { page, editor } = createFakePage({
+      restoredDraft: "11月20日三国志水友赛11月20日三国志水友赛",
+    });
+    await hardClearDyEditor(page);
+    await fillDyDescription(page, "11月20日三国志水友赛", false);
+    assert.strictEqual(
+      editor.text,
+      "11月20日三国志水友赛",
+      "硬清空后必须只写入单份，不能是双份"
+    );
+    assert.ok(
+      !looksLikeDoubledLanding(editor.text, "11月20日三国志水友赛"),
+      "结果不得叠加成双"
+    );
+  }
+
+  // 12c. Slate state 残留（DOM 已空但 Slate 仍有旧值）→ 硬清空必须把 Slate 也清掉
+  {
+    const { page, editor } = createFakePage({
+      restoredDraft: "旧简介",
+      slateBehavior: { staleText: true },
+    });
+    // 先把 DOM 清掉但让 Slate 保留旧值：模拟键盘全选只删 DOM 的假清空
+    editor.text = "";
+    const r = await hardClearDyEditor(page);
+    assert.strictEqual(r.cleared, true, "Slate 残留也必须能被硬清空");
+  }
+
+  // 12d. 清不干净时必须返回 cleared:false（调用方据此中止发布）
+  {
+    const { page, editor } = createFakePage({
+      restoredDraft: "顽固内容",
+      execCommandDeleteWorks: false,
+      typeLands: false,
+    });
+    // 让所有清空手法都失效：DOM 始终不变
+    const frozen = "顽固内容";
+    Object.defineProperty(editor, "text", {
+      get: () => frozen,
+      set: () => {},
+      configurable: true,
+    });
+    const r = await hardClearDyEditor(page, { maxRounds: 1 });
+    assert.strictEqual(
+      r.cleared,
+      false,
+      "清不干净时必须返回 cleared:false，让调用方中止发布而不是发出双份"
+    );
   }
 
   console.log("dy-description: 全部断言通过");

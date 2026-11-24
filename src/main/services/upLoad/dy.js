@@ -791,10 +791,92 @@ async function ensureDyTitleIntact(page, title, { context = "" } = {}) {
 }
 
 /**
+ * 发布前硬清空简介编辑器（不信任任何「清空成功」的推断，逐次确认）。
+ *
+ * 背景：抖音创作页同分区会恢复上次未提交的简介，而 Windows 后台窗口下
+ * execCommand("delete") 可能静默失效。清空不干净时输入新文案会拼成双份
+ *（11月20日实战：期望 12 字，回读 24 字）。
+ *
+ * 做法：多手法轮换（execCommand 全选覆盖 → 键盘全选 → Slate onChange），
+ * 每次都回读 DOM + Slate 双视图确认；全部失败则返回 cleared:false，
+ * 由调用方中止发布（宁可发布失败，也不发双份简介）。
+ */
+export async function hardClearDyEditor(page, { maxRounds = 3 } = {}) {
+  const before = normalizeDyEditorText(await readDyEditorText(page));
+  const beforeSlate = await readDySlateState(page);
+  console.log(
+    `[dy] 硬清空前编辑器内容：DOM ${before.length} 字「${before.slice(0, 60)}」` +
+      `，Slate ${beforeSlate.available ? `${normalizeDyEditorText(beforeSlate.text).length} 字` : "不可得"}`
+  );
+
+  const strategies = [
+    {
+      name: "execCommand 全选覆盖",
+      run: (p) => forceOverwriteClearDyEditor(p),
+    },
+    {
+      name: "Slate onChange 重置",
+      run: async (p) => {
+        for (const mode of ["object", "emptyArray", "empty"]) {
+          const r = await trySlateClear(p, mode);
+          if (r && r.ok) break;
+        }
+        return verifyDyEditorEmpty(p);
+      },
+    },
+    {
+      name: "selectAllChildren + delete",
+      run: (p) => clearDyEditorLegacy(p),
+    },
+    {
+      name: "键盘全选 + Backspace",
+      run: async (p) => {
+        const mod = process.platform === "darwin" ? "Meta" : "Control";
+        try {
+          await p.click(DY_EDITOR_SELECTOR, { clickCount: 3, delay: 20 });
+        } catch (_) {}
+        try {
+          await p.keyboard.down(mod);
+          await p.keyboard.press("a");
+          await p.keyboard.up(mod);
+          await p.keyboard.press("Backspace");
+        } catch (_) {}
+        return verifyDyEditorEmpty(p);
+      },
+    },
+  ];
+
+  for (let round = 1; round <= maxRounds; round++) {
+    for (const s of strategies) {
+      const r = await s.run(page);
+      if (r && r.cleared) {
+        console.log(
+          `[dy] 硬清空成功（第 ${round} 轮 / ${s.name}）${
+            r.verified ? "" : "（Slate state 不可得，仅 DOM 判定）"
+          }`
+        );
+        return { cleared: true, verified: Boolean(r.verified), strategy: s.name };
+      }
+    }
+    // 一轮全失败，等页面稳定后重试（恢复弹层/重渲染可能正在发生）
+    await page.waitForTimeout(400);
+  }
+
+  const after = normalizeDyEditorText(await readDyEditorText(page));
+  console.warn(
+    `[dy] 硬清空失败（${maxRounds} 轮 × ${strategies.length} 种手法），编辑器仍有 ${after.length} 字「${after.slice(0, 60)}」`
+  );
+  return { cleared: false, verified: false, strategy: null };
+}
+
+/**
  * 发布前最后一道闸：复核简介未重复/未残缺。从填完简介到点发布之间还有
  * 封面设置（25s 落定等待）、引导弹窗、自主声明弹窗、商品挂车等步骤，都可能
- * 动过编辑器状态；点发布后再发现就晚了。复核不过先重填一轮（内部已有
- * 三层输入方式重试），再复核标题，仍不过则中止发布。
+ * 动过编辑器状态；点发布后再发现就晚了。
+ *
+ * 复核不通过时**先硬清空再重填**（不直接调 fillDyDescription 追加——
+ * 编辑器里可能残留上次恢复的双份文案，追加只会继续叠加），
+ * 硬清空失败则中止发布。
  */
 async function verifyDyDescriptionBeforePublish(page, text, data) {
   const expected = normalizeDyEditorText(text.description || "");
@@ -803,9 +885,25 @@ async function verifyDyDescriptionBeforePublish(page, text, data) {
     .catch(() => {});
   let landed = normalizeDyEditorText(await readDyEditorText(page));
   if (checkDescriptionOnce(landed, expected)) return;
+
+  // 证据快照：把页面恢复出来的内容完整记下来，便于真机排查
+  //（这是抖音同分区自动恢复的表现，不是本次输入的结果）
   console.warn(
-    `[dy] 发布前简介复核不通过（期望 ${expected.length} 字，实得 ${landed.length} 字：「${landed.slice(0, 60)}」），重填一轮`
+    `[dy] 发布前简介复核不通过（期望 ${expected.length} 字，实得 ${landed.length} 字），` +
+      `页面现有内容：「${landed.slice(0, 200)}」`
   );
+  if (expected && landed.includes(expected + expected)) {
+    console.warn("[dy] 检测到当前简介=期望文案×2，判定为上次残留叠加成双");
+  }
+
+  const cleared = await hardClearDyEditor(page);
+  if (!cleared.cleared) {
+    throw new Error(
+      `发布前无法清空简介编辑器（页面残留 ${landed.length} 字），` +
+        `为避免发出重复/残缺简介的作品已中止本次发布。请手动在抖音创作页清空简介后重试`
+    );
+  }
+
   await fillDyDescription(
     page,
     text.description,
@@ -817,7 +915,7 @@ async function verifyDyDescriptionBeforePublish(page, text, data) {
       `发布前简介复核失败（期望 ${expected.length} 字，实得 ${landed.length} 字：「${landed.slice(0, 60)}」），为避免发出重复/残缺简介的作品已中止本次发布`
     );
   }
-  console.log("[dy] 发布前简介复核通过（已重填）");
+  console.log("[dy] 发布前简介复核通过（已硬清空重填）");
   // 重填会触发描述区重渲染，复核标题没被顺手清掉（空标题发布后补不回来）
   await ensureDyTitleIntact(page, text.title, { context: "发布前复核重填后" });
 }
