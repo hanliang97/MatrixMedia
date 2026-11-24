@@ -92,6 +92,7 @@ import { Message } from "element-ui";
 import SidebarItem from "./SidebarItem";
 import router from "@/router";
 import { useAppStore } from "@/store/app";
+import { safeRouteSegment } from "@/utils/safeRouteSegment";
 import { usePermissionStore } from "@/store/permission";
 import dataRequest from "@/utils/dataRequest";
 import {
@@ -210,11 +211,16 @@ async function confirmRenameGroup() {
     await usePermissionStore().GenerateRoutes();
     // 当前若停留在旧分组页面，跳到新分组
     const currentPath = router.currentRoute.path || "";
-    const oldPrefix = `/accountManager/${oldName}`;
+    const oldPrefix = `/accountManager/${safeRouteSegment(oldName)}`;
     if (currentPath.startsWith(oldPrefix)) {
       const tail = currentPath.slice(oldPrefix.length);
       router
-        .push(`/accountManager/${newName}${tail}`.replace(/\/+$/, ""))
+        .push(
+          `/accountManager/${safeRouteSegment(newName)}${tail}`.replace(
+            /\/+$/,
+            ""
+          )
+        )
         .catch(() => {});
     }
   } catch (e) {

@@ -51,6 +51,7 @@
 <script>
 import { PT_ICONS } from "../ptIcons";
 import { compareGroups } from "../../../../shared/accountGroupOrder.js";
+import { safeRouteSegment } from "@/utils/safeRouteSegment";
 
 /** 不参与统计的平台 */
 const EXCLUDED = new Set(["番茄视频", "掘金"]);
@@ -131,7 +132,7 @@ export default {
     // 点击明细行跳转到对应「分组 × 平台」统计页；总计行不跳转
     onRowClick(row) {
       if (row.isGroupTotal) return;
-      const path = `/data-stats/group/${row.group}/${row.platform}`;
+      const path = `/data-stats/group/${safeRouteSegment(row.group)}/${safeRouteSegment(row.platform)}`;
       if (this.$route.path !== path) {
         this.$router.push(path).catch(() => {});
       }

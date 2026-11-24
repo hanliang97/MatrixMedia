@@ -153,9 +153,16 @@ export default {
       }
     },
     refreshAccountMenuIndex() {
-      const hit = this.$router
-        .getRoutes()
-        .find(
+      const routes = this.$router.getRoutes();
+      const hit =
+        routes.find(
+          (r) =>
+            typeof r.path === "string" &&
+            r.path.startsWith("/accountManager/") &&
+            r.meta &&
+            r.meta.pt
+        ) ||
+        routes.find(
           (r) =>
             typeof r.path === "string" && r.path.startsWith("/accountManager")
         );
@@ -297,12 +304,21 @@ export default {
                   .filter(
                     (route) =>
                       typeof route.path === "string" &&
-                      route.path.startsWith("/accountManager")
+                      route.path.startsWith("/accountManager/") &&
+                      route.meta &&
+                      route.meta.pt
                   );
                 if (accountRoutes.length > 0) {
-                  const targetPath = accountRoutes[0].path;
+                  const newlyAdded = accountRoutes.find(
+                    (route) =>
+                      route.meta &&
+                      route.meta.group === group &&
+                      route.meta.pt === pt &&
+                      recordAccountNameOf(route.meta) === accountName
+                  );
+                  const targetPath = (newlyAdded || accountRoutes[0]).path;
                   if (this.$route.path !== targetPath) {
-                    this.$router.push(targetPath);
+                    this.$router.push(targetPath).catch(() => {});
                   }
                   this.applyIsRouteFromPath(targetPath);
                   if (this.getAccoutIndex) {

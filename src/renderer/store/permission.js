@@ -20,6 +20,7 @@ import {
   recordGroupOf,
   recordAccountKeyOf,
 } from "../../shared/accountIdentity.js";
+import { safeRouteSegment } from "@/utils/safeRouteSegment";
 
 const getCookieTaskHandlers = new Map();
 let getCookieListenerBound = false;
@@ -85,7 +86,7 @@ function addFetchRoute(routes) {
             if (!group) return;
             if (!endData[group]) {
               endData[group] = {
-                path: "/accountManager/" + group,
+                path: "/accountManager/" + safeRouteSegment(group),
                 name: `accountManager-${group}`,
                 component: Layout,
                 redirect: "accountManager",
@@ -104,7 +105,9 @@ function addFetchRoute(routes) {
               (child) => (child.meta && child.meta.pt) === i.pt
             );
             const accountKey = recordAccountKeyOf(i);
-            const childPath = hasSamePt ? `${i.pt}-${accountKey || i.id}` : i.pt;
+            const childPath = safeRouteSegment(
+              hasSamePt ? `${i.pt}-${accountKey || i.id}` : i.pt
+            );
             groupNode.children.push({
               path: childPath,
               name: `accountManager-${group}-${i.id || accountKey}-${i.pt}`,
@@ -174,7 +177,7 @@ function addFetchRoute(routes) {
                 arr.findIndex((c) => c.path === child.path) === idx
             );
           routes.push({
-            path: "/data-stats/group/" + phone,
+            path: "/data-stats/group/" + safeRouteSegment(phone),
             name: `dataStats-${phone}`,
             component: Layout,
             meta: {
