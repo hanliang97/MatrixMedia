@@ -134,6 +134,10 @@
 | `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
 | `cover`              | 否     | 自定义封面图片路径（别名 `coverPath` / `cover-path`；抖音 / 快手 / 视频号生效；竖封面 3:4 比例最佳，抖音横封面基于竖封面自动生成；视频号仅收 jpg/png）           |
 | `sphProductId`       | 否     | 视频号商品上架快捷字段（商品编号）；仅视频号生效，等价于 `platformOptions.sph.link.type=product` |
+| `dyProductUrl`       | 否     | 抖音商品挂车快捷字段（**完整商品链接**）；仅抖音生效，等价于 `platformOptions.dy.link.type=product`。抖音挂车**还需 `shortTitle` 商品短标题（≤10 字）** |
+| `dyLink`             | 否     | 抖音链接对象 `{ type: "product", value: "<商品链接>" }`；仅抖音生效 |
+| `ksProductName`      | 否     | 快手商品挂车快捷字段（**货架中已存在的商品完整名称**，不是商品 ID）；仅快手生效，等价于 `platformOptions.ks.link.type=product` |
+| `ksLink`             | 否     | 快手链接对象 `{ type: "product", value: "<货架商品完整名称>" }`；仅快手生效 |
 | `sphDramaId` | 否 | 视频号小程序短剧挂载快捷字段（**短剧名称**，如 `泳陷错恋`）；仅视频号生效，等价于 `platformOptions.sph.link.type=mini_drama`                                         |
 | `sphSeriesId` | 否 | 视频号剧集挂载快捷字段（**剧集名称**，视频号原生剧集）；仅视频号生效，等价于 `platformOptions.sph.link.type=sph_series`                                         |
 | `sphLink`            | 否     | 视频号链接对象，如 `{ "type": "product", "value": "商品编号" }`、`{ "type": "mini_drama", "value": "短剧名称" }` 或 `{ "type": "sph_series", "value": "剧集名称" }`；与三个快捷字段同时传时优先快捷字段                           |

@@ -112,6 +112,10 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | `cover`             | 否   | 自定义封面图片路径（抖音 / 快手 / 视频号；竖封面 3:4 比例最佳，抖音横封面基于竖封面自动生成；视频号仅收 jpg/png） |
 | `creativeStatement` | 否   | 创作声明 / 视频号视频标注                                     |
 | `sphProductId`      | 否   | 视频号商品上架编号（推荐） |
+| `dyProductUrl`      | 否   | 抖音商品挂车（**完整商品链接**；还须配合 `shortTitle` 商品短标题 ≤10 字） |
+| `dyLink`            | 否   | 抖音链接对象（`type` 支持 `none` / `product`） |
+| `ksProductName`     | 否   | 快手商品挂车（**货架中已存在的商品完整名称**，不是商品 ID） |
+| `ksLink`            | 否   | 快手链接对象（`type` 支持 `none` / `product`） |
 | `sphDramaId`        | 否   | 视频号小程序短剧挂载（**短剧名称**，如 `泳陷错恋`）                          |
 | `sphSeriesId`       | 否   | 视频号剧集挂载（**剧集名称**，视频号原生剧集）                          |
 | `sphLink`           | 否   | 视频号链接对象（`type` 支持 `none` / `product` / `mini_drama` / `sph_series`）；与 `sphProductId` / `sphDramaId` / `sphSeriesId` 同时传时优先快捷字段 |

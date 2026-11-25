@@ -117,6 +117,54 @@ export const publishVideoTool: Tool = {
         },
         required: ["type"],
       },
+      dyProductUrl: {
+        type: "string",
+        description:
+          "Douyin (dy) product URL for attaching a shop product (商品挂车). Paste the full product link. Ignored for other platforms. Equivalent to dyLink with type=product.",
+      },
+      dyLink: {
+        type: "object",
+        description:
+          "Optional Douyin-only link configuration. Ignored for other platforms. If dyProductUrl is also set, the shortcut field wins.",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["none", "product"],
+            description:
+              "Douyin link type. product attaches a shop product by URL.",
+          },
+          value: {
+            type: "string",
+            description:
+              "Douyin product URL. Required when type=product; must be a full http(s) link.",
+          },
+        },
+        required: ["type"],
+      },
+      ksProductName: {
+        type: "string",
+        description:
+          "Kuaishou (ks) product NAME (not an ID) for attaching a shop product (商品挂车). Must exactly match a product already on the shelf (货架), e.g. 泳陷错恋同款水杯. Ignored for other platforms. Equivalent to ksLink with type=product.",
+      },
+      ksLink: {
+        type: "object",
+        description:
+          "Optional Kuaishou-only link configuration. Ignored for other platforms. If ksProductName is also set, the shortcut field wins.",
+        properties: {
+          type: {
+            type: "string",
+            enum: ["none", "product"],
+            description:
+              "Kuaishou link type. product attaches a shelf product by its full name.",
+          },
+          value: {
+            type: "string",
+            description:
+              "Kuaishou shelf product full name. Required when type=product.",
+          },
+        },
+        required: ["type"],
+      },
     },
     required: ["platform", "file", "title", "phone"],
   },
@@ -149,6 +197,12 @@ export async function handlePublishVideo(
   const sphSeriesId =
     args.sphSeriesId == null ? "" : String(args.sphSeriesId).trim();
   const sphLink = args.sphLink;
+  const dyProductUrl =
+    args.dyProductUrl == null ? "" : String(args.dyProductUrl).trim();
+  const dyLink = args.dyLink;
+  const ksProductName =
+    args.ksProductName == null ? "" : String(args.ksProductName).trim();
+  const ksLink = args.ksLink;
 
   if (typeof phone !== "string" || phone.length === 0) {
     throw new Error("phone must be non-empty string");
@@ -204,6 +258,50 @@ export async function handlePublishVideo(
     }
   }
 
+  // 抖音 / 快手商品挂车：与视频号同一套 publishOptions.link 契约，
+// 走 --dy-product-url / --ks-product-name 快捷参数（等价于各自的 --link-value）。
+  let dyLinkArgs: string[] = [];
+  if (String(platform) === "dy") {
+    if (dyProductUrl) {
+      dyLinkArgs = ["--dy-product-url", dyProductUrl];
+    } else if (dyLink && typeof dyLink === "object") {
+      const link = dyLink as Record<string, unknown>;
+      const type = String(link.type || "");
+      const value = link.value == null ? "" : String(link.value).trim();
+      if (type === "product" || (!type && value)) {
+        if (!value) {
+          throw new Error("dyLink.value is required when dyLink.type=product");
+        }
+        dyLinkArgs = ["--dy-product-url", value];
+      } else if (type === "none") {
+        dyLinkArgs = ["--dy-link-type", "none"];
+      } else if (type) {
+        throw new Error("dyLink.type must be one of: none, product");
+      }
+    }
+  }
+
+  let ksLinkArgs: string[] = [];
+  if (String(platform) === "ks") {
+    if (ksProductName) {
+      ksLinkArgs = ["--ks-product-name", ksProductName];
+    } else if (ksLink && typeof ksLink === "object") {
+      const link = ksLink as Record<string, unknown>;
+      const type = String(link.type || "");
+      const value = link.value == null ? "" : String(link.value).trim();
+      if (type === "product" || (!type && value)) {
+        if (!value) {
+          throw new Error("ksLink.value is required when ksLink.type=product");
+        }
+        ksLinkArgs = ["--ks-product-name", value];
+      } else if (type === "none") {
+        ksLinkArgs = ["--ks-link-type", "none"];
+      } else if (type) {
+        throw new Error("ksLink.type must be one of: none, product");
+      }
+    }
+  }
+
   const cliArgs: string[] = [
     "publish",
     "-p",
@@ -227,6 +325,8 @@ export async function handlePublishVideo(
     ...(creativeStatement ? ["--creative-statement", creativeStatement] : []),
     ...(cover ? ["--cover", cover] : []),
     ...sphLinkArgs,
+    ...dyLinkArgs,
+    ...ksLinkArgs,
   ];
 
   const result = await runCli(cliArgs, { onProgress });
