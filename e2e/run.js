@@ -166,8 +166,11 @@ async function askBackendCheck(platformName, manageUrl, marker) {
 /** 根据回执与退出码分类（详见 README 的结果分类表） */
 function classify({ r, receipt, hasVerifyLogic }) {
   if (r.timedOut) return "TIMEOUT";
-  // CLI 对 skip 回执只透传 resultStatus: "skipped"，没有 skipped 字段
-  if (receipt && (receipt.skipped || receipt.resultStatus === "skipped")) {
+  // CLI 对用户关窗跳过统一返回退出码 6，且回执带 skipped / resultStatus: "skipped"
+  if (
+    r.code === 6 ||
+    (receipt && (receipt.skipped || receipt.resultStatus === "skipped"))
+  ) {
     return "SKIPPED_USER_CLOSE";
   }
   if (r.code === 0 && receipt) {
@@ -177,7 +180,7 @@ function classify({ r, receipt, hasVerifyLogic }) {
     return "PASS_VERIFIED";
   }
   if (r.code === 4) return "NEEDS_ATTENTION";
-  if (r.code === 3) return "FAIL";
+  if (r.code === 3 || r.code === 5) return "FAIL";
   return "ERROR";
 }
 

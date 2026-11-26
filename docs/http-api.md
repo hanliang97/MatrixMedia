@@ -123,7 +123,7 @@
 | `platform`           | 单平台 | 上表任一平台 code 或中文名，如 `xhs` / `小红书`（与 `platforms` 二选一）                                                                 |
 | `platforms`          | 多平台 | 平台数组，可一次包含全部 8 个平台；如 `["dy","xhs","ks"]` 或对象数组 `[{ "platform": "dy", "phone": "138..." }, ...]`                    |
 | `file`               | 是     | 本地视频绝对路径，或 `http://` / `https://` 远程视频 URL（会先下载到临时目录，全部平台发布结束后自动删除；定时发布则在到点执行时再下载）。远程下载默认上限 4 GiB，`Content-Type` 不是视频（HTML / JSON 等错误页）或超过上限时直接返回失败，不落盘；当服务端只回通用类型（`application/octet-stream` / 未声明）时，再按视频容器魔数复核一次响应内容 |
-| `title`              | 是     | 视频标题                                                                                                                                 |
+| `title`              | 是     | 视频标题（抖音硬限 ≤ 30 字，按 Unicode 字符 1:1 计字，超长返回 HTTP `400`）                                                               |
 | `description`        | 否     | 视频简介；抖音、快手、视频号会与标签拼接，小红书写入正文，哔哩哔哩写入简介控件                                                           |
 | `shortTitle`         | 否     | 视频号短标题，建议 6 ～ 16 字；其他平台忽略                                                                                              |
 | `phone`              | 二选一 | 账号手机号（与 GUI 账号树一致）；多平台时可作为默认值，单个平台对象内可覆盖                                                              |
@@ -167,6 +167,7 @@
 - 参数错误：HTTP `400`
 - 单平台发布失败（如上传/填写失败）：HTTP `200`，但 `success: false`、`exitCode: 3`
 - 登录态失效：HTTP `200`，`success: false`、`status: login_required`、`exitCode: 5`（需重新扫码后重跑）
+- 用户手动关闭发布窗口跳过发布：HTTP `200`，`success: false`、`status: skipped`、`exitCode: 6`
 - 视频号链接添加失败但草稿保存成功：HTTP `200`，`success: false`、`status: needs_attention`、`exitCode: 4`
 - 多平台：HTTP 只表示任务是否提交成功，最终结果请查询发布记录
 - 服务已配置 CORS，浏览器或本机脚本均可调用

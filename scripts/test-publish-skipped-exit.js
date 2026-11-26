@@ -213,6 +213,8 @@ function testParseArgsAndGuiTitleValidation() {
   });
   assert.equal(multiOk.ok, true);
   assert.match(publishHelpText(), /30 字/);
+  assert.match(publishHelpText(), /5 登录态失效/);
+  assert.match(publishHelpText(), /6 用户关闭窗口跳过发布/);
 
   // 2) GUI LocalVideoPublish.vue validatePlatformTitles parity
   const vue = fs.readFileSync(
