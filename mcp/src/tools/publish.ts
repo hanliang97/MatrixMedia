@@ -24,7 +24,8 @@ export const publishVideoTool: Tool = {
       },
       title: {
         type: "string",
-        description: "Video title.",
+        description:
+          "Video title (required). Douyin (dy) enforces a hard limit of 30 Unicode characters (CJK, ASCII, and punctuation each count as 1); titles over 30 chars are rejected.",
       },
       description: {
         type: "string",
@@ -48,7 +49,8 @@ export const publishVideoTool: Tool = {
       },
       tags: {
         type: "string",
-        description: "Optional tags string.",
+        description:
+          "Optional space-separated tags string. Douyin (dy) and Kuaishou (ks) enforce a hard limit of 4 hashtags.",
       },
       address: {
         type: "string",
@@ -208,12 +210,24 @@ export async function handlePublishVideo(
     throw new Error("phone must be non-empty string");
   }
 
-  if (typeof file !== "string" || file.length === 0) {
+  if (typeof file !== "string" || file.trim().length === 0) {
     throw new Error("file must be non-empty string");
+  }
+
+  if (typeof title !== "string" || title.trim().length === 0) {
+    throw new Error("title must be non-empty string");
   }
 
   if (!VIDEO_PLATFORMS.includes(String(platform) as (typeof VIDEO_PLATFORMS)[number])) {
     throw new Error("platform must be one of: " + VIDEO_PLATFORMS.join(", "));
+  }
+
+  const trimmedTitle = title.trim();
+  const titleCharCount = Array.from(trimmedTitle).length;
+  if (String(platform) === "dy" && titleCharCount > 30) {
+    throw new Error(
+      `参数错误: 抖音标题不能超过 30 字（当前 ${titleCharCount} 字，中英文与标点均按 1 字计），请缩短后重试`
+    );
   }
 
   let sphLinkArgs: string[] = [];
@@ -309,7 +323,7 @@ export async function handlePublishVideo(
     "-f",
     file,
     "-t",
-    String(title),
+    trimmedTitle,
     // The CLI derives persist:<phone><平台中文名> itself, keeping every platform alias in sync.
     "--phone",
     phone,
@@ -329,15 +343,38 @@ export async function handlePublishVideo(
     ...ksLinkArgs,
   ];
 
+  const getCliMessage = (
+    res: { lastJson: unknown; stderr: string },
+    fallback: string,
+    maxStderr = 300
+  ): string => {
+    const json = res.lastJson;
+    if (json !== null && typeof json === "object") {
+      const msg = (json as { message?: unknown }).message;
+      if (typeof msg === "string" && msg.trim().length > 0) {
+        return msg.trim();
+      }
+    }
+    const errText = String(res.stderr || "").trim();
+    if (errText.length > 0) {
+      return errText.length > maxStderr
+        ? errText.slice(errText.length - maxStderr)
+        : errText;
+    }
+    return fallback;
+  };
+
   const result = await runCli(cliArgs, { onProgress });
 
   if (result.exitCode === 0) {
     const lastJson = result.lastJson;
-    if (
-      lastJson !== null &&
-      typeof lastJson === "object" &&
-      (lastJson as { scheduled?: unknown }).scheduled === true
-    ) {
+    if (lastJson === null || typeof lastJson !== "object") {
+      throw new Error(
+        "CLI 未返回发布结果（进程异常提前退出）" +
+          (result.stderr ? `: ${result.stderr.slice(0, 200)}` : "")
+      );
+    }
+    if ((lastJson as { scheduled?: unknown }).scheduled === true) {
       return JSON.stringify({
         status: "scheduled",
         id: (lastJson as any).id,
@@ -345,37 +382,85 @@ export async function handlePublishVideo(
         message: (lastJson as any).message,
       });
     }
-    return JSON.stringify({
-      status: (result.lastJson as any)?.resultStatus ?? "success",
-      publishMode: (result.lastJson as any)?.publishMode,
-      message: (result.lastJson as any)?.message ?? "上传成功",
-    });
+    if ((lastJson as { status?: unknown }).status === false) {
+      throw new Error((lastJson as any)?.message ?? "发布失败");
+    }
+    const out: Record<string, unknown> = {
+      status: (lastJson as any)?.resultStatus ?? "success",
+      publishMode: (lastJson as any)?.publishMode,
+      id: (lastJson as any)?.id ?? null,
+      message: (lastJson as any)?.message ?? "上传成功",
+    };
+    if ((lastJson as any)?.effectiveTitle) {
+      out.effectiveTitle = (lastJson as any).effectiveTitle;
+    }
+    if ((lastJson as any)?.titleTruncated) {
+      out.titleTruncated = true;
+    }
+    return JSON.stringify(out);
   }
 
   if (result.exitCode === 4) {
-    return JSON.stringify({
+    const lastJson = (result.lastJson && typeof result.lastJson === "object"
+      ? result.lastJson
+      : {}) as Record<string, unknown>;
+    const out: Record<string, unknown> = {
       status: "needs_attention",
-      publishMode: "draft",
-      outcome: (result.lastJson as any)?.outcome ?? "draft_saved",
+      publishMode:
+        typeof lastJson.publishMode === "string"
+          ? lastJson.publishMode
+          : lastJson.outcome === "draft_saved" ||
+              lastJson.outcome === "draft_unverified"
+            ? "draft"
+            : "publish",
+      outcome: lastJson.outcome ?? "needs_attention",
+      resultStatus: lastJson.resultStatus ?? "abnormal",
+      id: lastJson.id ?? null,
       needsAttention: true,
-      message:
-        (result.lastJson as any)?.message ?? "已转存草稿，请检查视频号链接",
-    });
+      message: getCliMessage(result, "发布状态待人工核对，请检查平台作品管理或草稿箱"),
+    };
+    if (typeof lastJson.failScreenshot === "string" && lastJson.failScreenshot) {
+      out.failScreenshot = lastJson.failScreenshot;
+    }
+    return JSON.stringify(out);
   }
 
-  if (result.exitCode === 3) {
+  if (result.exitCode === 5) {
     throw new Error(
-      (result.lastJson as any)?.message ?? "发布失败(登录态异常)"
+      "登录态已失效: " +
+        getCliMessage(result, "登录状态已失效，请重新登录后再试")
     );
   }
 
+  if (result.exitCode === 6) {
+    throw new Error(
+      "发布已取消: " +
+        getCliMessage(result, "用户关闭窗口，已跳过该平台的发布")
+    );
+  }
+
+  if (result.exitCode === 3) {
+    const msg = getCliMessage(result, "发布失败");
+    const shot =
+      result.lastJson &&
+      typeof result.lastJson === "object" &&
+      typeof (result.lastJson as any).failScreenshot === "string"
+        ? (result.lastJson as any).failScreenshot
+        : "";
+    throw new Error(shot ? `${msg}（截图: ${shot}）` : msg);
+  }
+
   if (result.exitCode === 1) {
-    throw new Error("发布超时或失败: " + result.stderr.slice(0, 300));
+    throw new Error("发布超时或失败: " + getCliMessage(result, "发布超时或失败"));
   }
 
   if (result.exitCode === 2) {
-    throw new Error("参数错误: " + result.stderr.slice(0, 200));
+    throw new Error("参数错误: " + getCliMessage(result, "参数错误", 200));
   }
 
-  throw new Error("未知错误 exit " + String(result.exitCode));
+  throw new Error(
+    "未知错误 exit " +
+      String(result.exitCode) +
+      (result.stderr ? `: ${result.stderr.slice(0, 200)}` : "")
+  );
 }

@@ -4,8 +4,13 @@ import { runCli } from '../runner.js';
 const PLATFORM_ENUM = ['dy', 'sph', 'blbl', 'bjh', 'tt', 'ks', 'xhs'] as const;
 
 function fmt(result: { exitCode: number; lastJson: unknown; stderr: string }): string {
-  if (result.lastJson) return JSON.stringify(result.lastJson, null, 2);
-  return result.stderr || `exit code ${result.exitCode}`;
+  const text = result.lastJson
+    ? JSON.stringify(result.lastJson, null, 2)
+    : result.stderr || `exit code ${result.exitCode}`;
+  if (result.exitCode !== 0) {
+    throw new Error(text);
+  }
+  return text;
 }
 
 /* ---------------- 1. 获取账号粉丝数据（本地快照） ---------------- */

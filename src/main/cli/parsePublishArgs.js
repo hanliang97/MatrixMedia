@@ -14,6 +14,10 @@ import {
   VIDEO_LINK_TYPES,
   buildVideoLinkOption,
 } from "../../shared/videoLink.js";
+import {
+  countCodePoints,
+  validatePlatformTitle,
+} from "../../shared/videoMetadata.js";
 
 export { PLATFORM_ALIASES, VIDEO_PUBLISH_CANONICAL, resolvePublishPlatform };
 
@@ -326,6 +330,12 @@ export function parsePublishArgs(subArgv) {
         "缺少 --title（或 -t）视频标题（与 GUI「视频标题」一致，写入 data.bt1）",
     };
   }
+  if (!out.dir) {
+    const titleCheck = validatePlatformTitle(out.platform, out.title);
+    if (!titleCheck.ok) {
+      return { ok: false, error: titleCheck.error };
+    }
+  }
   // in dir mode title comes from xlsx per row, no global --title needed
 
   if (out.show) {
@@ -382,6 +392,18 @@ export function parsePublishArgs(subArgv) {
           String(t).startsWith("#") ? String(t) : `#${String(t).trim()}`
         )
         .join(" ");
+    }
+  }
+
+  if (out.platform === "抖音") {
+    const combinedDesc = [String(out.description || "").trim(), String(out.bq || "").trim()]
+      .filter(Boolean)
+      .join(" ");
+    const descLen = countCodePoints(combinedDesc);
+    if (descLen > 1000) {
+      console.warn(
+        `MatrixMedia: 抖音简介与话题合并后共 ${descLen} 字，超出 1000 字建议上限，可能触发页面截断或提交失败。`
+      );
     }
   }
 
@@ -789,7 +811,7 @@ export function publishHelpText() {
                             未传时用 xlsx 每行的封面列（相对路径相对视频目录解析）
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000抖音
-  -t, --title <text>    视频标题（必填）→ data.title
+  -t, --title <text>    视频标题（必填）→ data.title（抖音硬限 ≤ 30 字，按字符数 1:1 计字，超出将拒绝发布）
       --description <text> 视频简介或正文 → data.description
       --short-title <text> 视频号短标题 → data.shortTitle，建议 6～16 字
       --name <n>        名称 / 任务记录名 → bookName；默认与视频文件名（无扩展名）一致

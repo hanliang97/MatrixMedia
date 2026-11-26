@@ -210,14 +210,17 @@ async function main() {
           "提示: 检测到 yarn dev 会话正在运行，跳过自动构建，直接使用当前 dist 产物；需要强制构建请加 --rebuild（并建议先停掉 yarn dev，避免争用 dist）"
         );
       } else {
-        console.log("本地构建 dist（yarn build:dir，源码有更新或产物缺失）…");
         const { spawnSync } = require("child_process");
-        const r = spawnSync("yarn", ["build:dir"], {
+        const hasYarn = spawnSync("yarn", ["--version"], { stdio: "ignore" }).status === 0;
+        const pmCmd = hasYarn ? "yarn" : "npm";
+        const pmArgs = hasYarn ? ["build:dir"] : ["run", "build:dir"];
+        console.log(`本地构建 dist（${pmCmd} ${pmArgs.join(" ")}，源码有更新或产物缺失）…`);
+        const r = spawnSync(pmCmd, pmArgs, {
           cwd: projectRoot(),
           stdio: "inherit",
         });
         if (r.status !== 0) {
-          throw new Error("yarn build:dir 构建失败，无法以本地开发模式运行 e2e");
+          throw new Error(`${pmCmd} ${pmArgs.join(" ")} 构建失败，无法以本地开发模式运行 e2e`);
         }
       }
     }

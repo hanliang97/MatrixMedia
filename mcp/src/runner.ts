@@ -179,13 +179,26 @@ export async function runCli(args: string[], opts?: RunCliOptions): Promise<CliR
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      const timeoutMin = Math.round(TIMEOUT_MS / 60000);
+      const timeoutNote = `MatrixMedia CLI 超时（${timeoutMin} 分钟），已发送 SIGTERM 终止子进程`;
+      stderr = stderr ? `${stderr}\n${timeoutNote}` : timeoutNote;
       try {
         child.kill('SIGTERM');
       } catch {
         /* ignore */
       }
+      const killTimer = setTimeout(() => {
+        try {
+          if (child.exitCode === null && !child.killed) {
+            child.kill('SIGKILL');
+          }
+        } catch {
+          /* ignore */
+        }
+      }, 5000);
+      if (typeof killTimer.unref === 'function') killTimer.unref();
       if (interval) clearInterval(interval);
-      resolve({ exitCode: 1, jsonLines, stderr, lastJson });
+      resolve({ exitCode: 1, jsonLines, stderr: stripNoiseLines(stderr), lastJson });
     }, TIMEOUT_MS);
 
     const processLine = (line: string): void => {

@@ -23,7 +23,14 @@ import { runHistoryCli } from "./runHistoryCli";
 import { runStatsCli } from "./runStatsCli";
 import { runCommentsCli } from "./runCommentsCli";
 import ptConfig from "../config/ptConfig";
-import { runPuppeteerTask } from "../services/puppeteerFile";
+import {
+  runPuppeteerTask,
+  cancelPuppeteerTasks,
+  cancelPuppeteerTaskById,
+} from "../services/puppeteerFile";
+import { cleanupCurrentProcessRegistry } from "../services/publishWindowRegistry";
+import { closeAllSocksBridges } from "../services/socksBridge";
+import { withCliPublishShutdownHook } from "../services/cliShutdownGuard";
 import { runDouyinCliLogin } from "../services/cliLogin/douyinCliLogin";
 import { runSphCliLogin } from "../services/cliLogin/sphCliLogin";
 import { runSphChromeLogin } from "../services/cliLogin/sphChromeLogin";
@@ -34,7 +41,10 @@ import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
 import { resolveAccountPublishMode } from "../services/accountPublishSettingsResolver.js";
 import { resolveTaskPartition } from "../services/accountLookup.js";
 import { ensureAccountRecordsMigrated } from "../services/accountMigration.js";
-import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
+import {
+  normalizeVideoMetadata,
+  validatePlatformTitle,
+} from "../../shared/videoMetadata.js";
 
 export {
   isCliMode,
@@ -267,6 +277,23 @@ async function runBatchDirPublish(v, cfg) {
     const bt1 = row.title && row.title.trim() ? row.title.trim() : stem;
     const bookName = stem;
 
+    const titleCheck = validatePlatformTitle(v.platform, bt1);
+    if (!titleCheck.ok) {
+      const r = {
+        index: i + 1,
+        total: rows.length,
+        fileName: row.fileName,
+        title: bt1,
+        platform: v.platform,
+        phone: v.phone || "",
+        status: "skipped",
+        message: titleCheck.error,
+      };
+      results.push(r);
+      console.log(JSON.stringify({ progress: true, ...r }));
+      continue;
+    }
+
     // 封面：显式 --cover 全局覆盖 xlsx 封面列；行内相对路径相对视频目录解析。
     // 校验失败按「文件不存在」同一策略跳过该行，不中断整批。
     const rawCover = String(v.cover || row.coverPath || "").trim();
@@ -444,6 +471,9 @@ async function runBatchDirPublish(v, cfg) {
         e && e.message
       );
     }
+    if (recordId) taskPayload.recordId = recordId;
+    taskPayload.recordDate = recordDate;
+    taskPayload.selectedFile = selectedFile;
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
@@ -485,19 +515,20 @@ async function runBatchDirPublish(v, cfg) {
 
     const taskResult = await new Promise((resolve) => {
       let settled = false;
-      const finish = (ok, message) => {
+      const finish = (ok, message, status = ok ? "success" : "failed") => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
-        resolve({ ok, message });
+        resolve({ ok, message, status });
       };
 
       const timer = setTimeout(() => {
         const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
         const msg = "CLI publish 超时（" + min + " 分钟）";
         console.error("[" + row.fileName + "] " + msg);
+        cancelPuppeteerTaskById(taskId, msg);
         updateRecord("failed", msg);
-        finish(false, msg);
+        finish(false, msg, "failed");
       }, CLI_PUBLISH_TIMEOUT_MS);
 
       const transport = {
@@ -508,7 +539,7 @@ async function runBatchDirPublish(v, cfg) {
             if (payload && payload.skipped) {
               const msg = payload.message || "用户关闭窗口，已跳过发布";
               updateRecord("skipped", msg);
-              finish(true, msg);
+              finish(false, msg, "skipped");
               return;
             }
             const ok = payload && payload.status === true;
@@ -519,7 +550,7 @@ async function runBatchDirPublish(v, cfg) {
               abnormal ? "abnormal" : ok ? "success" : "failed",
               msg
             );
-            finish(ok && !abnormal, msg);
+            finish(ok && !abnormal, msg, ok && !abnormal ? "success" : "failed");
           } else if (channel === "puppeteer-noLogin") {
             if (payload && payload.taskId != null && payload.taskId !== taskId)
               return;
@@ -529,7 +560,7 @@ async function runBatchDirPublish(v, cfg) {
               JSON.stringify(payload)
             );
             updateRecord("failed", msg);
-            finish(false, msg);
+            finish(false, msg, "failed");
           }
         },
       };
@@ -544,7 +575,7 @@ async function runBatchDirPublish(v, cfg) {
       title: bt1,
       platform: v.platform,
       phone: v.phone || "",
-      status: taskResult.ok ? "success" : "failed",
+      status: taskResult.status || (taskResult.ok ? "success" : "failed"),
       message: taskResult.message,
     };
     results.push(r);
@@ -655,18 +686,36 @@ export async function runCliMain(argv = process.argv) {
       return 2;
     }
 
+    const runCliPublishCleanup = (reason) => {
+      try {
+        cancelPuppeteerTasks(reason || "进程收到终止信号，发布已中断");
+      } catch (_) {}
+      try {
+        cleanupCurrentProcessRegistry();
+      } catch (_) {}
+      try {
+        closeAllSocksBridges();
+      } catch (_) {}
+    };
+
     // Batch directory publish mode
     if (v.dir) {
-      return await runBatchDirPublish(v, cfg);
+      return await withCliPublishShutdownHook(
+        () => runBatchDirPublish(v, cfg),
+        runCliPublishCleanup
+      );
     }
 
-    const result = await runSingleFilePublish(v);
+    const result = await withCliPublishShutdownHook(
+      () => runSingleFilePublish(v),
+      runCliPublishCleanup
+    );
     if (result.scheduled) {
       console.log(
         JSON.stringify({
           status: true,
           scheduled: true,
-          id: result.id,
+          id: result.id ?? null,
           publishAt: result.publishAt,
           message: result.message,
         })
@@ -678,6 +727,7 @@ export async function runCliMain(argv = process.argv) {
           status: true,
           resultStatus: result.status,
           publishMode: result.publishMode,
+          id: result.id ?? null,
           // 草稿模式的保存结果校验字段（#42），老版本 App 无这两个字段
           ...(result.draftVerified !== undefined
             ? { draftVerified: result.draftVerified }
@@ -685,6 +735,10 @@ export async function runCliMain(argv = process.argv) {
           ...(result.draftUrlUnchanged !== undefined
             ? { draftUrlUnchanged: result.draftUrlUnchanged }
             : {}),
+          ...(result.effectiveTitle
+            ? { effectiveTitle: result.effectiveTitle }
+            : {}),
+          ...(result.titleTruncated ? { titleTruncated: true } : {}),
           message: result.message,
         })
       );
@@ -696,17 +750,33 @@ export async function runCliMain(argv = process.argv) {
           resultStatus: result.status,
           publishMode: result.publishMode,
           outcome: result.outcome,
+          id: result.id ?? null,
           needsAttention: true,
           // 草稿未确认场景透传诊断字段，便于 e2e/脚本消费（#42）
           ...(result.draftUrlUnchanged !== undefined
             ? { draftUrlUnchanged: result.draftUrlUnchanged }
             : {}),
+          ...(result.failScreenshot
+            ? { failScreenshot: result.failScreenshot }
+            : {}),
           message: result.message,
         })
       );
     } else if (result.exitCode === 5) {
+      const msg = result.message || "登录态已失效，需要重新登录后再试";
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: false,
+          exitCode: 5,
+          resultStatus: "login_required",
+          loginRequired: true,
+          id: result.id ?? null,
+          message: msg,
+        })
+      );
       // 登录态失效：单独的退出码，直接给出重登指令（不要落进通用 else 只剩一句文案）
-      console.error(result.message || "登录态已失效，需要重新登录后再试");
+      console.error(msg);
       const aliasMap = {
         抖音: "dy",
         快手: "ks",
@@ -719,15 +789,59 @@ export async function runCliMain(argv = process.argv) {
       console.error(
         `提示: 先执行 cli login -p ${alias} --phone ${v.phone || "<手机号>"} 在本机完成扫码，再重跑本次发布。`
       );
+    } else if (result.exitCode === 6) {
+      const msg = result.message || "用户关闭窗口，已跳过发布";
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: false,
+          exitCode: 6,
+          resultStatus: "skipped",
+          skipped: true,
+          id: result.id ?? null,
+          message: msg,
+        })
+      );
+      console.error(msg);
     } else if (result.exitCode === 3) {
-      console.error(result.message || "登录态异常或未登录");
+      const msg = result.message || "发布失败";
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: false,
+          exitCode: 3,
+          resultStatus: result.status || "failed",
+          id: result.id ?? null,
+          ...(result.failScreenshot
+            ? { failScreenshot: result.failScreenshot }
+            : {}),
+          message: msg,
+        })
+      );
+      console.error(msg);
       if (v.platform === "抖音") {
         console.error(
-          "提示: 可先执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"
+          "提示: 若为登录态异常，可执行 cli login -p dy --phone <手机号> 在本机完成扫码登录。"
         );
       }
-    } else if (result.message) {
-      console.error(result.message);
+    } else {
+      const msg = result.message || "发布失败";
+      console.log(
+        JSON.stringify({
+          channel: "puppeteerFile-done",
+          status: false,
+          exitCode: result.exitCode,
+          resultStatus: result.status || "failed",
+          id: result.id ?? null,
+          ...(result.failScreenshot
+            ? { failScreenshot: result.failScreenshot }
+            : {}),
+          message: msg,
+        })
+      );
+      if (result.message) {
+        console.error(result.message);
+      }
     }
     return result.exitCode;
   }
@@ -883,6 +997,9 @@ export async function runCliMain(argv = process.argv) {
         e && e.message
       );
     }
+    if (recordId) taskPayload.recordId = recordId;
+    taskPayload.recordDate = recordDate;
+    taskPayload.selectedFile = selectedFile;
 
     const updateRecord = (status, message) => {
       if (!recordId) return;
@@ -895,7 +1012,8 @@ export async function runCliMain(argv = process.argv) {
             date: recordDate,
             publishStatus: status,
             publishSuccessCount: status === "success" ? 1 : 0,
-            publishFailCount: status === "failed" ? 1 : 0,
+            publishFailCount:
+              status === "failed" || status === "login_required" ? 1 : 0,
             publishAbnormalCount: status === "abnormal" ? 1 : 0,
             lastPublishMessage: message || "",
             lastPublishAt: Date.now(),
@@ -909,82 +1027,112 @@ export async function runCliMain(argv = process.argv) {
       }
     };
 
-    return await new Promise((resolve) => {
-      let settled = false;
-      const finish = (code) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve(code);
-      };
+    const runArticleCleanup = (reason) => {
+      try {
+        cancelPuppeteerTasks(reason || "进程收到终止信号，文章发布已中断");
+      } catch (_) {}
+      try {
+        cleanupCurrentProcessRegistry();
+      } catch (_) {}
+      try {
+        closeAllSocksBridges();
+      } catch (_) {}
+    };
 
-      const timer = setTimeout(() => {
-        const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
-        console.error(
-          `CLI publish-article 超时（${min} 分钟），请检查网络或登录态`
-        );
-        updateRecord("failed", `CLI publish-article 超时 ${min} 分钟`);
-        finish(1);
-      }, CLI_PUBLISH_TIMEOUT_MS);
+    return await withCliPublishShutdownHook(
+      () =>
+        new Promise((resolve) => {
+          let settled = false;
+          const finish = (code) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve(code);
+          };
 
-      const transport = {
-        reply(channel, payload) {
-          if (channel === "puppeteerFile-done") {
-            if (
-              payload &&
-              payload.taskId != null &&
-              payload.taskId !== taskId
-            ) {
-              return;
-            }
-            if (payload && payload.skipped) {
-              console.log(
-                JSON.stringify({
-                  channel,
-                  skipped: true,
-                  message: payload.message,
-                })
-              );
-              updateRecord(
-                "skipped",
-                payload.message || "用户关闭窗口，已跳过发布"
-              );
-              finish(0);
-              return;
-            }
-            const ok = payload && payload.status === true;
-            console.log(
-              JSON.stringify({
-                channel,
-                status: ok,
-                message: payload && payload.message,
-              })
-            );
-            updateRecord(
-              ok ? "success" : "failed",
-              (payload && payload.message) ||
-                (ok ? "文章发布成功" : "文章发布失败")
-            );
-            finish(ok ? 0 : 3);
-          } else if (channel === "puppeteer-noLogin") {
-            if (
-              payload &&
-              payload.taskId != null &&
-              payload.taskId !== taskId
-            ) {
-              return;
-            }
-            console.error("登录态异常或未登录:", JSON.stringify(payload));
-            updateRecord("failed", "登录态异常或未登录");
-            finish(3);
-          } else {
-            console.log(channel, payload);
-          }
-        },
-      };
+          const timer = setTimeout(() => {
+            const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
+            const msg = `CLI publish-article 超时（${min} 分钟），请检查网络或登录态`;
+            console.error(msg);
+            cancelPuppeteerTaskById(taskId, msg);
+            updateRecord("failed", `CLI publish-article 超时 ${min} 分钟`);
+            finish(1);
+          }, CLI_PUBLISH_TIMEOUT_MS);
 
-      runPuppeteerTask(taskPayload, transport, () => {});
-    });
+          const transport = {
+            reply(channel, payload) {
+              if (channel === "puppeteerFile-done") {
+                if (
+                  payload &&
+                  payload.taskId != null &&
+                  payload.taskId !== taskId
+                ) {
+                  return;
+                }
+                if (payload && payload.skipped) {
+                  const msg = payload.message || "用户关闭窗口，已跳过发布";
+                  console.log(
+                    JSON.stringify({
+                      channel,
+                      status: false,
+                      resultStatus: "skipped",
+                      skipped: true,
+                      id: recordId ?? null,
+                      message: msg,
+                    })
+                  );
+                  updateRecord("skipped", msg);
+                  finish(6);
+                  return;
+                }
+                const ok = payload && payload.status === true;
+                console.log(
+                  JSON.stringify({
+                    channel,
+                    status: ok,
+                    resultStatus: ok ? "success" : "failed",
+                    id: recordId ?? null,
+                    message: payload && payload.message,
+                  })
+                );
+                updateRecord(
+                  ok ? "success" : "failed",
+                  (payload && payload.message) ||
+                    (ok ? "文章发布成功" : "文章发布失败")
+                );
+                finish(ok ? 0 : 3);
+              } else if (channel === "puppeteer-noLogin") {
+                if (
+                  payload &&
+                  payload.taskId != null &&
+                  payload.taskId !== taskId
+                ) {
+                  return;
+                }
+                const msg = (payload && payload.message) || "登录态异常或未登录";
+                console.log(
+                  JSON.stringify({
+                    channel: "puppeteerFile-done",
+                    status: false,
+                    resultStatus: "login_required",
+                    loginRequired: true,
+                    id: recordId ?? null,
+                    message: msg,
+                  })
+                );
+                console.error("登录态异常或未登录:", JSON.stringify(payload));
+                updateRecord("login_required", msg);
+                finish(5);
+              } else {
+                console.log(channel, payload);
+              }
+            },
+          };
+
+          runPuppeteerTask(taskPayload, transport, () => {});
+        }),
+      runArticleCleanup
+    );
   }
 
   if (cmd === "accounts") {

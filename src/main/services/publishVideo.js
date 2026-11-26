@@ -4,7 +4,10 @@ import fs from "fs";
 import path from "path";
 import { normalizeCreativeStatement } from "../../shared/creativeStatement.js";
 import ptConfig from "../config/ptConfig";
-import { runPuppeteerTask } from "./puppeteerFile";
+import {
+  runPuppeteerTask,
+  cancelPuppeteerTaskById,
+} from "./puppeteerFile";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "./scheduledPublish";
 import { findExistingScheduled } from "./scheduledDedupe.js";
@@ -343,8 +346,11 @@ async function runSingleFilePublishInner(
   } catch (e) {
     console.error("MatrixMedia: 写入 pushData 初始记录失败:", e && e.message);
   }
+  if (recordId) taskPayload.recordId = recordId;
+  taskPayload.recordDate = recordDate;
+  taskPayload.selectedFile = selectedFile;
 
-  const updateRecord = (status, message) => {
+  const updateRecord = (status, message, extra = {}) => {
     if (!recordId) return;
     try {
       changeData({
@@ -364,6 +370,9 @@ async function runSingleFilePublishInner(
           publishAbnormalCount: status === "abnormal" ? 1 : 0,
           lastPublishMessage: message || "",
           lastPublishAt: Date.now(),
+          ...(extra && extra.failScreenshot
+            ? { failScreenshot: extra.failScreenshot }
+            : {}),
         },
       });
     } catch (e) {
@@ -392,6 +401,7 @@ async function runSingleFilePublishInner(
       const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
       const message = `发布超时（${min} 分钟），请检查网络或登录态`;
       console.error(message);
+      cancelPuppeteerTaskById(taskId, message);
       updateRecord("failed", message);
       finish({ exitCode: 1, status: "failed", message, id: recordId });
     }, CLI_PUBLISH_TIMEOUT_MS);
@@ -406,15 +416,18 @@ async function runSingleFilePublishInner(
             const message = payload.message || "用户关闭窗口，已跳过发布";
             updateRecord("skipped", message);
             finish({
-              exitCode: 0,
+              exitCode: 6,
               status: "skipped",
               message,
               id: recordId,
+              skipped: true,
             });
             return;
           }
           const completion = resolvePublishCompletion(payload);
-          updateRecord(completion.recordStatus, completion.message);
+          updateRecord(completion.recordStatus, completion.message, {
+            failScreenshot: payload && payload.failScreenshot,
+          });
           finish({
             exitCode: completion.exitCode,
             status: completion.status,
@@ -427,6 +440,15 @@ async function runSingleFilePublishInner(
             // undefined 时 JSON.stringify 自动省略，保持老版本输出兼容
             draftVerified: payload && payload.draftVerified,
             draftUrlUnchanged: payload && payload.draftUrlUnchanged,
+            ...(payload && payload.failScreenshot
+              ? { failScreenshot: payload.failScreenshot }
+              : {}),
+            ...(payload && payload.effectiveTitle
+              ? { effectiveTitle: payload.effectiveTitle }
+              : {}),
+            ...(payload && payload.titleTruncated
+              ? { titleTruncated: true }
+              : {}),
           });
         } else if (channel === "puppeteer-noLogin") {
           if (payload && payload.taskId != null && payload.taskId !== taskId) {
