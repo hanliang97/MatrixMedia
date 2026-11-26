@@ -81,6 +81,7 @@ const ADAPTERS = {
         workId: String(it.id),
         url: "https://www.douyin.com/video/" + it.id,
         title: it.description || it.item_title || "(无标题)",
+        itemTitle: it.item_title || "",
         publishTime: __num(it.create_time) * 1000,
         play: __num(mt.view_count),
         like: __num(mt.like_count),

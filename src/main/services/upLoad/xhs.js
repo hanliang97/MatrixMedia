@@ -12,6 +12,7 @@ import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
+  isPageClosedError,
 } from "./uploadTimeouts.js";
 import {
   getRandomDelayMs,
@@ -20,6 +21,9 @@ import {
 import {
   buildPlatformVideoText,
   normalizeVideoTags,
+  PLATFORM_TITLE_LIMITS,
+  countCodePoints,
+  sliceCodePoints,
 } from "../../../shared/videoMetadata.js";
 
 /**
@@ -295,10 +299,12 @@ export default async function (page, data, window, event) {
     const titleInput = await page.$(titleSelector);
     if (!titleInput) throw new Error("未找到标题输入框");
     const rawTitle = text.title;
-    const titleText = rawTitle.slice(0, 20);
-    if (rawTitle.length > 20) {
+    const xhsTitleLimit = PLATFORM_TITLE_LIMITS["小红书"] || 20;
+    const rawTitleLen = countCodePoints(rawTitle);
+    const titleText = sliceCodePoints(rawTitle, xhsTitleLimit);
+    if (rawTitleLen > xhsTitleLimit) {
       console.warn(
-        `[xhs] ⚠️ 标题共${rawTitle.length}字，超过20字限制，已截断为: "${titleText}"`
+        `[xhs] ⚠️ 标题共${rawTitleLen}字，超过${xhsTitleLimit}字限制，已截断为: "${titleText}"`
       );
     }
     await titleInput.click({ clickCount: 3 });
@@ -430,7 +436,8 @@ export default async function (page, data, window, event) {
         WAIT_UPLOAD_PROCESSING_MS
       );
       console.log("[xhs] 视频上传完成（重新上传按钮已出现）");
-    } catch (_) {
+    } catch (e) {
+      if (isPageClosedError(e)) throw e;
       console.log("[xhs] 视频上传等待超时，继续走发布流程");
     }
 

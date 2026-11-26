@@ -248,9 +248,9 @@ router.get("/stats/work", function (req, res) {
   }
   try {
     const store = require("../../services/dataStats/store.js");
+    const { findWorkByTitle } = require("../../../shared/workStatsMatch.js");
     const { works } = store.readAccount(phone, pt);
-    const norm = (s) => String(s || "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
-    const hit = (works || []).find((w) => norm(w.title) === norm(title));
+    const hit = findWorkByTitle(works, title);
     if (!hit) {
       return res.json({
         success: false,

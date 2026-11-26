@@ -85,6 +85,14 @@
               @generated="onAiTitle"
             />
           </div>
+          <div
+            style="font-size: 12px; line-height: 18px; margin-top: 4px"
+            :style="{
+              color: formTitleCharCount > 30 ? '#f56c6c' : '#909399',
+            }"
+          >
+            当前 {{ formTitleCharCount }} 字（抖音硬限 30 字，超出将无法提交至抖音）
+          </div>
         </el-form-item>
         <el-form-item label="视频简介">
           <div class="ai-field-row">
@@ -120,6 +128,7 @@
               @compositionstart.native.capture="onBqCompositionStart"
               @compositionend.native.capture="onBqCompositionEnd"
               @keydown.native.capture="onBqKeydown"
+              @change="onBqTagsChange"
             ></el-select>
             <ai-generate-button
               :active="metaVisible"
@@ -725,7 +734,12 @@ import {
   sanitizeVideohaoBt2Input,
   validateVideohaoBt2 as validateVideohaoBt2Value,
 } from "@/utils/localVideoPublishBt2";
-import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
+import {
+  countTitleChars,
+  normalizeVideoMetadata,
+  normalizeVideoTags,
+  validatePlatformTitle,
+} from "../../shared/videoMetadata.js";
 import AiGenerateButton from "@/components/ai/AiGenerateButton.vue";
 
 function fileBaseName(p) {
@@ -742,18 +756,13 @@ function fileStem(p) {
 }
 
 function parseBqToTags(raw) {
-  return String(raw || "")
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean);
+  return normalizeVideoTags(raw);
 }
 
 /** 话题平台依赖「#词」；标签多选无 # 时自动补上，已带 # 的不重复添加 */
 function formatBqFromTags(tags) {
-  return (Array.isArray(tags) ? tags : [])
-    .map((t) => String(t).trim())
-    .filter(Boolean)
-    .map((t) => (t.startsWith("#") ? t : `#${t}`))
+  return normalizeVideoTags(tags)
+    .map((t) => `#${t}`)
     .join(" ");
 }
 
@@ -839,6 +848,9 @@ export default {
     coverFileName() {
       return this.form.coverPath ? fileBaseName(this.form.coverPath) : "";
     },
+    formTitleCharCount() {
+      return countTitleChars(this.form.bt1);
+    },
     batchStatementOptions() {
       return CREATIVE_STATEMENT_OPTIONS;
     },
@@ -914,6 +926,10 @@ export default {
     /** 生成的标签追加到已有标签后，自动去重 */
     onAiTags(list) {
       this._pushBqTags(list);
+    },
+    /** 回车直接创建含逗号/空格的标签时，立即拆分成多个独立标签 */
+    onBqTagsChange(list) {
+      this.bqTags = normalizeVideoTags(list);
     },
     platformSupportsVideoLink,
     /** 把字符串按 # / 空格 / 逗号 / 分号 / 顿号 切成多个标签 */
@@ -1697,6 +1713,13 @@ export default {
     validateVideohaoBt2(value) {
       return validateVideohaoBt2Value(value);
     },
+    validatePlatformTitles(platforms, title) {
+      for (const p of platforms || []) {
+        const res = validatePlatformTitle(p && p.pt, title);
+        if (!res.ok) return res.error;
+      }
+      return "";
+    },
     warnBt2SpecialPunctuation() {
       this.$message.warning("概括短标题不能包含特殊标点符号");
     },
@@ -1994,6 +2017,11 @@ export default {
       }
       if (isDraftMode && this.scheduledPublish) {
         this.$message.warning("发布到草稿不支持定时发布，请关闭定时发布后再试");
+        return;
+      }
+      const titleError = this.validatePlatformTitles(platforms, this.form.bt1);
+      if (titleError) {
+        this.$message.warning(titleError);
         return;
       }
       const hasVideohao = platforms.some(this.isVideohaoPlatform);
@@ -2451,6 +2479,16 @@ export default {
           this.$message.error(
             `视频号封面仅支持 jpg/png 格式（文件 ${badCoverRow.fileName}）: ${badCoverRow.coverResolved}`
           );
+          return;
+        }
+      }
+
+      for (const fileRow of this.dirBatchFiles) {
+        const stem = fileRow.fileName.replace(/\.[^/.]+$/, "");
+        const rowTitle = (fileRow.title || stem).trim();
+        const rowTitleError = this.validatePlatformTitles(platforms, rowTitle);
+        if (rowTitleError) {
+          this.$message.warning(`文件 ${fileRow.fileName}: ${rowTitleError}`);
           return;
         }
       }
