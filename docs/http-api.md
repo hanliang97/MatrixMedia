@@ -132,7 +132,8 @@
 | `tags`               | 否     | 标签，支持空格 / 逗号分隔；HTTP 会按 GUI 批量发布习惯拆分后再按平台补 `#` 或去 `#`                                                       |
 | `publishAt`          | 否     | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`（多平台时需全部一致）                                                                         |
 | `draft`              | 否     | `true` 时保存到平台草稿箱，不直接发布                                                                                                    |
-| `cover`              | 否     | 自定义封面图片路径（别名 `coverPath` / `cover-path`；抖音 / 快手 / 视频号生效；竖封面 3:4 比例最佳，抖音横封面基于竖封面自动生成；视频号仅收 jpg/png）           |
+| `cover`              | 否     | 自定义封面图片路径（别名 `coverPath` / `cover-path`；抖音 / 快手 / 视频号 / 哔哩哔哩生效；竖封面 3:4 比例最佳，视频号仅收 jpg/png；B 站未传 `horizontalCover` 时复用此图） |
+| `horizontalCover`    | 否     | 横版自定义封面图片路径（别名 `horizontalCoverPath` / `coverHorizontal` / `horizontal-cover`；推荐 4:3 如 1440×1080；哔哩哔哩优先使用并同步 4:3 推荐与 16:9 个人空间封面） |
 | `sphProductId`       | 否     | 视频号商品上架快捷字段（商品编号）；仅视频号生效，等价于 `platformOptions.sph.link.type=product` |
 | `dyProductUrl`       | 否     | 抖音商品挂车快捷字段（**完整商品链接**）；仅抖音生效，等价于 `platformOptions.dy.link.type=product`。抖音挂车**还需 `shortTitle` 商品短标题（≤10 字）** |
 | `dyLink`             | 否     | 抖音链接对象 `{ type: "product", value: "<商品链接>" }`；仅抖音生效 |

@@ -44,6 +44,7 @@ export function parsePublishArgs(subArgv) {
     dir: null,
     config: null,
     cover: null,
+    horizontalCover: null,
     creativeStatement: null,
     draft: false,
     noDownload: false,
@@ -90,6 +91,8 @@ export function parsePublishArgs(subArgv) {
       out.config = args[++i];
     } else if (a === "--cover") {
       out.cover = args[++i];
+    } else if (a === "--horizontal-cover" || a === "--cover-horizontal") {
+      out.horizontalCover = args[++i];
     } else if (a === "--creative-statement" || a === "--cs") {
       out.creativeStatement = args[++i];
     } else if (a === "--draft") {
@@ -438,6 +441,17 @@ export function publishBodyToArgv(body) {
     "--creative-statement"
   );
   pushPair(["cover", "coverPath", "cover-path"], "--cover");
+  pushPair(
+    [
+      "horizontalCover",
+      "horizontalCoverPath",
+      "coverHorizontal",
+      "horizontal-cover",
+      "horizontal-cover-path",
+      "cover-horizontal",
+    ],
+    "--horizontal-cover"
+  );
   const sphLink =
     (body.sphLink && typeof body.sphLink === "object" && body.sphLink) ||
     (body.platformOptions &&
@@ -552,6 +566,12 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "cover",
   "coverPath",
   "cover-path",
+  "horizontalCover",
+  "horizontalCoverPath",
+  "coverHorizontal",
+  "horizontal-cover",
+  "horizontal-cover-path",
+  "cover-horizontal",
   "show",
   "closeWindowAfterPublish",
   "draft",
@@ -783,10 +803,11 @@ export function publishHelpText() {
       --cs, --creative-statement <val>  creative statement value for single-file mode.
                             Valid values: none | ai_generated | fiction | marketing | personal_opinion | repost | self_made_no_repost
                             (self_made_no_repost is blbl-only). Default: none.
-      --cover <path>    自定义封面图片路径（抖音/快手/视频号生效；竖封面 3:4 比例最佳，
-                            抖音横封面基于竖封面自动生成；视频号仅收 jpg/png）。
+      --cover <path>    自定义封面图片路径（抖音/快手/视频号/哔哩哔哩生效；竖封面 3:4 比例最佳，
+                            抖音横封面基于竖封面自动生成；视频号仅收 jpg/png；B 站未传横版封面时复用此图）。
                             单文件模式传绝对路径；--dir 批量模式下全局覆盖 xlsx「封面」列，
                             未传时用 xlsx 每行的封面列（相对路径相对视频目录解析）
+      --horizontal-cover <path>  横版自定义封面图片路径（4:3 推荐，如 1440×1080；哔哩哔哩优先使用并同步 4:3/16:9 双比例；别名 --cover-horizontal）
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000抖音
   -t, --title <text>    视频标题（必填）→ data.title

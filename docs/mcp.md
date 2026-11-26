@@ -109,7 +109,8 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | `publishAt`    | 否   | 定时发布，`YYYY-MM-DD HH:mm:ss`                               |
 | `show`         | 否   | 是否显示底层浏览器窗口                                        |
 | `draft`             | 否   | `true` 时保存到草稿箱，不直接发布                             |
-| `cover`             | 否   | 自定义封面图片路径（抖音 / 快手 / 视频号；竖封面 3:4 比例最佳，抖音横封面基于竖封面自动生成；视频号仅收 jpg/png） |
+| `cover`             | 否   | 自定义封面图片路径（抖音 / 快手 / 视频号 / 哔哩哔哩；竖封面 3:4 比例最佳，视频号仅收 jpg/png；B 站未传 `horizontalCover` 时复用此图） |
+| `horizontalCover`   | 否   | 横版自定义封面图片路径（推荐 4:3 如 1440×1080；哔哩哔哩优先使用并同步 4:3 推荐与 16:9 个人空间封面） |
 | `creativeStatement` | 否   | 创作声明 / 视频号视频标注                                     |
 | `sphProductId`      | 否   | 视频号商品上架编号（推荐） |
 | `dyProductUrl`      | 否   | 抖音商品挂车（**完整商品链接**；还须配合 `shortTitle` 商品短标题 ≤10 字） |

@@ -102,14 +102,22 @@ function loadNativeImage() {
   return cachedNativeImage;
 }
 
-/** 归一产物路径：按源路径+大小+mtime hash 命名，同一源图重试复用同一产物，tmpdir 不膨胀 */
-function tempCoverPath(coverPath, stat) {
-  const key = crypto
-    .createHash("sha1")
-    .update(`${coverPath}|${stat.size}|${stat.mtimeMs}`)
-    .digest("hex")
-    .slice(0, 16);
-  return path.join(os.tmpdir(), `mm-cover-${key}.jpg`);
+/** 归一产物路径：按源路径+大小+mtime(+非默认目标宽高) hash 命名，同一源图重试复用同一产物且横竖尺寸不冲突 */
+function tempCoverPath(
+  coverPath,
+  stat,
+  targetW = COVER_TARGET_WIDTH,
+  targetH = COVER_TARGET_HEIGHT
+) {
+  const isDefaultSize =
+    targetW === COVER_TARGET_WIDTH && targetH === COVER_TARGET_HEIGHT;
+  const seed = isDefaultSize
+    ? `${coverPath}|${stat.size}|${stat.mtimeMs}`
+    : `${coverPath}|${stat.size}|${stat.mtimeMs}|${targetW}x${targetH}`;
+  const key = crypto.createHash("sha1").update(seed).digest("hex").slice(0, 16);
+  return isDefaultSize
+    ? path.join(os.tmpdir(), `mm-cover-${key}.jpg`)
+    : path.join(os.tmpdir(), `mm-cover-${key}-${targetW}x${targetH}.jpg`);
 }
 
 /**
@@ -165,7 +173,7 @@ export async function normalizeCoverForUpload(coverPath, opts = {}) {
       return coverPath;
     }
 
-    const outPath = tempCoverPath(coverPath, stat);
+    const outPath = tempCoverPath(coverPath, stat, targetW, targetH);
     fs.writeFileSync(outPath, jpg);
     console.log(
       `[cover-compat] 封面已归一 ${srcW}×${srcH} → ${targetW}×${targetH} (jpg): ${outPath}`

@@ -81,7 +81,12 @@ export const publishVideoTool: Tool = {
       cover: {
         type: "string",
         description:
-          "Optional absolute path to a custom cover image. Effective for Douyin (dy), Kuaishou (ks) and Shipinhao (sph) single-file publish; 3:4 portrait ratio recommended (1080x1440 fits all three; Douyin auto-generates the horizontal cover from the portrait one; Shipinhao accepts jpg/png only).",
+          "Optional absolute path to a custom cover image. Effective for Douyin (dy), Kuaishou (ks), Shipinhao (sph) and Bilibili (blbl) single-file publish; 3:4 portrait ratio recommended (1080x1440 fits dy/ks/sph; Shipinhao accepts jpg/png only; Bilibili falls back to this image when horizontalCover is omitted).",
+      },
+      horizontalCover: {
+        type: "string",
+        description:
+          "Optional absolute path to a custom 4:3 horizontal cover image (e.g. 1440x1080). Preferred by Bilibili (blbl, synced to both 4:3 feed and 16:9 space covers) and horizontal cover slots.",
       },
       sphProductId: {
         type: "string",
@@ -190,6 +195,8 @@ export async function handlePublishVideo(
   const creativeStatement =
     args.creativeStatement == null ? "" : String(args.creativeStatement).trim();
   const cover = args.cover == null ? "" : String(args.cover).trim();
+  const horizontalCover =
+    args.horizontalCover == null ? "" : String(args.horizontalCover).trim();
   const sphProductId =
     args.sphProductId == null ? "" : String(args.sphProductId).trim();
   const sphDramaId =
@@ -324,6 +331,7 @@ export async function handlePublishVideo(
     ...(noDownload ? ["--no-download"] : []),
     ...(creativeStatement ? ["--creative-statement", creativeStatement] : []),
     ...(cover ? ["--cover", cover] : []),
+    ...(horizontalCover ? ["--horizontal-cover", horizontalCover] : []),
     ...sphLinkArgs,
     ...dyLinkArgs,
     ...ksLinkArgs,
