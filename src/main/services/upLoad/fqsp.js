@@ -4,6 +4,9 @@ import { replyPublishFailure } from "./publishOutcome.js";
 import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
+  assertPageOpen,
+  isPageClosedError,
+  waitStepOrPageClose,
 } from "./uploadTimeouts.js";
 
 const FILE_INPUT_SELECTORS = [
@@ -224,6 +227,7 @@ async function waitForFqspUploadComplete(page) {
   let lastLogAt = 0;
 
   while (Date.now() < deadline) {
+    assertPageOpen(page);
     const snapshot = await page
       .evaluate((listSel) => {
         const root =
@@ -238,7 +242,11 @@ async function waitForFqspUploadComplete(page) {
           statuses,
         };
       }, UPLOAD_LIST_SELECTOR)
-      .catch(() => ({ count: 0, statuses: [] }));
+      .catch((err) => {
+        if (isPageClosedError(err)) throw err;
+        assertPageOpen(page);
+        return { count: 0, statuses: [] };
+      });
 
     const logValue =
       snapshot.statuses.length > 0
@@ -253,6 +261,15 @@ async function waitForFqspUploadComplete(page) {
       lastLogAt = Date.now();
     }
 
+    const failedStatus = snapshot.statuses.find(
+      (text) =>
+        /(?:上传失败|转码失败|失败)/.test(text) &&
+        !/(?:重试中|正在重试|自动重试)/.test(text)
+    );
+    if (failedStatus) {
+      throw new Error(`番茄视频上传失败：${failedStatus}`);
+    }
+
     const allDone =
       snapshot.count > 0 &&
       snapshot.statuses.every(
@@ -260,9 +277,10 @@ async function waitForFqspUploadComplete(page) {
       );
     if (allDone) return;
 
-    await page.waitForTimeout(2000);
+    await waitStepOrPageClose(page, 2000);
   }
 
+  assertPageOpen(page);
   const err = new Error("等待番茄视频上传完成超时");
   err.name = "TimeoutError";
   throw err;

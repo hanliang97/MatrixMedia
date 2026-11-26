@@ -12,6 +12,12 @@
  * 所以它们不能引用本模块作用域的常量或闭包变量——可变数据一律走参数。
  */
 
+import {
+  assertPageOpen,
+  isPageClosedError,
+  waitStepOrPageClose,
+} from "./uploadTimeouts.js";
+
 /** 单步链接操作的等待上限（与商品流程保持一致） */
 export const SPH_LINK_ACTION_TIMEOUT_MS = 30 * 1000;
 
@@ -385,10 +391,16 @@ export async function pollSphPageUntil(
   const deadline = Date.now() + totalMs;
   let last;
   while (Date.now() < deadline) {
-    last = await page.evaluate(pageFn, pageArg).catch(() => null);
+    assertPageOpen(page);
+    last = await page.evaluate(pageFn, pageArg).catch((err) => {
+      if (isPageClosedError(err)) throw err;
+      assertPageOpen(page);
+      return null;
+    });
     if (last && last.ok) return last;
-    await page.waitForTimeout(stepMs);
+    await waitStepOrPageClose(page, stepMs);
   }
+  assertPageOpen(page);
   const error = sphLinkError("sph_link_timeout", timeoutMessage);
   error.detail = last || null;
   throw error;

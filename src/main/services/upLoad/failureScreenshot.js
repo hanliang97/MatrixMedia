@@ -125,11 +125,21 @@ export function pruneFailScreenshots(
   return removed;
 }
 
-/** 页面是否还能截图（窗口已关 / page 已销毁时直接放弃） */
+/** 页面是否还能截图（窗口已关 / page 已销毁 / 浏览器已断开时直接放弃） */
 function canScreenshot(page) {
   if (!page || typeof page.screenshot !== "function") return false;
   try {
     if (typeof page.isClosed === "function" && page.isClosed()) return false;
+    if (typeof page.browser === "function") {
+      const browser = page.browser();
+      if (
+        browser &&
+        typeof browser.isConnected === "function" &&
+        !browser.isConnected()
+      ) {
+        return false;
+      }
+    }
   } catch (_) {
     return false;
   }

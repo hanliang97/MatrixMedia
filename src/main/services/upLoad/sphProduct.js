@@ -1,6 +1,11 @@
 "use strict";
 
-import { pollPageUntil } from "./uploadTimeouts.js";
+import {
+  pollPageUntil,
+  assertPageOpen,
+  isPageClosedError,
+  waitStepOrPageClose,
+} from "./uploadTimeouts.js";
 import { validateVideoProductId } from "../../../shared/videoProduct.js";
 
 const PRODUCT_ACTION_TIMEOUT_MS = 30 * 1000;
@@ -20,10 +25,16 @@ async function pollProductPageUntil(
 ) {
   const deadline = Date.now() + PRODUCT_ACTION_TIMEOUT_MS;
   while (Date.now() < deadline) {
-    const ok = await page.evaluate(pageFn, pageArg).catch(() => false);
+    assertPageOpen(page);
+    const ok = await page.evaluate(pageFn, pageArg).catch((err) => {
+      if (isPageClosedError(err)) throw err;
+      assertPageOpen(page);
+      return false;
+    });
     if (ok) return;
-    await page.waitForTimeout(stepMs);
+    await waitStepOrPageClose(page, stepMs);
   }
+  assertPageOpen(page);
   throw productError("product_action_timeout", timeoutMessage);
 }
 
