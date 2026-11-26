@@ -40,6 +40,11 @@ import {
   hasActivePublishTasks,
   cancelPuppeteerTasks,
 } from "./services/puppeteerFile";
+import { cleanupCurrentProcessRegistry } from "./services/publishWindowRegistry";
+import {
+  setCliShutdownExitHandler,
+  triggerCliPublishShutdown,
+} from "./services/cliShutdownGuard";
 import { destroyAccountLoginWindows } from "./services/accountLoginWindowManager";
 import { closeAllSocksBridges } from "./services/socksBridge";
 import { ensureAccountRecordsMigrated } from "./services/accountMigration";
@@ -69,11 +74,14 @@ if (!cliMode) {
 
 app.commandLine.appendSwitch("disable-features", "OutOfBlinkCors");
 
-if (!cliMode) {
-  app.on("window-all-closed", () => {
+app.on("window-all-closed", () => {
+  // Electron 未监听 window-all-closed 时默认自动 app.quit()（退出码 0），
+  // 会导致 CLI 模式下的关窗重试（attempt 1 -> attempt 2）或失败回写/收尾被提前中止。
+  // CLI 模式的退出码与生命周期统一由 runCliMain -> app.exit(exitCode) 控制。
+  if (!cliMode) {
     app.quit();
-  });
-}
+  }
+});
 
 let tray;
 let mainWin = null;
@@ -90,6 +98,9 @@ function performQuit() {
   if (hasActivePublishTasks()) {
     cancelPuppeteerTasks("应用退出，已中断发布");
   }
+  try {
+    cleanupCurrentProcessRegistry(app.getPath("userData"));
+  } catch (_) {}
   destroyAccountLoginWindows();
   allowQuit = true;
   app.quit();
@@ -187,6 +198,19 @@ if (!cliMode) {
       requestQuit();
     });
   });
+} else {
+  setCliShutdownExitHandler((code) => app.exit(code));
+  const cleanupCliOnQuit = () => {
+    triggerCliPublishShutdown("CLI 应用退出，发布已中断");
+    try {
+      cleanupCurrentProcessRegistry(app.getPath("userData"));
+    } catch (_) {}
+    try {
+      closeAllSocksBridges();
+    } catch (_) {}
+  };
+  app.on("before-quit", cleanupCliOnQuit);
+  app.on("will-quit", cleanupCliOnQuit);
 }
 
 // Electron 24 的 net 模块（SimpleURLLoader）遇到代理隧道类网络错误时，即使

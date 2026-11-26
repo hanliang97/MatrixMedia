@@ -25,6 +25,33 @@ import {
 import { canonicalAccountPartition } from "../../shared/accountPartition.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
 import { capturePublishFailureScreenshot } from "./upLoad/failureScreenshot.js";
+import {
+  listActivePublishWindows,
+  registerPublishWindow,
+  showPublishWindow,
+} from "./publishWindowRegistry.js";
+
+function getSafeUserDataDir() {
+  try {
+    return app && typeof app.getPath === "function"
+      ? app.getPath("userData")
+      : "";
+  } catch (_) {
+    return "";
+  }
+}
+
+function getSafePushDataDir() {
+  try {
+    if (app && typeof app.getPath === "function") {
+      const documents = app.getPath("documents");
+      if (documents) {
+        return path.join(documents, "MatrixMedia", "data", "pushData");
+      }
+    }
+  } catch (_) {}
+  return "";
+}
 
 import StealthPlugin from "puppeteer-extra-plugin-stealth";
 
@@ -131,6 +158,43 @@ export function createPuppeteerTaskRuntime({ runTask }) {
         total: active + queued,
       };
     },
+    cancelPuppeteerTaskById(taskId, reason = "上传任务已主动中断") {
+      if (taskId == null) {
+        return { cancelled: false, scope: "none" };
+      }
+      if (
+        activeTask &&
+        taskBusy &&
+        activeTask.data &&
+        activeTask.data.taskId === taskId
+      ) {
+        activeTask.cancel(reason);
+        return { cancelled: true, scope: "active" };
+      }
+      const idx = taskQueue.findIndex(
+        (item) => item && item.data && item.data.taskId === taskId
+      );
+      if (idx !== -1) {
+        const [removed] = taskQueue.splice(idx, 1);
+        try {
+          if (removed && removed.transport && typeof removed.transport.reply === "function") {
+            removed.transport.reply("puppeteerFile-done", {
+              ...(removed.data || {}),
+              status: false,
+              interrupted: true,
+              message: reason,
+            });
+          }
+        } catch (_) {}
+        try {
+          if (removed && typeof removed.userOnFinish === "function") {
+            removed.userOnFinish();
+          }
+        } catch (_) {}
+        return { cancelled: true, scope: "queued" };
+      }
+      return { cancelled: false, scope: "none" };
+    },
     getQueueSize() {
       return taskQueue.length;
     },
@@ -152,6 +216,10 @@ function enqueueTask(data, transport, userOnFinish) {
 
 export function cancelPuppeteerTasks(reason) {
   return puppeteerTaskRuntime.cancelPuppeteerTasks(reason);
+}
+
+export function cancelPuppeteerTaskById(taskId, reason) {
+  return puppeteerTaskRuntime.cancelPuppeteerTaskById(taskId, reason);
 }
 
 let openPublishWindows = new Set();
@@ -250,6 +318,19 @@ export function registerPuppeteerIpc() {
     const result = cancelPuppeteerTasks(args.reason);
     event.reply("puppeteerFile:cancelAll-done", result);
   });
+  ipcMain.handle("publish:list-active-windows", () =>
+    listActivePublishWindows({
+      userDataDir: getSafeUserDataDir(),
+      pushDataDir: getSafePushDataDir(),
+    })
+  );
+  ipcMain.handle("publish:show-window", (_event, query) =>
+    showPublishWindow(query || {}, {
+      userDataDir: getSafeUserDataDir(),
+      pushDataDir: getSafePushDataDir(),
+      appRef: app,
+    })
+  );
 }
 
 /**
@@ -615,6 +696,8 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
     let browser;
     let win;
     let page;
+    let cleanupAttemptWindow = null;
+    let scheduleRetry = null;
 
     try {
       const proxyResult = await applyAccountProxyForTask({
@@ -630,12 +713,13 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
 
       browser = await connectDevTools(app, puppeteer);
       activeBrowser = browser;
+      const initialShow = isXhsTask
+        ? true
+        : data.mmCliSuppressWindow
+        ? false
+        : data?.show ?? false;
       win = new BrowserWindow({
-        show: isXhsTask
-          ? true
-          : data.mmCliSuppressWindow
-          ? false
-          : data?.show ?? false,
+        show: initialShow,
         width: data?.width ?? 1300,
         height: data?.height ?? 800,
         title: `${data.partition} (尝试${currentAttempt}/${maxRetries})`,
@@ -646,8 +730,192 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
           devTools: true,
         },
       });
+      win._mmInitiallyShown = Boolean(initialShow);
       activeWin = win;
       openPublishWindows.add(win);
+      const isStatusTask = String(data.pt || "").endsWith("状态");
+      const unregisterPublishWindow = isStatusTask
+        ? () => {}
+        : registerPublishWindow(
+            win,
+            {
+              recordId: data.recordId,
+              recordDate: data.recordDate,
+              taskId: data.taskId,
+              pt: data.pt,
+              partition: data.partition,
+              phone: data.phone,
+              bookName: data.bookName,
+              textOtherName:
+                data.textOtherName || (data.data && data.data.textOtherName),
+              selectedFile:
+                data.selectedFile ||
+                (data.filePath ? path.basename(String(data.filePath)) : ""),
+              title:
+                data.title ||
+                (data.data && (data.data.title || data.data.bt1)) ||
+                "",
+            },
+            {
+              userDataDir: getSafeUserDataDir(),
+              pushDataDir: getSafePushDataDir(),
+              appRef: app,
+            }
+          );
+
+      let windowCleaned = false;
+      let retryScheduled = false;
+      cleanupAttemptWindow = () => {
+        if (windowCleaned) return;
+        windowCleaned = true;
+        openPublishWindows.delete(win);
+        unregisterPublishWindow();
+        if (autoCloseTimer) {
+          clearTimeout(autoCloseTimer);
+          autoCloseTimer = null;
+        }
+        try {
+          if (browser) browser.disconnect();
+        } catch (_) {
+          // 忽略
+        }
+        if (activeWin === win) {
+          activeWin = null;
+          activePage = null;
+        }
+        if (activeBrowser === browser) activeBrowser = null;
+      };
+
+      scheduleRetry = () => {
+        if (finished || retryScheduled) return;
+        retryScheduled = true;
+        setTimeout(() => {
+          createWindowAndAttempt().catch((err) => {
+            console.error("重试创建窗口失败:", err);
+            safeReply("puppeteerFile-done", {
+              ...data,
+              status: false,
+              message: "重试失败",
+            });
+            finishOnce();
+          });
+        }, retryDelay);
+      };
+
+      // 尽早绑定 closed 监听，避免 loadURL / pie.getPage 抛错或提前关窗时泄漏
+      // openPublishWindows、active-publish-windows.json 与 autoCloseTimer。
+      win.on("closed", () => {
+        cleanupAttemptWindow();
+        if (finished) return;
+        const retry =
+          Boolean(win._mmRetryAfterClose) && currentAttempt < maxRetries;
+        if (retry) {
+          scheduleRetry();
+          return;
+        }
+        // 用户主动关窗（非程序自动关窗 / 非重试关窗）：跳过该平台，继续队列中的下一项
+        const userClosed = !win._mmClosedByProgram;
+        if (userClosed) {
+          console.log(`用户关闭 ${data.partition} 发布窗口，跳过 ${data.pt}`);
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            skipped: true,
+            message: "用户关闭窗口，已跳过该平台的发布",
+          });
+          finishOnce();
+          return;
+        }
+        if (win._mmAutoClosed) {
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            message: "发布窗口超时已自动关闭，任务结束",
+          });
+          finishOnce();
+          return;
+        }
+        if (currentAttempt >= maxRetries) {
+          safeReply("puppeteer-noLogin", data);
+          // 窗口此刻已销毁，页面截不到图，直接回执
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            message: "窗口已关闭，任务结束",
+          });
+          finishOnce();
+          return;
+        }
+        safeReply("puppeteerFile-done", {
+          ...data,
+          status: false,
+          message: "发布窗口已关闭，任务中止",
+        });
+        finishOnce();
+      });
+
+      if (win.webContents && typeof win.webContents.on === "function") {
+        win.webContents.on("render-process-gone", (_ev, details) => {
+          if (finished) return;
+          const reason = (details && details.reason) || "unknown";
+          console.error(
+            `[puppeteer] ${data.partition} 渲染进程异常退出（reason=${reason}，尝试 ${currentAttempt}/${maxRetries}）`
+          );
+          if (currentAttempt < maxRetries) {
+            if (win && !win.isDestroyed()) {
+              win._mmRetryAfterClose = true;
+              closePublishWinProgrammatically(win);
+            } else {
+              cleanupAttemptWindow();
+              scheduleRetry();
+            }
+            return;
+          }
+          safeReply("puppeteerFile-done", {
+            ...data,
+            status: false,
+            message: `发布页面渲染进程异常崩溃（${reason}）`,
+          });
+          finishOnce();
+          if (win && !win.isDestroyed()) {
+            closePublishWinProgrammatically(win);
+          }
+        });
+      }
+      // 后台任务被用户通过「查看窗口」拉到前台后，点关闭按钮时默认提示「退回后台继续」，
+      // 避免用户只是看一眼进度顺手点 × 却把正在上传的任务直接中止。
+      win.on("close", (event) => {
+        if (
+          finished ||
+          win._mmClosedByProgram ||
+          win._mmInitiallyShown ||
+          !win._mmRevealedFromBackground ||
+          win.isDestroyed()
+        ) {
+          return;
+        }
+        const choice = dialog.showMessageBoxSync(win, {
+          type: "question",
+          title: "后台发布窗口",
+          message:
+            "当前任务仍在后台发布中，要把窗口退回后台继续发布，还是中止本次发布？",
+          buttons: ["退回后台继续", "中止发布", "留在前台"],
+          defaultId: 0,
+          cancelId: 2,
+          noLink: true,
+        });
+        if (choice === 0) {
+          event.preventDefault();
+          win.hide();
+          return;
+        }
+        if (choice === 2) {
+          event.preventDefault();
+          return;
+        }
+        // choice === 1：用户明确选择中止发布，跳过页面 beforeunload 二次弹窗直接走关窗跳过链路
+        skipCloseConfirmation(win);
+      });
       page = await pie.getPage(browser, win);
       activePage = page;
 
@@ -843,6 +1111,9 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               AUTO_CLOSE_DELAY / 60000
             )} 分钟兜底超时）`
           );
+          if (win && !win.isDestroyed()) {
+            win._mmAutoClosed = true;
+          }
           closePublishWinProgrammatically(win);
         }, AUTO_CLOSE_DELAY);
       }
@@ -882,64 +1153,6 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
       } else {
         await win.loadURL(data.url);
       }
-
-      win.on("closed", () => {
-        openPublishWindows.delete(win);
-        if (autoCloseTimer) {
-          clearTimeout(autoCloseTimer);
-          autoCloseTimer = null;
-        }
-        try {
-          if (browser) browser.disconnect();
-        } catch (_) {
-          // 忽略
-        }
-        if (activeWin === win) {
-          activeWin = null;
-          activePage = null;
-        }
-        if (activeBrowser === browser) activeBrowser = null;
-        if (finished) return;
-        const retry =
-          Boolean(win._mmRetryAfterClose) && currentAttempt < maxRetries;
-        if (retry) {
-          setTimeout(() => {
-            createWindowAndAttempt().catch((err) => {
-              console.error("重试创建窗口失败:", err);
-              safeReply("puppeteerFile-done", {
-                ...data,
-                status: false,
-                message: "重试失败",
-              });
-              finishOnce();
-            });
-          }, retryDelay);
-          return;
-        }
-        // 用户主动关窗（非程序自动关窗 / 非重试关窗）：跳过该平台，继续队列中的下一项
-        const userClosed = !win._mmClosedByProgram;
-        if (userClosed) {
-          console.log(`用户关闭 ${data.partition} 发布窗口，跳过 ${data.pt}`);
-          safeReply("puppeteerFile-done", {
-            ...data,
-            status: false,
-            skipped: true,
-            message: "用户关闭窗口，已跳过该平台的发布",
-          });
-          finishOnce();
-          return;
-        }
-        if (currentAttempt >= maxRetries) {
-          safeReply("puppeteer-noLogin", data);
-          // 窗口此刻已销毁，页面截不到图，直接回执
-          safeReply("puppeteerFile-done", {
-            ...data,
-            status: false,
-            message: "窗口已关闭，任务结束",
-          });
-        }
-        finishOnce();
-      });
 
       actionCheckTimer = setTimeout(async () => {
         actionCheckTimer = null;
@@ -1006,16 +1219,56 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
               finishOnce();
               return;
             }
+            if (currentAttempt >= maxRetries) {
+              await replyFailureWithShot({
+                ...data,
+                status: false,
+                message: `${data.pt}发布页地址异常（${currentUrl}）`,
+              });
+              finishOnce();
+              if (win && !win.isDestroyed()) {
+                closePublishWinProgrammatically(win);
+              }
+              return;
+            }
             if (win && !win.isDestroyed()) {
               win._mmRetryAfterClose = true;
               closePublishWinProgrammatically(win);
+            } else {
+              cleanupAttemptWindow();
+              scheduleRetry();
             }
           }
         } catch (err) {
           if (finished) return;
           console.log(`尝试${currentAttempt}执行平台逻辑失败:`, err);
           const failurePayload = err && err._mmUploadFailurePayload;
-          if (currentAttempt >= maxRetries) {
+          if (failurePayload && failurePayload.loginRequired === true) {
+            const message =
+              failurePayload.message || `${data.pt}登录状态已失效，请重新登录后再试`;
+            safeReply("puppeteer-noLogin", {
+              ...data,
+              ...failurePayload,
+              loginRequired: true,
+              message,
+            });
+            safeReply("puppeteerFile-done", {
+              ...data,
+              ...failurePayload,
+              status: false,
+              loginRequired: true,
+              message,
+            });
+            finishOnce();
+            if (win && !win.isDestroyed()) {
+              closePublishWinProgrammatically(win);
+            }
+            return;
+          }
+          if (
+            (failurePayload && failurePayload.noRetry === true) ||
+            currentAttempt >= maxRetries
+          ) {
             await replyFailureWithShot({
               ...data,
               ...failurePayload,
@@ -1031,6 +1284,9 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
           if (win && !win.isDestroyed()) {
             win._mmRetryAfterClose = true;
             closePublishWinProgrammatically(win);
+          } else {
+            cleanupAttemptWindow();
+            scheduleRetry();
           }
         }
       }, 3000);
@@ -1057,23 +1313,47 @@ async function doUpload(data, transport, queueDone, runtimeTask) {
         finishOnce();
         return;
       }
+      if (currentAttempt >= maxRetries) {
+        await replyFailureWithShot({
+          ...data,
+          status: false,
+          message: (error && error.message) || "发布窗口异常",
+        });
+        finishOnce();
+        if (win && !win.isDestroyed()) {
+          closePublishWinProgrammatically(win);
+        }
+        return;
+      }
       if (win && !win.isDestroyed()) {
+        // win.on("closed") 已提前挂载，关窗后会经由 scheduleRetry 触发下一轮，
+        // 这里不再重复 setTimeout，避免单次异常演变成双重重试。
         win._mmRetryAfterClose = true;
         closePublishWinProgrammatically(win);
+      } else {
+        if (typeof cleanupAttemptWindow === "function") cleanupAttemptWindow();
+        else if (browser) {
+          try {
+            browser.disconnect();
+          } catch (_) {}
+        }
+        if (finished) return;
+        if (typeof scheduleRetry === "function") {
+          scheduleRetry();
+        } else {
+          setTimeout(() => {
+            createWindowAndAttempt().catch((err) => {
+              console.error("重试创建窗口失败:", err);
+              safeReply("puppeteerFile-done", {
+                ...data,
+                status: false,
+                message: "重试失败",
+              });
+              finishOnce();
+            });
+          }, retryDelay);
+        }
       }
-      if (browser) browser.disconnect();
-      if (finished) return;
-      setTimeout(() => {
-        createWindowAndAttempt().catch((err) => {
-          console.error("重试创建窗口失败:", err);
-          safeReply("puppeteerFile-done", {
-            ...data,
-            status: false,
-            message: "重试失败",
-          });
-          finishOnce();
-        });
-      }, retryDelay);
     }
   };
 
