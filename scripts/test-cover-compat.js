@@ -210,6 +210,23 @@ async function main() {
     });
     assert.strictEqual(out9, out1, "同源图归一产物路径应稳定");
     console.log("stable temp path passed");
+
+    // 10) 同一源图分别按 3:4（1080×1440）和 B 站 4:3（1440×1080）归一：缓存路径必须隔离不互相覆盖
+    const fake10 = makeFakeNativeImage(2000, 1000);
+    const out10 = await normalizeCoverForUpload(landscape, {
+      width: 1440,
+      height: 1080,
+      nativeImage: fake10,
+    });
+    created.push(out10);
+    assert.notStrictEqual(out10, out1, "不同目标尺寸的归一产物路径不能碰撞");
+    assert.ok(out10.endsWith("-1440x1080.jpg"), "自定义尺寸产物应带尺寸后缀");
+    assert.deepStrictEqual(fake10.calls.resize[0], {
+      width: 1440,
+      height: 1080,
+      quality: "best",
+    });
+    console.log("custom target dimensions cache isolation passed");
   } finally {
     for (const f of created) {
       try {

@@ -136,9 +136,9 @@ export function buildTaskPayloadFromRecord(record) {
       tags: metadata.tags,
       ...metadata.legacy,
       creativeStatement: normalizeCreativeStatement(record.creativeStatement),
-      // 定时视频发布透传封面（dy/ks/sph 读 data.data.coverPath，
-      // 缺失会静默跳过自定义封面；文章分支一直有传，视频分支上游漏了）
+      // 定时视频发布透传封面（dy/ks/sph/blbl 读 data.data.coverPath / horizontalCoverPath）
       coverPath: record.coverPath || "",
+      horizontalCoverPath: record.horizontalCoverPath || "",
       // 快手禁下载红线参数：定时触发时从记录字段回传（GUI 勾选/CLI --no-download 落档）
       noDownload: record.noDownload === true,
     },

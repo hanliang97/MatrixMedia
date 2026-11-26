@@ -116,6 +116,19 @@ export async function runSingleFilePublish(
   }
   const coverPath = cover.coverPath;
 
+  let horizontalCoverPath = "";
+  if (v.horizontalCover != null && String(v.horizontalCover).trim() !== "") {
+    const rawH = path.resolve(String(v.horizontalCover).trim());
+    if (!fs.existsSync(rawH) || !fs.statSync(rawH).isFile()) {
+      return {
+        exitCode: 2,
+        status: "failed",
+        message: `横版封面文件不存在: ${rawH}`,
+      };
+    }
+    horizontalCoverPath = rawH;
+  }
+
   let cleanupDownload = null;
   let resolvedFile = sourceFile;
   const deferRemoteDownload =
@@ -148,6 +161,7 @@ export async function runSingleFilePublish(
         metadata,
         bookName,
         coverPath,
+        horizontalCoverPath,
       },
       options
     );
@@ -159,7 +173,15 @@ export async function runSingleFilePublish(
 async function runSingleFilePublishInner(
   v,
   cfg,
-  { sourceFile, resolvedFile, stem, metadata, bookName, coverPath = "" },
+  {
+    sourceFile,
+    resolvedFile,
+    stem,
+    metadata,
+    bookName,
+    coverPath = "",
+    horizontalCoverPath = "",
+  },
   options = {}
 ) {
   // 新分组模型：CLI/HTTP 传入的 partition 可能仍按历史「phone 前缀」规则拼出，
@@ -191,6 +213,7 @@ async function runSingleFilePublishInner(
       ...metadata.legacy,
       creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
       coverPath,
+      horizontalCoverPath,
       noDownload: v.noDownload === true,
     },
     url: cfg.upload,
@@ -227,6 +250,7 @@ async function runSingleFilePublishInner(
     ...metadata.legacy,
     creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
     coverPath,
+    horizontalCoverPath,
     noDownload: v.noDownload === true,
     filePath:
       v.publishAt && isRemotePublishFile(sourceFile)
