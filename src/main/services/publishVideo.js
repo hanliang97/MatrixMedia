@@ -120,7 +120,7 @@ export async function runSingleFilePublish(
   let horizontalCoverPath = "";
   if (v.horizontalCover != null && String(v.horizontalCover).trim() !== "") {
     const rawH = path.resolve(String(v.horizontalCover).trim());
-    if (!fs.existsSync(rawH)) {
+    if (!fs.existsSync(rawH) || !fs.statSync(rawH).isFile()) {
       return {
         exitCode: 2,
         status: "failed",
@@ -251,6 +251,7 @@ async function runSingleFilePublishInner(
     ...metadata.legacy,
     creativeStatement: normalizeCreativeStatement(v.creativeStatement || ""),
     coverPath,
+    horizontalCoverPath,
     noDownload: v.noDownload === true,
     filePath:
       v.publishAt && isRemotePublishFile(sourceFile)

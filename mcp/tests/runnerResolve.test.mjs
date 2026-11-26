@@ -61,6 +61,43 @@ console.log(JSON.stringify({ resultStatus: 'success', message: 'ok' }));
   }
 });
 
+test('publish_video forwards --cover and --horizontal-cover for dy', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mm-bin-dy-cover-'));
+  const bin = path.join(dir, 'fake-matrixmedia');
+  const argsLog = path.join(dir, 'args.json');
+  await writeFile(
+    bin,
+    `#!/usr/bin/env node
+require('fs').writeFileSync(${JSON.stringify(argsLog)}, JSON.stringify(process.argv.slice(2)));
+console.log(JSON.stringify({ resultStatus: 'success', message: 'ok' }));
+`,
+    'utf8'
+  );
+  await chmod(bin, 0o755);
+  try {
+    await withEnv({ MATRIXMEDIA_BIN: bin }, async () => {
+      const out = JSON.parse(
+        await handlePublishVideo({
+          platform: 'dy',
+          phone: '13800138000',
+          file: '/tmp/v.mp4',
+          title: 't',
+          cover: '/tmp/3x4.jpg',
+          horizontalCover: '/tmp/4x3.jpg',
+        })
+      );
+      assert.equal(out.status, 'success');
+      const argv = JSON.parse(await readFile(argsLog, 'utf8'));
+      const cIdx = argv.indexOf('--cover');
+      assert.ok(cIdx > 0 && argv[cIdx + 1] === '/tmp/3x4.jpg');
+      const hIdx = argv.indexOf('--horizontal-cover');
+      assert.ok(hIdx > 0 && argv[hIdx + 1] === '/tmp/4x3.jpg');
+    });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('publish_video rejects unknown platform', async () => {
   await assert.rejects(
     handlePublishVideo({ platform: 'weibo', phone: '1', file: '/tmp/v.mp4', title: 't' }),

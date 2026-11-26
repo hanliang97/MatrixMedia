@@ -98,7 +98,8 @@
     "test:devtools-endpoint": "node scripts/test-devtools-endpoint.js",
     "test:scheduled-dedupe": "node scripts/test-scheduled-dedupe.js",
     "test:fans-history": "node scripts/test-fans-history.js",
-    "test:toutiao-stats": "node scripts/test-toutiao-stats.js"
+    "test:toutiao-stats": "node scripts/test-toutiao-stats.js",
+    "test:dy-dual-cover-slot": "node scripts/test-dy-dual-cover-slot.js"
   },
   "build": {
     "forceCodeSigning": false,

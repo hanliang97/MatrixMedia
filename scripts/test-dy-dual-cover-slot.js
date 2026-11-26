@@ -146,4 +146,56 @@ const { pickDyCoverSlotCandidate } = require(bundle);
   assert.strictEqual(h.id, 2);
 }
 
+// 6. CLI / HTTP 三链路参数解析：--horizontal-cover 与 horizontalCover/horizontalCoverPath
+{
+  const parseBundle = path.join(outDir, "dy-parse-args.cjs");
+  buildSync({
+    entryPoints: [path.join(root, "src/main/cli/parsePublishArgs.js")],
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    outfile: parseBundle,
+  });
+  const {
+    parsePublishArgs,
+    parsePublishRequest,
+    publishHelpText,
+  } = require(parseBundle);
+
+  const cliRes = parsePublishArgs([
+    "-p",
+    "dy",
+    "--phone",
+    "13800138000",
+    "-f",
+    "/tmp/demo.mp4",
+    "-t",
+    "抖音双封面测试",
+    "--cover",
+    "/tmp/3x4.jpg",
+    "--horizontal-cover",
+    "/tmp/4x3.jpg",
+  ]);
+  assert.strictEqual(cliRes.ok, true);
+  assert.strictEqual(cliRes.value.cover, "/tmp/3x4.jpg");
+  assert.strictEqual(cliRes.value.horizontalCover, "/tmp/4x3.jpg");
+
+  const httpRes = parsePublishRequest({
+    platform: "dy",
+    phone: "13800138000",
+    file: "/tmp/demo.mp4",
+    title: "抖音双封面测试",
+    coverPath: "/tmp/3x4.jpg",
+    horizontalCoverPath: "/tmp/4x3-path.jpg",
+  });
+  assert.strictEqual(httpRes.ok, true);
+  assert.strictEqual(httpRes.value.cover, "/tmp/3x4.jpg");
+  assert.strictEqual(httpRes.value.horizontalCover, "/tmp/4x3-path.jpg");
+
+  assert.ok(
+    publishHelpText().includes("--horizontal-cover"),
+    "CLI --help 必须包含 --horizontal-cover 说明"
+  );
+}
+
 console.log("test-dy-dual-cover-slot: 全部断言通过");

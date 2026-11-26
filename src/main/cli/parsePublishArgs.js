@@ -442,7 +442,14 @@ export function publishBodyToArgv(body) {
   );
   pushPair(["cover", "coverPath", "cover-path"], "--cover");
   pushPair(
-    ["horizontalCover", "coverHorizontal", "horizontal-cover", "cover-horizontal"],
+    [
+      "horizontalCover",
+      "horizontalCoverPath",
+      "coverHorizontal",
+      "horizontal-cover",
+      "horizontal-cover-path",
+      "cover-horizontal",
+    ],
     "--horizontal-cover"
   );
   const sphLink =
@@ -560,8 +567,10 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "coverPath",
   "cover-path",
   "horizontalCover",
+  "horizontalCoverPath",
   "coverHorizontal",
   "horizontal-cover",
+  "horizontal-cover-path",
   "cover-horizontal",
   "show",
   "closeWindowAfterPublish",
@@ -798,6 +807,7 @@ export function publishHelpText() {
                             抖音横封面基于竖封面自动生成；视频号仅收 jpg/png）。
                             单文件模式传绝对路径；--dir 批量模式下全局覆盖 xlsx「封面」列，
                             未传时用 xlsx 每行的封面列（相对路径相对视频目录解析）
+      --horizontal-cover <path>  横版自定义封面图片路径（4:3 推荐，如 1440×1080；用于抖音横版封面槽位，不裁切为 3:4；别名 --cover-horizontal）
       --phone <id>      账号手机号（与 GUI 账号树一致，可与 partition 二选一）
       --partition <p>   完整 session partition，如 persist:13800138000抖音
   -t, --title <text>    视频标题（必填）→ data.title

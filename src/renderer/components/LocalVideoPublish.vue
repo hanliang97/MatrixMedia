@@ -165,6 +165,30 @@
             最佳；视频号仅支持 jpg/png），不选则由平台自动截取视频帧。
           </p>
         </el-form-item>
+        <el-form-item label="横版封面">
+          <div class="cover-field-row">
+            <el-button size="small" @click="chooseHorizontalCoverImage">{{
+              form.horizontalCoverPath ? "重新选择横版封面" : "选择横版封面 (4:3)"
+            }}</el-button>
+            <el-button
+              v-if="form.horizontalCoverPath"
+              type="text"
+              size="small"
+              class="cover-clear"
+              @click="form.horizontalCoverPath = ''"
+              >清除</el-button
+            >
+            <span
+              v-if="form.horizontalCoverPath"
+              class="cover-name"
+              :title="form.horizontalCoverPath"
+              >{{ horizontalCoverFileName }}</span
+            >
+          </div>
+          <p class="bt2-tip">
+            选填，推荐 4:3（如 1440×1080）。用于 <strong>抖音</strong> 横版封面槽位，保持原 4:3 比例上传（不裁切为 3:4）。
+          </p>
+        </el-form-item>
         <el-form-item label="定时发布">
           <el-switch
             v-model="scheduledPublish"
@@ -800,6 +824,8 @@ export default {
         shortTitle: "",
         // 自定义封面图片绝对路径（发布第一步选图；重发时从历史记录带入）
         coverPath: "",
+        // 横版封面绝对路径（4:3，如 1440×1080；B 站优先使用）
+        horizontalCoverPath: "",
         noDownload: false,
       },
       thisShow: false,
@@ -838,6 +864,11 @@ export default {
     },
     coverFileName() {
       return this.form.coverPath ? fileBaseName(this.form.coverPath) : "";
+    },
+    horizontalCoverFileName() {
+      return this.form.horizontalCoverPath
+        ? fileBaseName(this.form.horizontalCoverPath)
+        : "";
     },
     batchStatementOptions() {
       return CREATIVE_STATEMENT_OPTIONS;
@@ -1006,6 +1037,10 @@ export default {
       const picked = await ipcRenderer.invoke("dialog:openImageFile");
       if (picked) this.form.coverPath = picked;
     },
+    async chooseHorizontalCoverImage() {
+      const picked = await ipcRenderer.invoke("dialog:openImageFile");
+      if (picked) this.form.horizontalCoverPath = picked;
+    },
     /**
      * 封面文件发布前校验（GUI 直发不经 runSingleFilePublish 的 resolveCoverPath，
      * 不在这里拦就会到上传阶段才失败，视频白传一次）：
@@ -1044,6 +1079,7 @@ export default {
         description: "",
         shortTitle: "",
         coverPath: "",
+        horizontalCoverPath: "",
         noDownload: false,
       };
       this.thisShow = false;
@@ -1089,6 +1125,7 @@ export default {
         description: (form.description || form.bdText || "").trim(),
         shortTitle: (form.shortTitle || form.bt2Filled || "").trim(),
         coverPath: (form.coverPath || "").trim(),
+        horizontalCoverPath: (form.horizontalCoverPath || "").trim(),
         noDownload: form.noDownload === true,
       };
       this.bqTags = parseBqToTags(form.tags || form.bq);
@@ -1204,6 +1241,7 @@ export default {
           ...metadata.legacy,
           bq: formatBqFromTags(this.bqTags),
           coverPath: (this.form.coverPath || "").trim(),
+          horizontalCoverPath: (this.form.horizontalCoverPath || "").trim(),
           noDownload: this.form.noDownload === true,
         },
       };
@@ -1815,6 +1853,7 @@ export default {
         description: "",
         shortTitle: "",
         coverPath: "",
+        horizontalCoverPath: "",
       };
       this.thisShow = false;
       this.closeWindow = true;
@@ -2020,6 +2059,14 @@ export default {
         this.$message.error(coverError);
         return;
       }
+      const hCoverError = this.validateCoverPath(
+        this.form.horizontalCoverPath,
+        []
+      );
+      if (hCoverError) {
+        this.$message.error(hCoverError);
+        return;
+      }
       const baseVideo = this.buildVideoPayload();
       const selectedFile = fileBaseName(this.localFilePath);
       const currentDate = moment().format("YYYY-MM-DD");
@@ -2071,6 +2118,7 @@ export default {
                 noDownload: video.data.noDownload === true,
                 publishOptions: video.publishOptions,
                 coverPath: video.data.coverPath || "",
+                horizontalCoverPath: video.data.horizontalCoverPath || "",
                 filePath: this.localFilePath,
                 useragent: this.ptConfig[p.pt].useragent,
                 phone: p.phone,
@@ -2156,6 +2204,7 @@ export default {
               noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
               coverPath: video.data.coverPath || "",
+              horizontalCoverPath: video.data.horizontalCoverPath || "",
               filePath: this.localFilePath,
               publishAttemptCount: oldAttempt + 1,
               republishCount: oldRepublish + 1,
@@ -2193,6 +2242,7 @@ export default {
               noDownload: video.data.noDownload === true,
               publishOptions: video.publishOptions,
               coverPath: video.data.coverPath || "",
+              horizontalCoverPath: video.data.horizontalCoverPath || "",
               filePath: this.localFilePath,
               useragent: this.ptConfig[p.pt].useragent,
               phone: p.phone,
