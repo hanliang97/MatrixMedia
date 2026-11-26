@@ -104,6 +104,18 @@
           :status="progressStaus"
         ></el-progress>
       </div>
+      <!-- 兜底退出：本弹窗关闭了 X / ESC / 点遮罩三条关闭入口，
+           下载失败或长时间无进展时用户会被遮罩困住。下载未完成时给一个
+           显式「关闭」按钮，避免整屏不可操作（历史反馈「卡住遮罩」）。 -->
+      <template #footer>
+        <el-button
+          v-if="percentage < 100"
+          size="small"
+          @click="dismissUpdateDialog"
+        >
+          关闭
+        </el-button>
+      </template>
     </el-dialog>
   </div>
 </template>
@@ -193,23 +205,51 @@ export default {
     skipUpdate() {
       this.versionDialogVisible = false;
     },
+    // 关闭「自动更新」进度弹窗。该弹窗禁用了 X / ESC / 点遮罩三条入口，
+    // 下载卡住时用户会被遮罩困住，这里给一条明确的退出路径。
+    dismissUpdateDialog() {
+      this.dialogVisible = false;
+      this.$message.info("已关闭更新窗口，可稍后重启应用再试");
+    },
     // 用户点击「立即更新」才请求主进程开始下载安装包
     startUpdateDownload() {
       if (this.startingDownload) return;
       this.startingDownload = true;
+      // 兜底超时：ipcRenderer.invoke 在极端情况下可能既不 resolve 也不 reject
+      // （主进程事件异常等），届时按钮会永久转圈、弹窗遮罩挡住整个界面。
+      // 这里限时等不到结果就复位并给提示，保证用户永远能退出来。
+      let settled = false;
+      const timeoutMs = 15000;
+      const timer = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        this.startingDownload = false;
+        this.versionDialogVisible = false;
+        this.$message.error("启动更新超时，已取消，请稍后重试");
+      }, timeoutMs);
+
       Promise.resolve(ipcRenderer.invoke("start-update-download"))
         .then((res) => {
+          if (settled) return;
+          settled = true;
           if (res && res.ok) {
             this.versionDialogVisible = false;
             this.resetDownloadUi();
             return;
           }
+          // 失败时同样关闭弹窗：只弹 toast 提示。否则遮罩会一直挡在主界面上，
+          // 用户点「立即更新」失败后既看不到内容也关不掉（历史反馈）。
+          this.versionDialogVisible = false;
           this.$message.error((res && res.message) || "启动更新下载失败");
         })
         .catch(() => {
+          if (settled) return;
+          settled = true;
+          this.versionDialogVisible = false;
           this.$message.error("启动更新下载失败");
         })
         .finally(() => {
+          clearTimeout(timer);
           this.startingDownload = false;
         });
     },
