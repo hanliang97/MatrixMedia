@@ -10,6 +10,17 @@ import {
 } from "../../../shared/creativeStatement.js";
 import { attachSphVideoLink } from "./sphLink.js";
 import {
+  SPH_COVER_DIALOG_MATCH_CONFIG,
+  clickSphCoverUploadTriggerInPage,
+  confirmSphCoverDialogInPage,
+  findSphCoverFileInputInPage,
+  hasVisibleSphCoverDialogInPage,
+  listVisibleSphDialogsInPage,
+  openSphCoverSlotInPage,
+  readSphCoverAfterStateInPage,
+  readSphVerticalCoverSrcInPage,
+} from "./sphCoverDialog.js";
+import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
@@ -156,10 +167,10 @@ async function tryDeclareOriginal(page) {
 
 /**
  * 视频号自定义封面（探针实证配方）：
- * 点 .vertical-cover-wrap 槽位 → weui-desktop-dialog「编辑封面」→「上传封面」→
- * .single-cover-uploader-wrap 内隐藏 file input（accept=jpeg/jpg/png，勿传 webp）注入 →
- * 「确定」→ 校验 .cover-img-vertical 槽位 img src 变化 + 弹窗已关闭。
- * 封面为「个人主页和分享卡片(3:4)」——3:4 竖图（如 1080x1440）恰好匹配。
+ * 点 .vertical-cover-wrap 槽位 → weui-desktop-dialog（竖屏「编辑封面」/ 横屏「编辑个人主页卡片」）
+ * →「上传封面」→ .single-cover-uploader-wrap 内隐藏 file input（accept=jpeg/jpg/png，勿传 webp）注入 →
+ * 「确定/确认」（若存在裁剪子弹窗则兼容二次确认）→ 校验 3:4 槽位 img src 变化 + 弹窗已关闭。
+ * 封面为 3:4 竖图（如 1080x1440），兼容竖屏单槽位与横屏/4:3「个人主页卡片 3:4」槽位。
  */
 async function uploadSphCustomCover(page, coverPath) {
   if (!fs.existsSync(coverPath)) {
@@ -169,81 +180,53 @@ async function uploadSphCustomCover(page, coverPath) {
   // 1080×1440 jpg（失败回退原图，不阻断发布）
   coverPath = await normalizeCoverForUpload(coverPath);
 
-  const srcBefore = await page.evaluate(() => {
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    const img = root && root.querySelector(".cover-img-vertical");
-    return img ? img.src : "";
-  });
+  const srcBefore = await page.evaluate(readSphVerticalCoverSrcInPage);
 
-  const opened = await page.evaluate(() => {
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    if (!root) return false;
-    const slot =
-      root.querySelector(".vertical-cover-wrap") ||
-      root.querySelector(".cover-preview-wrap");
-    if (!slot) return false;
-    slot.click();
-    return true;
-  });
+  const opened = await page.evaluate(openSphCoverSlotInPage);
   if (!opened) throw new Error("未找到视频号封面编辑入口（.vertical-cover-wrap）");
 
-  // 等「编辑封面」弹窗可见
-  await page.waitForFunction(
-    () => {
-      const app = document.querySelector("wujie-app.wujie_iframe");
-      const root = app && app.shadowRoot;
-      if (!root) return false;
-      for (const d of root.querySelectorAll(".weui-desktop-dialog")) {
-        const t = (d.textContent || "").replace(/\s+/g, "");
-        const r = d.getBoundingClientRect();
-        if (t.includes("编辑封面") && r.width > 0) return true;
-      }
-      return false;
-    },
-    { timeout: 15000 }
+  // 等封面编辑弹窗可见（兼容竖屏「编辑封面」及横屏/4:3「编辑个人主页卡片」「编辑分享卡片」）
+  const dialogReady = await page
+    .waitForFunction(
+      hasVisibleSphCoverDialogInPage,
+      { timeout: 15000 },
+      SPH_COVER_DIALOG_MATCH_CONFIG
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (!dialogReady) {
+    const visibleTitles = await page
+      .evaluate(listVisibleSphDialogsInPage)
+      .catch(() => []);
+    throw new Error(
+      `等待视频号封面编辑弹窗超时（15s），当前可见弹窗: ${JSON.stringify(
+        visibleTitles
+      )}`
+    );
+  }
+  await page.waitForTimeout(1200);
+
+  // 切到「上传封面」（若弹窗已直接挂载图片 file input 则放行）
+  const uploadTrigger = await page.evaluate(
+    clickSphCoverUploadTriggerInPage,
+    SPH_COVER_DIALOG_MATCH_CONFIG
   );
-  await page.waitForTimeout(1200);
-
-  // 切到「上传封面」
-  const tabbed = await page.evaluate(() => {
-    const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    if (!root) return false;
-    const dlg = [...root.querySelectorAll(".weui-desktop-dialog")].find(
-      (d) =>
-        (d.textContent || "").includes("编辑封面") &&
-        d.getBoundingClientRect().width > 0
+  if (!uploadTrigger || !uploadTrigger.ok) {
+    throw new Error(
+      `视频号封面弹窗内未找到「上传封面」入口（${
+        (uploadTrigger && uploadTrigger.reason) || "unknown"
+      }）`
     );
-    if (!dlg) return false;
-    for (const el of dlg.querySelectorAll("*")) {
-      const r = el.getBoundingClientRect();
-      if (r.width === 0 || el.children.length > 2) continue;
-      if (norm(el.textContent) === "上传封面") {
-        el.click();
-        return true;
-      }
-    }
-    return false;
-  });
-  if (!tabbed) throw new Error("视频号封面弹窗内未找到「上传封面」入口");
-  await page.waitForTimeout(1200);
+  }
+  if (uploadTrigger.mode === "clicked") {
+    await page.waitForTimeout(1200);
+  }
 
-  // 注入图片文件（探针实证：input 挂 .single-cover-uploader-wrap，隐藏可注入）
-  const inputHandle = await page.evaluateHandle(() => {
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    if (!root) return null;
-    return (
-      root.querySelector('.single-cover-uploader-wrap input[type="file"]') ||
-      [...root.querySelectorAll('input[type="file"]')].find((i) =>
-        /image/.test(i.accept || "")
-      ) ||
-      null
-    );
-  });
+  // 注入图片文件（优先当前顶层可见封面弹窗内的 file input，找不到再回退整个 shadowRoot）
+  const inputHandle = await page.evaluateHandle(
+    findSphCoverFileInputInPage,
+    SPH_COVER_DIALOG_MATCH_CONFIG
+  );
   const inputEl = inputHandle.asElement();
   if (!inputEl) throw new Error("未找到视频号封面上传 file input");
   await inputEl.uploadFile(path.resolve(coverPath));
@@ -252,59 +235,71 @@ async function uploadSphCustomCover(page, coverPath) {
   // 等上传+裁剪视图落定（1080x1440 与 3:4 槽位同比，通常无强制裁剪步骤）
   await page.waitForTimeout(5000);
 
-  // 点「确定」（兜底再试「确认」）
-  const confirmed = await page.evaluate(() => {
-    const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    if (!root) return { ok: false, reason: "no-shadow" };
-    const dlg = [...root.querySelectorAll(".weui-desktop-dialog")].find(
-      (d) =>
-        (d.textContent || "").includes("编辑封面") &&
-        d.getBoundingClientRect().width > 0
+  // 点「确定」（兜底再试「确认」；按钮短暂禁用/加载中时轮询等待最多 6s）
+  let confirmed = { ok: false, reason: "not-run" };
+  const confirmDeadline = Date.now() + 6000;
+  do {
+    confirmed = await page.evaluate(
+      confirmSphCoverDialogInPage,
+      SPH_COVER_DIALOG_MATCH_CONFIG
     );
-    if (!dlg) return { ok: false, reason: "no-dialog" };
-    for (const label of ["确定", "确认"]) {
-      for (const b of dlg.querySelectorAll(
-        "button,.weui-desktop-btn,[role='button']"
-      )) {
-        const r = b.getBoundingClientRect();
-        if (r.width > 0 && !b.disabled && norm(b.textContent) === label) {
-          b.click();
-          return { ok: true, label };
-        }
-      }
+    if (confirmed && confirmed.ok) break;
+    if (Date.now() < confirmDeadline) {
+      await page.waitForTimeout(500).catch(() => {});
     }
-    return { ok: false, reason: "no-确定/确认" };
-  });
-  if (!confirmed.ok) {
-    throw new Error(`视频号封面弹窗确认失败: ${confirmed.reason}`);
+  } while (Date.now() < confirmDeadline);
+
+  if (!confirmed || !confirmed.ok) {
+    throw new Error(
+      `视频号封面弹窗确认失败: ${(confirmed && confirmed.reason) || "unknown"}`
+    );
   }
-  console.log("[sph] 封面弹窗已点「" + confirmed.label + "」");
+  console.log(
+    `[sph] 封面弹窗已点「${confirmed.label}」(${confirmed.dialogTitle || ""})`
+  );
   await page.waitForTimeout(3500);
 
   // 校验：弹窗已关 + 槽位 img src 相对设置前变化；微信 CDN 域名为强信号
-  const after = await page.evaluate(() => {
-    const app = document.querySelector("wujie-app.wujie_iframe");
-    const root = app && app.shadowRoot;
-    if (!root) return { src: "", dialogOpen: false };
-    const img = root.querySelector(".cover-img-vertical");
-    const dlg = [...root.querySelectorAll(".weui-desktop-dialog")].find(
-      (d) =>
-        (d.textContent || "").includes("编辑封面") &&
-        d.getBoundingClientRect().width > 0
+  let after = await page.evaluate(
+    readSphCoverAfterStateInPage,
+    SPH_COVER_DIALOG_MATCH_CONFIG
+  );
+
+  // 若存在嵌套裁剪子弹窗：首次确认仅关闭了裁剪步，外层封面弹窗仍开且槽位未更新，补点一次确认
+  if (after.dialogOpen && (!after.src || after.src === srcBefore)) {
+    const secondConfirm = await page.evaluate(
+      confirmSphCoverDialogInPage,
+      SPH_COVER_DIALOG_MATCH_CONFIG
     );
-    return { src: img ? img.src : "", dialogOpen: !!dlg };
-  });
+    if (secondConfirm && secondConfirm.ok) {
+      console.log(
+        `[sph] 封面弹窗二次确认已点「${secondConfirm.label}」(${
+          secondConfirm.dialogTitle || ""
+        })`
+      );
+      await page.waitForTimeout(3500);
+      after = await page.evaluate(
+        readSphCoverAfterStateInPage,
+        SPH_COVER_DIALOG_MATCH_CONFIG
+      );
+    }
+  }
+
   const changed = !!after.src && after.src !== srcBefore;
   if (!changed) {
     throw new Error(
-      `视频号封面设置后槽位图片未变化（src=${(after.src || "").slice(0, 120)}, 弹窗仍开=${after.dialogOpen}）`
+      `视频号封面设置后槽位图片未变化（src=${(after.src || "").slice(
+        0,
+        120
+      )}, 弹窗仍开=${after.dialogOpen}）`
     );
   }
   const cdn = /qpic|weixin|wechat|wx\.qq|qq\.com/.test(after.src);
   console.log(
-    `[sph] 自定义封面已设置并校验通过（src变化=true, CDN=${cdn}, 弹窗已关=${!after.dialogOpen}）: ${after.src.slice(0, 120)}`
+    `[sph] 自定义封面已设置并校验通过（src变化=true, CDN=${cdn}, 弹窗已关=${!after.dialogOpen}）: ${after.src.slice(
+      0,
+      120
+    )}`
   );
   if (after.dialogOpen) {
     console.warn("[sph] ⚠️ 封面弹窗未关闭，尝试 Esc 收敛");
@@ -538,7 +533,12 @@ export default async function (page, data, window, event, onFinish) {
       await clickSphShadow(page, DESC_SEL, { timeout: 5000, focus: true });
       await clearAndType();
       if (text.description) {
-        await page.keyboard.type(text.description, { delay: 50 });
+        // 视频号描述编辑器按空格收敛当前 #话题；末尾以 #话题 结尾时补一个空格，
+        // 确保最后一个话题也能被高亮识别（matchesHead 忽略空白，不受影响）
+        const descToType = /#[^\s#]+$/.test(text.description)
+          ? `${text.description} `
+          : text.description;
+        await page.keyboard.type(descToType, { delay: 50 });
       }
       await page.waitForTimeout(300);
       descOk = matchesHead(await readSphField(DESC_SEL, false), text.description);

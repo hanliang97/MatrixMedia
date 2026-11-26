@@ -67,7 +67,7 @@
 | ------------- | ------------------------------------------------------------------------------------------------------ |
 | 进入 CLI 模式 | argv 含子串 `cli` 即进入无 GUI 流程（如 `matrixmedia cli publish ...`）                                |
 | 子命令        | `cli login \| publish \| publish-article \| accounts \| history`，每个均支持 `--help`                  |
-| 退出码        | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败（登录、上传等）                                      |
+| 退出码        | `0` 成功 / `1` 异常 / `2` 参数错误 / `3` 业务失败 / `4` 已转存草稿待检查 / `5` 登录失效 / `6` 用户关窗跳过 |
 | 机器可读输出  | `cli accounts --json` 与 `cli history --json` 产出稳定 JSON，便于上游消费                              |
 | 登录态共享    | CLI 与 GUI 共用 `persist:<phone><平台>` session partition，互不侵扰                                    |
 | HTTP API      | GUI 启动后 `POST http://127.0.0.1:30088/publish` 发布视频（见 [docs/http-api.md](./docs/http-api.md)） |

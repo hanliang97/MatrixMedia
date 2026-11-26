@@ -24,6 +24,8 @@ const overrides = new Map([
   ["src/main/services/upLoad/uploadTimeouts.js", asModule(`
     export const WAIT_SELECTOR_APPEAR_MS = 1;
     export const WAIT_UPLOAD_PROCESSING_MS = 1;
+    export function isPageClosedError() { return false; }
+    export function assertPageOpen() {}
     export async function pollPageUntil() { return true; }
   `)],
   ["src/main/services/upLoad/failureScreenshot.js", asModule(`

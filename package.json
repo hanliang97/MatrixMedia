@@ -98,7 +98,14 @@
     "test:devtools-endpoint": "node scripts/test-devtools-endpoint.js",
     "test:scheduled-dedupe": "node scripts/test-scheduled-dedupe.js",
     "test:fans-history": "node scripts/test-fans-history.js",
-    "test:toutiao-stats": "node scripts/test-toutiao-stats.js"
+    "test:toutiao-stats": "node scripts/test-toutiao-stats.js",
+    "test:upload-timeouts": "node scripts/test-upload-timeouts.js",
+    "test:dy-upload-failure": "node scripts/test-dy-upload-failure.js",
+    "test:stale-publish-reconcile": "node scripts/test-stale-publish-reconcile.js",
+    "test:publish-skipped-exit": "node scripts/test-publish-skipped-exit.js",
+    "test:publish-window-reveal": "node scripts/test-publish-window-reveal.js",
+    "test:sph-cover-dialog": "node scripts/test-sph-cover-dialog.js",
+    "test:blbl-cover": "node scripts/test-blbl-cover.js"
   },
   "build": {
     "forceCodeSigning": false,

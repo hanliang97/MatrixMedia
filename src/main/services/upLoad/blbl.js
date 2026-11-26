@@ -12,6 +12,7 @@ import {
   pollPageUntil,
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
+  isPageClosedError,
 } from "./uploadTimeouts.js";
 import {
   buildPlatformVideoText,
@@ -34,46 +35,216 @@ async function waitForBlblAutoCover(page) {
   );
 }
 
+export const BLBL_COVER_ENTRY_TIMEOUT_MS = 15000;
+export const BLBL_COVER_DIALOG_OPEN_TIMEOUT_MS = 6000;
+export const BLBL_COVER_DIALOG_OPEN_ATTEMPTS = 2;
+export const BLBL_COVER_SLIDER_TIMEOUT_MS = 10000;
+
 export function findBlblCoverEntry(root = document) {
   return root.querySelector(".cover-empty");
 }
 
+export function hasBlblAutoCover(root = document) {
+  const main = root.querySelector(".cover-main");
+  if (!main) return false;
+  const empty = main.querySelector(".cover-empty");
+  const img = main.querySelector(".cover-img");
+  return !empty && !!img;
+}
+
+export function isBlblCoverDialogOpen(root = document) {
+  const dlg = root.querySelector(".cover-editor.bcc-dialog__wrap");
+  if (!dlg) return false;
+  if (typeof dlg.getBoundingClientRect === "function") {
+    const r = dlg.getBoundingClientRect();
+    if (r.width <= 0 || r.height <= 0) return false;
+  }
+  if (typeof getComputedStyle === "function") {
+    const s = getComputedStyle(dlg);
+    if (s.display === "none" || s.visibility === "hidden") return false;
+  }
+  return true;
+}
+
+async function waitForBlblCoverDialogOrAutoCover(page, timeoutMs, stepMs = 400) {
+  const deadline = Date.now() + Math.max(0, timeoutMs);
+  while (Date.now() <= deadline) {
+    const state = await page.evaluate(() => {
+      const dlg = document.querySelector(".cover-editor.bcc-dialog__wrap");
+      let dialogOpen = false;
+      if (dlg) {
+        const r = dlg.getBoundingClientRect();
+        const s = getComputedStyle(dlg);
+        dialogOpen =
+          r.width > 0 &&
+          r.height > 0 &&
+          s.display !== "none" &&
+          s.visibility !== "hidden";
+      }
+      const main = document.querySelector(".cover-main");
+      const autoCover = Boolean(
+        main && !main.querySelector(".cover-empty") && main.querySelector(".cover-img")
+      );
+      return { dialogOpen, autoCover };
+    });
+    if (state.dialogOpen) return "dialog";
+    if (state.autoCover) return "auto_cover";
+    if (Date.now() < deadline) {
+      await page.waitForTimeout(stepMs);
+    } else {
+      break;
+    }
+  }
+  return "timeout";
+}
+
 /**
  * 视频上传成功后默认设置封面：
- * 点击「封面设置」→ 弹窗中滑块往左滑 10px → 点击「完成」。
- * 任何步骤失败均跳过，不阻断发布。
+ * 若 B 站已自动生成封面（.cover-img 且无 .cover-empty）直接放行；
+ * 否则滚动居中点击 .cover-empty（最多尝试 2 次，每次短超时 6s 等弹窗）→
+ * 滑块往左滑 10px → 点击「完成」。
+ * 任何非窗口关闭的失败均快速跳过（绝不卡死 5 分钟），不阻断发布。
  */
-async function handleBlblCover(page) {
+export async function handleBlblCover(page, options = {}) {
+  const entryTimeoutMs =
+    Number(options.entryTimeoutMs) > 0
+      ? Number(options.entryTimeoutMs)
+      : BLBL_COVER_ENTRY_TIMEOUT_MS;
+  const dialogOpenTimeoutMs =
+    Number(options.dialogOpenTimeoutMs) > 0
+      ? Number(options.dialogOpenTimeoutMs)
+      : BLBL_COVER_DIALOG_OPEN_TIMEOUT_MS;
+  const openAttempts =
+    Number(options.openAttempts) > 0
+      ? Number(options.openAttempts)
+      : BLBL_COVER_DIALOG_OPEN_ATTEMPTS;
+  const sliderTimeoutMs =
+    Number(options.sliderTimeoutMs) > 0
+      ? Number(options.sliderTimeoutMs)
+      : BLBL_COVER_SLIDER_TIMEOUT_MS;
+  const pollIntervalMs =
+    Number(options.pollIntervalMs) > 0 ? Number(options.pollIntervalMs) : 1000;
+
   try {
-    // 1. 等待并点击新版封面设置入口
-    const deadline = Date.now() + WAIT_SELECTOR_APPEAR_MS;
-    let coverEntry = null;
-    while (!coverEntry && Date.now() < deadline) {
-      const handle = await page
-        .evaluateHandle(findBlblCoverEntry)
-        .catch(() => null);
-      coverEntry = handle?.asElement() || null;
-      if (!coverEntry) {
-        await handle?.dispose();
-        await page.waitForTimeout(2000);
+    // 失焦标签输入框，避免联想下拉框或吸顶栏遮挡封面区域
+    await page
+      .evaluate(() => {
+        if (
+          document.activeElement &&
+          typeof document.activeElement.blur === "function"
+        ) {
+          document.activeElement.blur();
+        }
+      })
+      .catch(() => {});
+
+    // 1. 等待封面入口（.cover-empty）或已自动生成的封面（.cover-img）
+    const entryDeadline = Date.now() + entryTimeoutMs;
+    let hasEntry = false;
+    while (Date.now() <= entryDeadline) {
+      const status = await page.evaluate(() => {
+        const main = document.querySelector(".cover-main");
+        const autoCover = Boolean(
+          main && !main.querySelector(".cover-empty") && main.querySelector(".cover-img")
+        );
+        const entry = Boolean(document.querySelector(".cover-empty"));
+        return { autoCover, entry };
+      });
+      if (status.autoCover) {
+        console.log("[blbl] 封面已自动生成，跳过手动封面设置");
+        return;
+      }
+      if (status.entry) {
+        hasEntry = true;
+        break;
+      }
+      if (Date.now() < entryDeadline) {
+        await page.waitForTimeout(pollIntervalMs);
+      } else {
+        break;
       }
     }
-    if (!coverEntry) throw new Error("未找到哔哩哔哩封面设置入口");
-    await coverEntry.click({ delay: 200 });
-    await coverEntry.dispose();
-    console.log("[blbl] 已点击封面设置入口");
+    if (!hasEntry) {
+      throw new Error("未找到哔哩哔哩封面设置入口（15s）");
+    }
 
-    // 2. 等待封面编辑弹窗
-    await page.waitForSelector(".cover-editor.bcc-dialog__wrap", {
-      visible: true,
-      timeout: WAIT_SELECTOR_APPEAR_MS,
-    });
+    // 2. 滚动居中点击封面入口并短超时等待编辑弹窗（支持重试一次，避免刚上传完单次点击落空）
+    let dialogOpened = false;
+    for (let attempt = 1; attempt <= openAttempts; attempt++) {
+      const coverHandle = await page.evaluateHandle(findBlblCoverEntry);
+      const coverEntry = coverHandle?.asElement() || null;
+      if (!coverEntry) {
+        await coverHandle?.dispose().catch(() => {});
+        const autoReady = await page
+          .evaluate(() => {
+            const main = document.querySelector(".cover-main");
+            return Boolean(
+              main && !main.querySelector(".cover-empty") && main.querySelector(".cover-img")
+            );
+          })
+          .catch(() => false);
+        if (autoReady) {
+          console.log("[blbl] 封面已自动生成，跳过手动封面设置");
+          return;
+        }
+        break;
+      }
+
+      try {
+        await coverEntry
+          .evaluate((el) => {
+            if (typeof el.scrollIntoView === "function") {
+              el.scrollIntoView({ block: "center", inline: "center" });
+            }
+          })
+          .catch(() => {});
+        if (attempt === 1) {
+          await coverEntry.click({ delay: 200 });
+        } else {
+          // 二次重试改走 DOM click，绕开吸顶栏/浮层遮挡导致的坐标点击落空
+          await coverEntry.evaluate((el) => el.click());
+        }
+      } finally {
+        await coverEntry.dispose().catch(() => {});
+      }
+      console.log(
+        attempt === 1
+          ? "[blbl] 已点击封面设置入口"
+          : `[blbl] 已重试点击封面设置入口（第 ${attempt} 次）`
+      );
+
+      const waitResult = await waitForBlblCoverDialogOrAutoCover(
+        page,
+        dialogOpenTimeoutMs,
+        Math.min(400, pollIntervalMs)
+      );
+      if (waitResult === "dialog") {
+        dialogOpened = true;
+        break;
+      }
+      if (waitResult === "auto_cover") {
+        console.log("[blbl] 点击后封面已自动生成，跳过弹窗设置");
+        return;
+      }
+      if (attempt < openAttempts) {
+        await page.waitForTimeout(Math.min(800, pollIntervalMs));
+      }
+    }
+
+    if (!dialogOpened) {
+      throw new Error(
+        `封面编辑弹窗未出现（重试 ${openAttempts} 次，每次 ${Math.round(
+          dialogOpenTimeoutMs / 1000
+        )}s）`
+      );
+    }
+
     await page.waitForTimeout(1000); // 等待弹窗内组件渲染
 
-    // 3. 滑块往左滑 10px
+    // 3. 滑块往左滑 10px（短超时，避免弹窗结构变化导致长卡死）
     const handle = await page.waitForSelector(".vue-slider-dot-handle", {
       visible: true,
-      timeout: WAIT_SELECTOR_APPEAR_MS,
+      timeout: sliderTimeoutMs,
     });
     const box = await handle.boundingBox();
     if (box) {
@@ -108,6 +279,7 @@ async function handleBlblCover(page) {
 
     await page.waitForTimeout(1000); // 等待弹窗关闭
   } catch (e) {
+    if (isPageClosedError(e)) throw e;
     console.warn("[blbl] 封面设置失败，跳过:", e?.message || e);
   }
 }
@@ -268,6 +440,7 @@ export default async function (page, data, window, event) {
       "等待哔哩哔哩视频上传完成超时"
     );
   } catch (e) {
+    if (isPageClosedError(e)) throw e;
     console.warn("哔哩哔哩视频上传未完成，跳过后续步骤:", e?.message || e);
   }
 

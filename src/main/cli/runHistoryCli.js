@@ -3,10 +3,21 @@
 import path from "path";
 import fs from "fs";
 import { app } from "electron";
+import { reconcileStalePushData } from "../services/publishReconcile.js";
 
 function getPushDataDir() {
   const documents = app.getPath("documents");
   return path.join(documents, "MatrixMedia", "data", "pushData");
+}
+
+function getSafeUserDataDir() {
+  try {
+    return app && typeof app.getPath === "function"
+      ? app.getPath("userData") || ""
+      : "";
+  } catch (_) {
+    return "";
+  }
 }
 
 function parseDate(s) {
@@ -93,6 +104,10 @@ function truncate(s, maxWidth) {
 
 export function runHistoryCli(options) {
   const dir = getPushDataDir();
+  reconcileStalePushData({
+    userDataDir: getSafeUserDataDir(),
+    pushDataDir: dir,
+  });
   const allFiles = listDateFiles(dir);
 
   let targetFiles;

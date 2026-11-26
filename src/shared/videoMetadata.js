@@ -12,12 +12,11 @@ function semanticText(data, key, legacyKeys = []) {
 }
 
 export function normalizeVideoTags(value) {
-  const items = Array.isArray(value)
-    ? value
-    : String(value || "").split(/[\s,，、;；|]+/);
+  const rawItems = Array.isArray(value) ? value : [value];
   return [
     ...new Set(
-      items
+      rawItems
+        .flatMap((item) => String(item || "").split(/[\s,，、;；|]+/))
         .flatMap((item) => String(item || "").split(/(?=#)/))
         .map((item) => String(item || "").trim().replace(/^#+/, ""))
         .filter(Boolean)
@@ -48,6 +47,61 @@ export const PLATFORM_TAG_LIMITS = {
   // 此为平台硬限制，实测确认。
   抖音: 4,
 };
+
+/**
+ * 各平台标题字数上限（按 Unicode 码点 1:1 计字，实机截图证实抖音中英文/标点均计 1 字）。
+ * 抖音：标题输入框 .semi-input 硬截断于 30 字并标红，超长会破坏标题完整性或阻断提交；
+ * 小红书：标题上限 20 字（xhs.js 内按码点截断）。
+ */
+export const PLATFORM_TITLE_LIMITS = {
+  抖音: 30,
+  小红书: 20,
+};
+
+/** 在 CLI / MCP / GUI 入口层前置硬拦截的平台标题上限（避免截断破坏标题） */
+export const PLATFORM_STRICT_TITLE_LIMITS = {
+  抖音: 30,
+};
+
+export function countCodePoints(str) {
+  return Array.from(String(str ?? "")).length;
+}
+
+export function countTitleChars(title) {
+  return countCodePoints(String(title ?? "").trim());
+}
+
+export function sliceCodePoints(str, max) {
+  const limit = Math.max(0, Number(max) || 0);
+  return Array.from(String(str ?? "")).slice(0, limit).join("");
+}
+
+/**
+ * 校验指定平台标题字数是否超出硬上限。
+ * 默认仅对 PLATFORM_STRICT_TITLE_LIMITS（当前为抖音 30 字）做硬拦截；
+ * 传 strictOnly: false 时覆盖 PLATFORM_TITLE_LIMITS 全部平台。
+ */
+export function validatePlatformTitle(
+  platform,
+  title,
+  { strictOnly = true } = {}
+) {
+  const pt = String(platform || "").trim();
+  const limits = strictOnly
+    ? PLATFORM_STRICT_TITLE_LIMITS
+    : PLATFORM_TITLE_LIMITS;
+  const limit = limits[pt] || 0;
+  const length = countTitleChars(title);
+  if (limit > 0 && length > limit) {
+    return {
+      ok: false,
+      length,
+      limit,
+      error: `${pt}标题不能超过 ${limit} 字（当前 ${length} 字，中英文与标点均按 1 字计），请缩短后重试`,
+    };
+  }
+  return { ok: true, length, limit, error: "" };
+}
 
 export function formatTagsForPlatform(platform, tags) {
   const prefix = platform === "哔哩哔哩" ? "" : "#";

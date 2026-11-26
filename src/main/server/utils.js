@@ -3,6 +3,10 @@ const path = require("path");
 const https = require("https");
 const http = require("http");
 const moment = require("moment"); // 引入日期处理库
+const {
+  writeJsonAtomic,
+  reconcileStalePushData,
+} = require("../services/publishReconcile.js");
 
 /**
  * 业务数据目录名（英文路径，避免卸载器/工具链编码问题；与 appId 一致便于识别）
@@ -69,9 +73,19 @@ function readJsonFile(filePath) {
   }
 }
 
-// 工具：写入 JSON
+function getSafeUserDataDir() {
+  try {
+    const { app } = require("electron");
+    if (app && typeof app.getPath === "function") {
+      return app.getPath("userData") || "";
+    }
+  } catch (_) {}
+  return "";
+}
+
+// 工具：写入 JSON（原子写 temp + rename，防止跨进程读写损坏）
 function writeJsonFile(filePath, data) {
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf-8");
+  writeJsonAtomic(filePath, data);
 }
 
 // 工具：生成唯一 ID
@@ -351,6 +365,12 @@ function changeDataUnsafe({ item, fileName, type } = {}) {
     }
 
     case "get": {
+      if (folder.name === "pushData") {
+        reconcileStalePushData({
+          userDataDir: getSafeUserDataDir(),
+          pushDataDir: folderPath,
+        });
+      }
       const page = parseInt(item.page) || 1;
       const pageSize = parseInt(item.pageSize) || 10;
 

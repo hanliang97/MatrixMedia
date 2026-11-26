@@ -161,8 +161,17 @@ export async function handlePublishArticle(args: Record<string, unknown>): Promi
 
     return JSON.stringify({
       status: 'success',
+      ...((lastJson as any)?.id != null ? { id: (lastJson as any).id } : {}),
       message: getCliMessage(result, '文章发布成功'),
     });
+  }
+
+  if (result.exitCode === 5) {
+    throw new Error('登录态已失效: ' + getCliMessage(result, '登录状态已失效，请重新登录后再试'));
+  }
+
+  if (result.exitCode === 6) {
+    throw new Error('发布已取消: ' + getCliMessage(result, '用户关闭窗口，已跳过文章发布'));
   }
 
   if (result.exitCode === 3) {

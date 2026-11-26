@@ -43,7 +43,7 @@ const {
 } = require(schedulerBundle);
 const { parsePublishArgs, publishHelpText } = require(publishArgsBundle);
 
-const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
+const fixedNow = new Date(2026, 4, 5, 8, 0, 0).getTime();
 
 (() => {
   const r = parsePublishAt("2026-05-05 20:30:00", fixedNow);

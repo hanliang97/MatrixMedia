@@ -61,7 +61,7 @@
           <el-table :data="item" border style="width: 100%">
             <el-table-column prop="bt" label="标题" min-width="180" />
             <el-table-column prop="phone" label="发布分组" min-width="120" />
-            <el-table-column label="发布进度" min-width="320">
+            <el-table-column label="发布进度" min-width="360">
               <template slot-scope="scope">
                 <div
                   v-for="(sub, si) in scope.row.showAlltype"
@@ -105,6 +105,27 @@
                       :type="publishStatusType(sub.publishStatus)"
                       >{{ publishStatusText(sub.publishStatus) }}</el-tag
                     >
+                    <el-button
+                      v-if="canInspectPublishWindow(scope.row, sub)"
+                      :type="
+                        hasActivePublishWindow(scope.row, sub)
+                          ? 'primary'
+                          : 'info'
+                      "
+                      plain
+                      size="mini"
+                      icon="el-icon-view"
+                      class="inspect-window-btn"
+                      :loading="isInspectingWindow(scope.row, sub)"
+                      :title="
+                        hasActivePublishWindow(scope.row, sub)
+                          ? '将后台发布窗口切到前台实时查看进度'
+                          : '查看或核对当前后台发布窗口'
+                      "
+                      @click="handleShowPublishWindow(scope.row, sub)"
+                    >
+                      查看窗口
+                    </el-button>
                   </div>
                 </div>
               </template>
@@ -211,6 +232,10 @@ import {
   recordGroupOf,
 } from "../../../shared/accountIdentity.js";
 import { buildPublishHistoryCsv } from "../../../shared/publishHistoryCsv.js";
+import {
+  buildPublishWindowQuery,
+  matchPublishWindowEntry,
+} from "../../../shared/publishWindowMatch.js";
 
 export default {
   name: "VideoManager",
@@ -235,6 +260,9 @@ export default {
       screenshotDataUrl: "",
       screenshotError: "",
       screenshotPath: "",
+      // 当前活跃后台发布窗口（含同进程 GUI 任务与独立 CLI/MCP 子进程）
+      activePublishWindows: [],
+      inspectingWindowKey: "",
     };
   },
   mounted() {
@@ -247,16 +275,106 @@ export default {
       } else {
         this.syncPublishProgress(data);
       }
+      this.refreshActivePublishWindows();
     };
     ipcRenderer.on("puppeteerFile-done", this._onPuppeteerDone);
+    this.startActiveWindowPolling();
   },
   beforeDestroy() {
     ipcRenderer.removeListener("puppeteerFile-done", this._onPuppeteerDone);
+    this.stopActiveWindowPolling();
   },
   activated() {
     this.loadRecords();
+    this.startActiveWindowPolling();
+  },
+  deactivated() {
+    this.stopActiveWindowPolling();
   },
   methods: {
+    startActiveWindowPolling() {
+      this.refreshActivePublishWindows();
+      if (this._activeWindowTimer) return;
+      this._activeWindowTimer = setInterval(() => {
+        this.refreshActivePublishWindows({ reloadOnChange: true });
+      }, 3000);
+    },
+    stopActiveWindowPolling() {
+      if (this._activeWindowTimer) {
+        clearInterval(this._activeWindowTimer);
+        this._activeWindowTimer = null;
+      }
+    },
+    async refreshActivePublishWindows({ reloadOnChange = false } = {}) {
+      try {
+        const list = await ipcRenderer.invoke("publish:list-active-windows");
+        const nextList = Array.isArray(list) ? list : [];
+        const sig = nextList
+          .map((item) => item && item.key)
+          .filter(Boolean)
+          .sort()
+          .join("|");
+        const prevSig = this._lastActiveWindowSig;
+        this._lastActiveWindowSig = sig;
+        this.activePublishWindows = nextList;
+        if (reloadOnChange && prevSig !== undefined && sig !== prevSig) {
+          this.loadRecords();
+        }
+      } catch (_) {}
+    },
+    windowActionKey(row, sub) {
+      const q = buildPublishWindowQuery(row, sub);
+      return [q.recordId, q.pt, q.partition || q.phone, q.selectedFile || q.textOtherName].join("|");
+    },
+    hasActivePublishWindow(row, sub) {
+      if (!sub || !this.activePublishWindows.length) return false;
+      return Boolean(
+        matchPublishWindowEntry(
+          this.activePublishWindows,
+          buildPublishWindowQuery(row, sub)
+        )
+      );
+    },
+    canInspectPublishWindow(row, sub) {
+      if (!sub) return false;
+      return (
+        sub.publishStatus === "publishing" ||
+        sub.publishStatus === "drafting" ||
+        this.hasActivePublishWindow(row, sub)
+      );
+    },
+    isInspectingWindow(row, sub) {
+      return this.inspectingWindowKey === this.windowActionKey(row, sub);
+    },
+    async handleShowPublishWindow(row, sub) {
+      const key = this.windowActionKey(row, sub);
+      if (this.inspectingWindowKey === key) return;
+      this.inspectingWindowKey = key;
+      try {
+        const query = buildPublishWindowQuery(row, sub);
+        const res = await ipcRenderer.invoke("publish:show-window", query);
+        if (res && res.ok) {
+          this.$message.success(
+            "已将后台发布窗口切到前台（点窗口关闭可选择退回后台继续）"
+          );
+        } else {
+          await this.refreshActivePublishWindows();
+          this.loadRecords();
+          this.$message.info(
+            (res && res.message) ||
+              "当前没有运行中的发布窗口（可能仍在排队或任务已结束），已刷新状态"
+          );
+        }
+      } catch (err) {
+        this.$message.error(
+          "打开发布窗口失败：" + (err && err.message ? err.message : err)
+        );
+      } finally {
+        if (this.inspectingWindowKey === key) {
+          this.inspectingWindowKey = "";
+        }
+      }
+    },
     async exportHistory() {
       if (this.exportingHistory) return;
       const { csv, recordCount } = buildPublishHistoryCsv(this.dataList);
@@ -1130,9 +1248,16 @@ export default {
   display: flex;
   align-items: center;
   gap: 6px;
-  width: 300px;
+  flex-shrink: 0;
+  max-width: 390px;
   flex-wrap: wrap;
   justify-content: flex-end;
+}
+
+.inspect-window-btn {
+  padding: 4px 8px;
+  font-size: 12px;
+  margin-left: 2px;
 }
 
 .progress-count {
@@ -1187,7 +1312,8 @@ export default {
 
 .pt-name {
   cursor: pointer;
-  width: 60%;
+  flex: 1;
+  min-width: 68px;
   word-break: break-all;
 }
 

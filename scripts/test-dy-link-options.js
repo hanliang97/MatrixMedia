@@ -26,9 +26,9 @@ async function main() {
   assert.equal(build("抖音", "product", "10000591263144", { shortTitle: "商品" }).ok, false);
   assert.equal(build("抖音", "product", "javascript:alert(1)", { shortTitle: "商品" }).ok, false);
   assert.equal(build("抖音", "product", url).ok, false);
-  // 快手商品挂载（exact_product_name）暂缓合入，能力表中不存在时必须拒绝
+  // 快手商品挂载（exact_product_name）已合入能力表，校验正常通过
   const productName = "【3瓶装】测试商品 完整名称 60ml";
-  assert.equal(build("快手", "product", productName).ok, false);
+  assert.equal(build("快手", "product", productName).ok, true);
   assert.equal(build("视频号", "product", "001234567890123456789").value.value, "001234567890123456789");
   assert.equal(build("视频号", "product", productName).ok, false);
   assert.equal(build("视频号", "product", "1").value.failurePolicy, "save_draft");

@@ -49,9 +49,9 @@ assert.ok(
   "puppeteerFile-done 应带 message，界面才能显示失败原因"
 );
 
-/* 4) 三处 puppeteer-noLogin 都应成对发出 puppeteerFile-done */
+/* 4) 四处 puppeteer-noLogin 都应成对发出 puppeteerFile-done */
 const noLoginCount = (src.match(/safeReply\("puppeteer-noLogin"/g) || []).length;
-assert.strictEqual(noLoginCount, 3, `应有 3 处 puppeteer-noLogin，实际 ${noLoginCount}`);
+assert.strictEqual(noLoginCount, 4, `应有 4 处 puppeteer-noLogin，实际 ${noLoginCount}`);
 
 /* 逐处检查：每处 noLogin 之后 600 字符内应出现 puppeteerFile-done 或 replyFailureWithShot */
 let cursor = 0;

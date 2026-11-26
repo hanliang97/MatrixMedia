@@ -12,6 +12,9 @@ import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
+  assertPageOpen,
+  isPageClosedError,
+  waitStepOrPageClose,
 } from "./uploadTimeouts.js";
 import ttPublishMode from "./ttPublishMode.js";
 
@@ -571,6 +574,7 @@ async function waitForToutiaoUploadProgressComplete(page) {
   let lastLogAt = 0;
   let missingProgressCount = 0;
   while (Date.now() < deadline) {
+    assertPageOpen(page);
     const progresses = await page
       .evaluate(() =>
         [...document.querySelectorAll(".progress-bar-inner")].map((bar) => ({
@@ -580,7 +584,11 @@ async function waitForToutiaoUploadProgressComplete(page) {
           textContent: bar.textContent || "",
         }))
       )
-      .catch(() => []);
+      .catch((err) => {
+        if (isPageClosedError(err)) throw err;
+        assertPageOpen(page);
+        return [];
+      });
 
     const logValue =
       progresses
@@ -624,9 +632,10 @@ async function waitForToutiaoUploadProgressComplete(page) {
       return;
     }
 
-    await page.waitForTimeout(1000);
+    await waitStepOrPageClose(page, 1000);
   }
 
+  assertPageOpen(page);
   const err = new Error("等待头条上传进度到 100% 超时");
   err.name = "TimeoutError";
   throw err;

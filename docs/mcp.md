@@ -88,7 +88,7 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | ---------- | ---- | ------------------------------------------------- |
 | `days`     | 否   | 最近 N 天，默认 7                                 |
 | `platform` | 否   | 平台过滤                                          |
-| `status`   | 否   | `success` / `failed` / `publishing` / `scheduled` |
+| `status`   | 否   | `success` / `failed` / `publishing` / `scheduled` / `expired` / `draft` / `drafting` / `abnormal` / `skipped` / `login_required` |
 | `all`      | 否   | 为 `true` 时返回全部历史                          |
 
 ### publish_video
@@ -99,7 +99,7 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 | -------------- | ---- | ------------------------------------------------------------- |
 | `platform`     | 是   | `dy` / `ks` / `blbl` / `bjh` / `tt` / `sph` / `xhs` / `fqsp`  |
 | `file`         | 是   | 视频文件绝对路径                                              |
-| `title`        | 是   | 视频标题                                                      |
+| `title`        | 是   | 视频标题（抖音 `dy` 硬限 ≤ 30 字，按 Unicode 字符 1:1 计字，超长会在拉起 CLI 前直接报错） |
 | `description`  | 否   | 视频简介或正文                                                |
 | `shortTitle`   | 否   | 视频号短标题，建议 6～16 字；其他平台忽略                     |
 | `phone`        | 是   | 账号手机号，CLI 据此推导 session partition                    |
@@ -162,7 +162,7 @@ MCP Server 按以下顺序寻找 MatrixMedia：环境变量 `MATRIXMEDIA_BIN`（
 }
 ```
 
-当 `platform` 不是 `sph` 时，`sphProductId` / `sphDramaId` / `sphSeriesId` / `sphLink` 会被忽略。若商品、短剧或剧集添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`，不会误报为发布成功。
+当 `platform` 不是 `sph` 时，`sphProductId` / `sphDramaId` / `sphSeriesId` / `sphLink` 会被忽略。若商品、短剧或剧集添加失败但视频已成功转存草稿，Tool 返回 `status: needs_attention`（对应 CLI 退出码 `4`，保留真实 `publishMode`、`id` 与 `failScreenshot`），不会误报为发布成功；登录态失效（退出码 `5`）返回需重新登录提示；用户手动关闭发布窗口（退出码 `6`）返回取消/跳过提示而非成功。
 
 ### publish_article
 

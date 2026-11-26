@@ -8,9 +8,7 @@
 import { collectAccount } from "../services/dataStats/collector.js";
 import store from "../services/dataStats/store.js";
 import { resolveTaskPartition } from "../services/accountLookup.js";
-
-const normalizeTitle = (s) =>
-  String(s || "").replace(/[\u200B-\u200D\uFEFF]/g, "").trim();
+import { findWorkByTitle } from "../../shared/workStatsMatch.js";
 
 function print(data) {
   console.log(JSON.stringify(data, null, 2));
@@ -95,9 +93,7 @@ export async function runStatsCli({ action, platform, phone, title }) {
 
   if (action === "work") {
     const { works } = store.readAccount(phone, platform);
-    const hit = (works || []).find(
-      (w) => normalizeTitle(w.title) === normalizeTitle(title)
-    );
+    const hit = findWorkByTitle(works, title);
     if (!hit) {
       print({
         success: false,

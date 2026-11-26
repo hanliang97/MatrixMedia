@@ -122,6 +122,37 @@ const fiveTags = ["贰臣传", "历史", "明清史", "衣冠所向", "历史冷
   assert.strictEqual(PLATFORM_TAG_LIMITS["快手"], 4);
   assert.strictEqual(PLATFORM_TAG_LIMITS["抖音"], 4);
 
+  // 8. 复现 GUI 重发场景：数组元素本身包含逗号分隔字符串时必须拆分成独立 #话题
+  {
+    const text = buildPlatformVideoText("视频号", {
+      title: "标题",
+      description: "正文",
+      tags: ["AI编程,大模型测评,Claude,GPT"],
+    });
+    assert.strictEqual(
+      text.description,
+      "正文 #AI编程 #大模型测评 #Claude #GPT",
+      "数组元素内的逗号分隔标签必须拆成独立 #话题"
+    );
+    assert.strictEqual(countTopics(text.description), 4);
+  }
+  {
+    const dyFormatted = formatTagsForPlatform("抖音", [
+      "AI编程,大模型测评、Claude;GPT|多标签",
+    ]);
+    assert.strictEqual(
+      dyFormatted,
+      "#AI编程 #大模型测评 #Claude #GPT",
+      "拆分后抖音 4 个话题硬上限也必须生效"
+    );
+  }
+  {
+    const blblFormatted = formatTagsForPlatform("哔哩哔哩", [
+      "AI编程,大模型测评,Claude,GPT",
+    ]);
+    assert.strictEqual(blblFormatted, "AI编程 大模型测评 Claude GPT");
+  }
+
   console.log("test-video-metadata-tags: 全部断言通过");
 })().catch((e) => {
   console.error(e);

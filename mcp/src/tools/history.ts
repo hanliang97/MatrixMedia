@@ -17,11 +17,22 @@ export const listHistoryTool: Tool = {
       },
       status: {
         type: 'string',
-        enum: ['success', 'failed', 'publishing', 'scheduled'],
+        enum: [
+          'success',
+          'failed',
+          'publishing',
+          'scheduled',
+          'expired',
+          'draft',
+          'drafting',
+          'abnormal',
+          'skipped',
+          'login_required',
+        ],
       },
       all: {
         type: 'boolean',
-        description: 'Return all history regardless of date range (omits --days)',
+        description: 'Return all history regardless of date range (passes --all)',
       },
     },
     required: [],
@@ -39,7 +50,7 @@ export async function handleListHistory(
   const status = args.status;
 
   if (all === true) {
-    // no --days flag: CLI defaults to returning all records
+    cliArgs.push('--all');
   } else if (days !== undefined && days !== null) {
     cliArgs.push('--days', String(days));
   }

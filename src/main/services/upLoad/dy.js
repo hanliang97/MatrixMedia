@@ -4,6 +4,7 @@ import { normalizeCoverForUpload } from "../coverCompat.js";
 import { resolveVideoLinkOption } from "../../../shared/videoLink.js";
 import { attachDyProductLink } from "./dyProductLink.js";
 import { resolveDyCreativeStatementLabel } from "../../../shared/creativeStatement.js";
+import { isPlatformLoginUrl } from "../../../shared/platformPageState.js";
 import {
   readPageUrl,
   replyPublishFailure,
@@ -13,10 +14,15 @@ import {
   WAIT_SELECTOR_APPEAR_MS,
   WAIT_UPLOAD_PROCESSING_MS,
   pollPageUntil,
+  isPageClosedError,
 } from "./uploadTimeouts.js";
 import {
+  PLATFORM_TITLE_LIMITS,
   buildPlatformVideoText,
+  countCodePoints,
   normalizeVideoTags,
+  sliceCodePoints,
+  validatePlatformTitle,
 } from "../../../shared/videoMetadata.js";
 import {
   head,
@@ -766,7 +772,275 @@ export async function fillDyDescription(
   );
 }
 
-/** 标题复核：被动掉（简介区 Slate 重置/重填会触发重渲染）就重输一次，失败抛错 */
+/** 抖音标题全量归一比对：不仅检查前 8 字，连尾字截断也能抓出 */
+export function isDyTitleComplete(typed, expected) {
+  const want = normalizeForCompare(expected);
+  if (!want) return true;
+  return normalizeForCompare(typed) === want;
+}
+
+function buildDyTitleMismatchError(context, typed, expected) {
+  const expectedLen = countCodePoints(expected);
+  const actualLen = countCodePoints(typed);
+  const prefix = context ? `${context}` : "";
+  if (typed && matchesHead(typed, expected) && actualLen < expectedLen) {
+    const err = new Error(
+      `${prefix}标题被抖音页面截断（期望 ${expectedLen} 字，实际仅写入 ${actualLen} 字：「${typed}」），请缩短至 ${PLATFORM_TITLE_LIMITS["抖音"]} 字以内`
+    );
+    err.noRetry = true;
+    err.effectiveTitle = typed;
+    err.titleTruncated = true;
+    return err;
+  }
+  return new Error(
+    `${prefix}标题未完整写入（期望 ${expectedLen} 字「${head(expected)}」，实得 ${actualLen} 字）`
+  );
+}
+
+/**
+ * 浏览器端探针：检测抖音视频上传状态（必须自包含、无外部闭包、无 async/await）。
+ *
+ * 严格防误判规则：
+ * 1) 优先判就绪（<video src*="douyin.com"> + .rc-slider.rc-slider-horizontal），
+ *    就绪即立刻返回 ready，彻底规避「重新上传」等常驻按钮干扰；
+ * 2) 永不匹配裸「重新上传」按钮；
+ * 3) 跳过表单输入/富文本编辑器、script/style、发文助手面板、以及右侧手机预览区中
+ *    复述用户标题/简介的文本；
+ * 4) 跳过瞬时自动重试提示（正在重试/自动重试/重试中）。
+ */
+export function probeDyUploadState(probeConfig) {
+  var videos = document.querySelectorAll("video");
+  for (var i = 0; i < videos.length; i++) {
+    var v = videos[i];
+    var src = v.currentSrc || v.getAttribute("src") || "";
+    if (src.indexOf("douyin.com") === -1) continue;
+    var parent = v.parentElement;
+    if (parent && parent.querySelector(".rc-slider.rc-slider-horizontal")) {
+      return { state: "ready" };
+    }
+  }
+
+  var failRe =
+    /(?:视频)?上传失败|转码失败|文件解析失败|解析失败|网络(?:异常|错误|中断|断开)/;
+  var retryRe = /正在重试|自动重试|重试中|重新连接中/;
+  var excludeContainerRe =
+    /assistant|helper|preview-caption|phone-preview|發文助手|发文助手/i;
+  var titlePrefix = (probeConfig && probeConfig.titlePrefix) || "";
+  var descPrefix = (probeConfig && probeConfig.descPrefix) || "";
+  var submittedTitleNorm =
+    (probeConfig && probeConfig.submittedTitleNorm) || "";
+  var submittedDescNorm =
+    (probeConfig && probeConfig.submittedDescNorm) || "";
+
+  var isVisible = function (el) {
+    if (!el || typeof el.getBoundingClientRect !== "function") return false;
+    var rect = el.getBoundingClientRect();
+    if (!rect || rect.width <= 0 || rect.height <= 0) return false;
+    if (typeof getComputedStyle === "function") {
+      var st = getComputedStyle(el);
+      if (
+        st &&
+        (st.display === "none" ||
+          st.visibility === "hidden" ||
+          st.opacity === "0")
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+
+  var isExcludedAncestor = function (el) {
+    if (
+      el.closest &&
+      el.closest(
+        "input, textarea, [contenteditable='true'], .semi-input, .zone-container.editor-kit-container, script, style, noscript, template"
+      )
+    ) {
+      return true;
+    }
+    var cur = el;
+    for (var depth = 0; depth < 6 && cur; depth++) {
+      var cls =
+        typeof cur.className === "string"
+          ? cur.className
+          : String((cur.getAttribute && cur.getAttribute("class")) || "");
+      var id = String((cur.getAttribute && cur.getAttribute("id")) || "");
+      var testId = String(
+        (cur.getAttribute && cur.getAttribute("data-testid")) || ""
+      );
+      if (excludeContainerRe.test(cls + " " + id + " " + testId)) return true;
+      cur = cur.parentElement;
+    }
+    var p = el.parentElement;
+    for (var up = 0; up < 3 && p; up++) {
+      var pText = String(p.innerText || p.textContent || "").replace(/\s+/g, "");
+      if (pText.length > 0 && pText.length <= 400) {
+        if (pText.indexOf("发文助手") !== -1) return true;
+        if (
+          titlePrefix &&
+          titlePrefix.length >= 4 &&
+          pText.indexOf(titlePrefix) !== -1 &&
+          !/^(?:视频)?上传失败/.test(pText)
+        ) {
+          return true;
+        }
+        if (
+          descPrefix &&
+          descPrefix.length >= 4 &&
+          pText.indexOf(descPrefix) !== -1 &&
+          !/^(?:视频)?上传失败/.test(pText)
+        ) {
+          return true;
+        }
+      }
+      p = p.parentElement;
+    }
+    return false;
+  };
+
+  var nodes = document.querySelectorAll("div, span, p, a, strong, em, li");
+  for (var j = 0; j < nodes.length; j++) {
+    var el = nodes[j];
+    if (!isVisible(el)) continue;
+    if (isExcludedAncestor(el)) continue;
+    var raw = String(el.innerText || el.textContent || "")
+      .replace(/\s+/g, " ")
+      .trim();
+    if (!raw || raw.length > 80) continue;
+    var norm = raw.replace(/\s+/g, "");
+    if (!failRe.test(norm)) continue;
+    if (retryRe.test(norm)) continue;
+    if (norm.indexOf("发文助手") !== -1) continue;
+    if (titlePrefix && titlePrefix.length >= 4 && norm.indexOf(titlePrefix) !== -1) {
+      continue;
+    }
+    if (descPrefix && descPrefix.length >= 4 && norm.indexOf(descPrefix) !== -1) {
+      continue;
+    }
+    var isCoreFailText =
+      /^(?:视频)?上传失败(?:[，,！!。]|$)/.test(norm) ||
+      /^(?:转码失败|文件解析失败|解析失败)(?:[，,！!。]|$)/.test(norm);
+    if (
+      !isCoreFailText &&
+      norm.length >= 6 &&
+      ((submittedTitleNorm && submittedTitleNorm.indexOf(norm) !== -1) ||
+        (submittedDescNorm && submittedDescNorm.indexOf(norm) !== -1))
+    ) {
+      continue;
+    }
+    // 若子元素本身已命中失败文案，跳过外层容器，取最内层准确提示
+    var hasMatchingChild = false;
+    var children = el.querySelectorAll
+      ? el.querySelectorAll("div, span, p, a, strong, em, li")
+      : [];
+    for (var k = 0; k < children.length; k++) {
+      var child = children[k];
+      if (!isVisible(child)) continue;
+      var cNorm = String(child.innerText || child.textContent || "").replace(
+        /\s+/g,
+        ""
+      );
+      if (cNorm && cNorm.length <= 80 && failRe.test(cNorm) && !retryRe.test(cNorm)) {
+        hasMatchingChild = true;
+        break;
+      }
+    }
+    if (hasMatchingChild) continue;
+    return { state: "failed", reason: raw.slice(0, 80) };
+  }
+
+  return { state: "pending" };
+}
+
+/**
+ * 等待抖音视频上传与预览就绪；同时监测登录跳转与连续 2 轮确认的上传失败，
+ * 避免上传失败后在页面空转 3 小时。
+ */
+export async function waitForDyUploadReady(
+  page,
+  text = {},
+  {
+    totalMs = WAIT_UPLOAD_PROCESSING_MS,
+    stepMs = 2000,
+    requiredFailTicks = 2,
+    heartbeatMs = 25000,
+  } = {}
+) {
+  const submittedTitleNorm = normalizeForCompare(text.title || "");
+  const submittedDescNorm = normalizeForCompare(
+    sliceCodePoints(text.description || "", 200)
+  );
+  const probeConfig = {
+    titlePrefix: sliceCodePoints(submittedTitleNorm, 12),
+    descPrefix: sliceCodePoints(submittedDescNorm, 16),
+    submittedTitleNorm,
+    submittedDescNorm,
+  };
+
+  let consecutiveFailures = 0;
+  let lastFailReason = "";
+
+  const outcome = await pollPageUntil(
+    page,
+    probeDyUploadState,
+    totalMs,
+    stepMs,
+    "等待抖音视频上传/转码就绪超时",
+    {
+      pageArgs: [probeConfig],
+      heartbeatMs,
+      onHeartbeat: (elapsedMs) => {
+        console.log(
+          `[dy] 等待视频上传/转码就绪中（已等待 ${Math.round(
+            elapsedMs / 1000
+          )}s）...`
+        );
+      },
+      onBeforeTick: () => {
+        const currentUrl =
+          page && typeof page.url === "function" ? String(page.url() || "") : "";
+        if (currentUrl && isPlatformLoginUrl("抖音", currentUrl)) {
+          const err = new Error(
+            `抖音登录状态已失效，上传等待期间页面跳转到登录页（${currentUrl}）`
+          );
+          err.loginRequired = true;
+          throw err;
+        }
+      },
+      acceptResult: (res) => {
+        if (res === true || (res && res.state === "ready")) {
+          consecutiveFailures = 0;
+          lastFailReason = "";
+          return { state: "ready" };
+        }
+        if (res && res.state === "failed") {
+          consecutiveFailures++;
+          lastFailReason = res.reason || "上传失败";
+          console.warn(
+            `[dy] 检测到疑似上传失败（第 ${consecutiveFailures}/${requiredFailTicks} 次确认）：${lastFailReason}`
+          );
+          if (consecutiveFailures >= requiredFailTicks) {
+            return { state: "failed", reason: lastFailReason };
+          }
+          return false;
+        }
+        consecutiveFailures = 0;
+        lastFailReason = "";
+        return false;
+      },
+    }
+  );
+
+  // 兼容单测中 pollPageUntil 直接返回 true / undefined 的桩实现
+  if (outcome && outcome.state === "failed") {
+    throw new Error(
+      `抖音视频上传失败（页面提示「${outcome.reason || "上传失败"}」）`
+    );
+  }
+}
+
+/** 标题复核：被动掉（简介区 Slate 重置/重填会触发重渲染）或被截断就重输一次，失败抛错 */
 async function ensureDyTitleIntact(page, title, { context = "" } = {}) {
   const titleInput = await page.$(".semi-input");
   if (!titleInput) {
@@ -777,16 +1051,16 @@ async function ensureDyTitleIntact(page, title, { context = "" } = {}) {
       .evaluate((el) => String(el.value || el.textContent || "").trim())
       .catch(() => "");
   const current = await readTitle();
-  if (matchesHead(current, title)) return;
+  if (isDyTitleComplete(current, title)) return;
   console.warn(
-    `[dy] ${context}标题被动掉（实得 ${current.length} 字），重输一次`
+    `[dy] ${context}标题回读不完整（期望 ${countCodePoints(
+      title
+    )} 字，实得 ${countCodePoints(current)} 字），重输一次`
   );
   await replaceAllText(page, titleInput, title, 80);
   const again = await readTitle();
-  if (!matchesHead(again, title)) {
-    throw new Error(
-      `${context}标题重输失败（期望含「${head(title)}」，实得 ${again.length} 字）`
-    );
+  if (!isDyTitleComplete(again, title)) {
+    throw buildDyTitleMismatchError(context, again, title);
   }
 }
 
@@ -923,8 +1197,25 @@ async function verifyDyDescriptionBeforePublish(page, text, data) {
 export default async function (page, data, window, event) {
   const isDraftMode =
     data.publishMode === "draft" || data.publishToDraft === true;
-  // 文案在顶部解析：简介填写与发布前复核（第二个 try 块）都要用
+  // 文案在顶部解析：前置字数校验、简介填写与发布前复核都要用
   const text = buildPlatformVideoText("抖音", data.data);
+
+  // 防御性前置校验：抖音标题硬限 30 字（按 Unicode 码点 1:1 计字），
+  // 超长时直接中止且不触发无意义的 5 轮重传
+  const titleCheck = validatePlatformTitle("抖音", text.title);
+  if (!titleCheck.ok) {
+    console.error(`❌ ${titleCheck.error}`);
+    await replyPublishFailure({
+      page,
+      data,
+      window,
+      event,
+      message: titleCheck.error,
+      extraPayload: { noRetry: true },
+      closeWindow: true,
+    });
+    return;
+  }
 
   try {
     // 等待 name=upload-btn 的 input 出现
@@ -938,6 +1229,14 @@ export default async function (page, data, window, event) {
   } catch (e) {
     // 上传失败必须阻断：文件没进上传区还继续填表点发布，会发出残缺作品
     console.error("❌ 输入文件失败", e);
+    if (
+      isPageClosedError(e) &&
+      window &&
+      typeof window.isDestroyed === "function" &&
+      window.isDestroyed()
+    ) {
+      return;
+    }
     await replyPublishFailure({
       page,
       data,
@@ -958,25 +1257,22 @@ export default async function (page, data, window, event) {
     await input.click({ clickCount: 3 }); // 三击全选
     await page.keyboard.press("Backspace"); // 删除内容
     await page.type(".semi-input", text.title, { delay: 50 });
-    // 回读校验：标题空写不能放过（发布后才补不回来）。
-    // 按码点取前 8 字比较（slice 会切出孤立代理对）；不一致先重输一次再判失败。
+    // 全量回读校验：不仅防空写，也拦截抖音输入框在 30 字处静默截断尾部
     const readTitle = () =>
       input
         .evaluate((el) => String(el.value || el.textContent || "").trim())
         .catch(() => "");
     let typedTitle = await readTitle();
-    if (!matchesHead(typedTitle, text.title)) {
+    if (!isDyTitleComplete(typedTitle, text.title)) {
       console.warn(
-        `[dy] 标题回读不一致，重输一次（期望含「${head(text.title)}」，实得 ${
-          typedTitle.length
-        } 字）`
+        `[dy] 标题回读不完整，重输一次（期望 ${countCodePoints(
+          text.title
+        )} 字「${head(text.title)}」，实得 ${countCodePoints(typedTitle)} 字）`
       );
       await replaceAllText(page, input, text.title, 80);
       typedTitle = await readTitle();
-      if (!matchesHead(typedTitle, text.title)) {
-        throw new Error(
-          `标题未写入（期望含「${head(text.title)}」，实得 ${typedTitle.length} 字）`
-        );
+      if (!isDyTitleComplete(typedTitle, text.title)) {
+        throw buildDyTitleMismatchError("", typedTitle, text.title);
       }
     }
 
@@ -994,37 +1290,33 @@ export default async function (page, data, window, event) {
     await ensureDyTitleIntact(page, text.title, { context: "简介填写后" });
   } catch (e) {
     console.error("❌ 输入标题失败", e);
+    if (
+      isPageClosedError(e) &&
+      window &&
+      typeof window.isDestroyed === "function" &&
+      window.isDestroyed()
+    ) {
+      return;
+    }
+    const extraPayload = {};
+    if (e && e.noRetry) extraPayload.noRetry = true;
+    if (e && e.effectiveTitle) extraPayload.effectiveTitle = e.effectiveTitle;
+    if (e && e.titleTruncated) extraPayload.titleTruncated = true;
     await replyPublishFailure({
       page,
       data,
       window,
       event,
       message: `抖音标题/简介填写失败: ${(e && e.message) || String(e)}`,
+      extraPayload,
       closeWindow: true,
     });
     return;
   }
 
   try {
-    // 不依赖会随打包变化的 container-xxx：等预览区 video（抖音 CDN）与同容器内的 rc 进度条同时出现
-    await pollPageUntil(
-      page,
-      () => {
-        for (const v of document.querySelectorAll("video")) {
-          const src = v.currentSrc || v.getAttribute("src") || "";
-          if (!src.includes("douyin.com")) continue;
-          const parent = v.parentElement;
-          if (
-            parent &&
-            parent.querySelector(".rc-slider.rc-slider-horizontal")
-          ) {
-            return true;
-          }
-        }
-        return false;
-      },
-      WAIT_UPLOAD_PROCESSING_MS
-    );
+    // 等待视频预览就绪；同步监测登录跳转、关窗断开及连续 2 轮确认的上传失败提示
+    await waitForDyUploadReady(page, text);
 
     // 「保存权限」区域往往在预览视频就绪后才挂载；放在预览等待之后，并放宽文案/控件匹配
     await page.waitForFunction(
@@ -1115,15 +1407,29 @@ export default async function (page, data, window, event) {
     });
   } catch (e) {
     const detail = (e && e.message) || String(e);
+    console.error("❌ 上传失败", e);
+    if (
+      isPageClosedError(e) &&
+      window &&
+      typeof window.isDestroyed === "function" &&
+      window.isDestroyed()
+    ) {
+      return;
+    }
+    const extraPayload = {};
+    if (e && e.loginRequired) extraPayload.loginRequired = true;
+    if (e && e.noRetry) extraPayload.noRetry = true;
+    if (e && e.effectiveTitle) extraPayload.effectiveTitle = e.effectiveTitle;
+    if (e && e.titleTruncated) extraPayload.titleTruncated = true;
     await replyPublishFailure({
       page,
       data,
       window,
       event,
       message: detail.length > 200 ? `${detail.slice(0, 200)}…` : detail,
+      extraPayload,
       // 抖音发布失败后窗口是否关闭沿用原行为（上游统一处理）
       closeWindow: false,
     });
-    console.error("❌ 上传失败", e);
   }
 }

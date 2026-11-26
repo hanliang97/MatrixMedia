@@ -57,7 +57,7 @@ function startServer(env) {
   };
 }
 
-async function fakeBin(dir, { sleepMs, exitCode = 0, stdout }) {
+async function fakeBin(dir, { sleepMs, exitCode = 0, stdout, stderr }) {
   const bin = path.join(dir, 'fake-matrixmedia');
   const counter = path.join(dir, 'count.txt');
   await writeFile(
@@ -68,6 +68,7 @@ const c = ${JSON.stringify(counter)};
 fs.writeFileSync(c, String((fs.existsSync(c) ? Number(fs.readFileSync(c, 'utf8')) : 0) + 1));
 setTimeout(() => {
   ${stdout ? `console.log(${JSON.stringify(JSON.stringify(stdout))});` : ''}
+  ${stderr ? `console.error(${JSON.stringify(stderr)});` : ''}
   process.exit(${exitCode});
 }, ${sleepMs});
 `,
@@ -160,5 +161,154 @@ test('unknown jobId points the agent at list_history instead of republishing', a
     assert.match(res.body, /list_history/);
   } finally {
     srv.close();
+  }
+});
+
+test('zero-exit CLI without JSON receipt fails instead of falsely reporting success', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mm-jobs-'));
+  const { bin } = await fakeBin(dir, { sleepMs: 10, exitCode: 0, stdout: undefined });
+  const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+  try {
+    await srv.init();
+    const res = await srv.call('publish_video', videoArgs);
+    assert.equal(res.isError, true);
+    assert.match(res.body, /未返回发布结果/);
+  } finally {
+    srv.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('pre-flight rejects empty title and Douyin >30 code-point titles without spawning CLI', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mm-jobs-'));
+  const { bin, counter } = await fakeBin(dir, { sleepMs: 10, exitCode: 0, stdout: { resultStatus: 'success' } });
+  const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+  try {
+    await srv.init();
+    const emptyRes = await srv.call('publish_video', { ...videoArgs, title: '   ' });
+    assert.equal(emptyRes.isError, true);
+    assert.match(emptyRes.body, /title must be non-empty/);
+
+    const longRes = await srv.call('publish_video', {
+      ...videoArgs,
+      title: 'Claude Ship上线！写代码审PR批合并，AI一条龙全包了？',
+    });
+    assert.equal(longRes.isError, true);
+    assert.match(longRes.body, /30 字/);
+
+    // 30 code points including emoji should pass and reach CLI
+    const okRes = await srv.call('publish_video', {
+      ...videoArgs,
+      title: '🔥' + 'A'.repeat(28) + '！',
+    });
+    assert.equal(okRes.isError, false);
+    assert.equal(await readFile(counter, 'utf8'), '1');
+  } finally {
+    srv.close();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('exitCode 3 without stdout JSON surfaces stderr instead of hardcoded login error, exit 4/5/6 handled cleanly', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'mm-jobs-'));
+  try {
+    // exitCode 3 without stdout JSON -> uses stderr
+    {
+      const { bin } = await fakeBin(dir, { sleepMs: 10, exitCode: 3, stderr: '封面上传失败：不支持的格式' });
+      const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+      try {
+        await srv.init();
+        const res = await srv.call('publish_video', videoArgs);
+        assert.equal(res.isError, true);
+        assert.match(res.body, /封面上传失败/);
+        assert.doesNotMatch(res.body, /登录态异常/);
+      } finally {
+        srv.close();
+      }
+    }
+    // exitCode 4 with publish_abnormal preserves publishMode="publish"
+    {
+      const { bin } = await fakeBin(dir, {
+        sleepMs: 10,
+        exitCode: 4,
+        stdout: {
+          publishMode: 'publish',
+          outcome: 'publish_abnormal',
+          resultStatus: 'abnormal',
+          id: 'rec-4',
+          message: '页面地址未变化，请核对',
+        },
+      });
+      const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+      try {
+        await srv.init();
+        const res = await srv.call('publish_video', videoArgs);
+        assert.equal(res.isError, false);
+        const parsed = JSON.parse(res.body);
+        assert.equal(parsed.status, 'needs_attention');
+        assert.equal(parsed.publishMode, 'publish');
+        assert.equal(parsed.outcome, 'publish_abnormal');
+        assert.equal(parsed.id, 'rec-4');
+      } finally {
+        srv.close();
+      }
+    }
+    // exitCode 5 login expired
+    {
+      const { bin } = await fakeBin(dir, {
+        sleepMs: 10,
+        exitCode: 5,
+        stdout: { message: '抖音登录状态已失效' },
+      });
+      const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+      try {
+        await srv.init();
+        const res = await srv.call('publish_video', videoArgs);
+        assert.equal(res.isError, true);
+        assert.match(res.body, /登录态已失效.*抖音登录状态已失效/);
+      } finally {
+        srv.close();
+      }
+    }
+    // exitCode 6 user closed window (skipped) fails instead of reporting success
+    {
+      const { bin } = await fakeBin(dir, {
+        sleepMs: 10,
+        exitCode: 6,
+        stdout: { skipped: true, message: '用户关闭窗口，已跳过发布' },
+      });
+      const srv = startServer({ MATRIXMEDIA_BIN: bin, MATRIXMEDIA_INLINE_WAIT_MS: '5000' });
+      try {
+        await srv.init();
+        const res = await srv.call('publish_video', videoArgs);
+        assert.equal(res.isError, true);
+        assert.match(res.body, /发布已取消.*用户关闭窗口/);
+      } finally {
+        srv.close();
+      }
+    }
+    // get_work_stats returns isError:true on non-zero exit
+    {
+      const { bin } = await fakeBin(dir, {
+        sleepMs: 10,
+        exitCode: 1,
+        stdout: { success: false, error: '未找到该标题的视频' },
+      });
+      const srv = startServer({ MATRIXMEDIA_BIN: bin });
+      try {
+        await srv.init();
+        const res = await srv.call('get_work_stats', {
+          phone: '13800138000',
+          platform: 'dy',
+          title: '不存在',
+        });
+        assert.equal(res.isError, true);
+        assert.match(res.body, /未找到该标题的视频/);
+      } finally {
+        srv.close();
+      }
+    }
+  } finally {
+    await rm(dir, { recursive: true, force: true });
   }
 });

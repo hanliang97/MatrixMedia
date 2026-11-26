@@ -3,6 +3,7 @@
 require("@babel/register")({
   extensions: [".js"],
   ignore: [/node_modules/],
+  presets: [["@babel/preset-env", { targets: { node: "20" }, modules: "commonjs" }]],
 });
 
 const assert = require("assert");
@@ -106,6 +107,18 @@ async function main() {
   );
   assert.strictEqual(
     isPlatformLoginUrl("抖音", "https://channels.weixin.qq.com/login.html"),
+    false
+  );
+  assert.strictEqual(
+    isPlatformLoginUrl("抖音", "https://passport.douyin.com/login"),
+    true
+  );
+  assert.strictEqual(
+    isPlatformLoginUrl("抖音", "https://creator.douyin.com/"),
+    true
+  );
+  assert.strictEqual(
+    isPlatformLoginUrl("抖音", "https://creator.douyin.com/creator-micro/content/upload"),
     false
   );
   console.log("test-electron-startup passed");

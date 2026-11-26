@@ -28,6 +28,9 @@ jobs:
           yarn test:publish-failure-queue
           yarn test:publish-draft-args
           yarn test:publish-article-args
+          yarn test:publish-skipped-exit
+          yarn test:stale-publish-reconcile
+          yarn test:publish-window-reveal
 
           # 内置 HTTP 服务的访问守卫（Origin 精确比对 + 写接口必须有守卫）
           yarn test:server-request-guard
@@ -37,6 +40,10 @@ jobs:
           yarn test:history-args
           yarn test:publish-history-csv
           # 平台适配逻辑
+          yarn test:upload-timeouts
+          yarn test:dy-upload-failure
+          yarn test:sph-cover-dialog
+          yarn test:blbl-cover
           yarn test:ks-description
           yarn test:ks-no-download
           yarn test:dy-description
