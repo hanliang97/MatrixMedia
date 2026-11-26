@@ -658,6 +658,7 @@ export default {
           bq: sample.bq || "",
           creativeStatement: sample.creativeStatement,
           coverPath: sample.coverPath || "",
+          horizontalCoverPath: sample.horizontalCoverPath || "",
           noDownload: sample.noDownload === true,
         },
         records: normalizedDetails.map(({ record, metadata }) => ({

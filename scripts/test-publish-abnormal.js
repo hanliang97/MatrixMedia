@@ -466,6 +466,57 @@ function createSignalPage(urls, full, overlay) {
     assert.strictEqual(payload.message, "上传成功");
   }
 
+  // 5d. 点击前页面静态文案已含「发布成功」且未出现在弹层 overlay 时，
+  //     不得误判成功（防 40ms 假阳性提前关窗）；仅当弹层 overlay 新出现该文案或地址跳转时才判成功
+  {
+    const staticText = "编辑作品 作品发布成功后可前往作品管理查看 发布 取消";
+    const pageNoOverlay = createSignalPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      staticText,
+      ""
+    );
+    const event1 = createEvent();
+    await replyPublishOutcome({
+      page: pageNoOverlay,
+      data: { pt: "抖音", closeWindowAfterPublish: false },
+      window: null,
+      event: event1,
+      urlBefore: "https://x.com/publish",
+      textBefore: staticText,
+      waitMs: 0,
+      successMessage: "上传成功",
+    });
+    assert.strictEqual(
+      event1.calls[0].payload.publishAbnormal,
+      true,
+      "点击前已存在的静态「发布成功」文案不得判成功"
+    );
+    assert.strictEqual(event1.calls[0].payload.publishSignal, "none");
+
+    const pageWithOverlay = createSignalPage(
+      ["https://x.com/publish", "https://x.com/publish"],
+      staticText,
+      "发布成功"
+    );
+    const event2 = createEvent();
+    await replyPublishOutcome({
+      page: pageWithOverlay,
+      data: { pt: "抖音", closeWindowAfterPublish: false },
+      window: null,
+      event: event2,
+      urlBefore: "https://x.com/publish",
+      textBefore: staticText,
+      waitMs: 0,
+      successMessage: "上传成功",
+    });
+    assert.strictEqual(
+      event2.calls[0].payload.publishAbnormal,
+      undefined,
+      "弹层 overlay 真正出现「发布成功」时应判成功"
+    );
+    assert.strictEqual(event2.calls[0].payload.publishSignal, "toast:发布成功");
+  }
+
   // 6. 结果映射：异常不计成功
   {
     const abnormal = resolvePublishCompletion({

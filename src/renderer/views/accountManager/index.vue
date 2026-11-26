@@ -626,7 +626,9 @@ export default {
                   .filter(
                     (route) =>
                       typeof route.path === "string" &&
-                      route.path.startsWith("/accountManager")
+                      route.path.startsWith("/accountManager/") &&
+                      route.meta &&
+                      route.meta.pt
                   );
                 if (accountRoutes.length > 0) {
                   const targetPath = accountRoutes[0].path;
