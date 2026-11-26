@@ -72,4 +72,78 @@ const { pickDyCoverSlotCandidate } = require(bundle);
   assert.strictEqual(h, null, "仅有单槽位时必须返回 null，禁止覆写竖封面槽位");
 }
 
+// 4. 复现今日线上失败：真实封面槽位滚出视口后，仅剩右侧吸顶「发文助手」缺失封面提示条时必须返回 null，绝不能当 first-slot 误点
+{
+  const cands = [
+    {
+      id: 0,
+      text: "横/竖双封面缺失为增加作品的流量，建议同时设置横版和竖版的封面",
+      localCtx: "横/竖双封面缺失为增加作品的流量，建议同时设置横版和竖版的封面",
+      x: 1034,
+      y: 241,
+      width: 211,
+      height: 68,
+      hasImg: false,
+      isCoverBox: true,
+    },
+  ];
+  assert.strictEqual(
+    pickDyCoverSlotCandidate(cands, "portrait"),
+    null,
+    "发文助手「横/竖双封面缺失」提示卡片绝不能被误判为竖版封面槽位"
+  );
+  assert.strictEqual(
+    pickDyCoverSlotCandidate(cands, "horizontal"),
+    null,
+    "发文助手「横/竖双封面缺失」提示卡片绝不能被误判为横版封面槽位"
+  );
+}
+
+// 5. 真实双槽位与右侧「发文助手」提示卡片共存时，自动忽略提示卡片且 slotCount 仍为 2
+{
+  const cands = [
+    {
+      id: 0,
+      text: "横/竖双封面缺失为增加作品的流量，建议同时设置横版和竖版的封面",
+      localCtx: "发文助手横/竖双封面缺失",
+      x: 1034,
+      y: 241,
+      width: 211,
+      height: 68,
+      hasImg: false,
+      isCoverBox: true,
+    },
+    {
+      id: 1,
+      text: "选择封面",
+      localCtx: "竖封面3:4选择封面",
+      x: 120,
+      y: 360,
+      width: 108,
+      height: 144,
+      hasImg: false,
+      isCoverBox: true,
+    },
+    {
+      id: 2,
+      text: "选择封面",
+      localCtx: "横封面4:3选择封面",
+      x: 260,
+      y: 372,
+      width: 160,
+      height: 120,
+      hasImg: false,
+      isCoverBox: true,
+    },
+  ];
+  const p = pickDyCoverSlotCandidate(cands, "portrait");
+  assert.ok(p);
+  assert.strictEqual(p.id, 1);
+  assert.strictEqual(p.slotCount, 2);
+
+  const h = pickDyCoverSlotCandidate(cands, "horizontal", { x: p.cx, y: p.cy });
+  assert.ok(h);
+  assert.strictEqual(h.id, 2);
+}
+
 console.log("test-dy-dual-cover-slot: 全部断言通过");

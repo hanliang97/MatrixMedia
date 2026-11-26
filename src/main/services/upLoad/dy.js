@@ -146,78 +146,184 @@ async function uploadDyCoverInOpenModal(page, imagePath, label) {
   await page.waitForTimeout(2500);
 }
 
-async function clickDyCoverSlot(page, kind, excludeCenter = null) {
-  // 在页面侧采集所有封面候选节点（文案按钮 + 封面预览盒），并给每个节点挂临时标记索引；
-  // 向上读取局部上下文时一旦遇到同时包含「竖封面」与「横封面」的共享父容器即止步，杜绝标签互污。
-  const rawCandidates = await page.evaluate(() => {
+async function scrollDyCoverAreaIntoView(page) {
+  const res = await page.evaluate(() => {
     const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
-    const localContextOf = (el) => {
-      let a = el;
-      let best = norm(el.textContent || "");
-      for (let k = 0; k < 4 && a && a.parentElement; k++) {
-        a = a.parentElement;
-        const t = norm(a.textContent || "");
-        // 碰到同时包含竖封面与横封面的共享外框即立刻止步，不再向上污染
-        if (t.includes("竖封面") && t.includes("横封面")) break;
-        if (t.length <= 80) best = t;
-      }
-      return best;
-    };
-
-    const TEXT_RE =
+    const ACTION_RE =
       /^(?:选择封面|编辑封面|修改封面|更换封面|设置竖封面|选择竖封面|上传竖封面|设置横封面|选择横封面|上传横封面|添加横封面|编辑横封面)$/;
-    const found = new Set();
-    const list = [];
+    const LABEL_RE = /^(?:设置封面|封面设置|视频封面|竖封面|横封面)$/;
+    const NOISE_RE =
+      /(?:双封面缺失|封面缺失|建议同时设置|增加作品的流量|发文助手|快速检测|检测中|AI智能推荐|智能推荐封面|好封面能帮作品提升吸引力|查看封面展示页面)/;
 
-    const pushEl = (el, isCoverBox) => {
-      if (!el || found.has(el)) return;
+    let anchor = null;
+    let by = "";
+    for (const el of document.querySelectorAll("div,span,button,label,p,h3,h4")) {
       const r = el.getBoundingClientRect();
-      if (r.width < 30 || r.height < 20 || r.width > 460 || r.height > 460) return;
-      if (r.bottom < 0 || r.right < 0) return;
-      found.add(el);
-      const id = list.length;
-      el.setAttribute("data-mm-cover-cand", String(id));
-      list.push({
-        id,
-        text: norm(el.innerText || el.textContent || ""),
-        localCtx: localContextOf(el),
-        x: Math.round(r.left),
-        y: Math.round(r.top),
-        width: Math.round(r.width),
-        height: Math.round(r.height),
-        hasImg: Boolean(el.querySelector && el.querySelector("img")),
-        isCoverBox,
-      });
-    };
-
-    // 清理旧标记
-    for (const old of document.querySelectorAll("[data-mm-cover-cand]")) {
-      old.removeAttribute("data-mm-cover-cand");
-    }
-
-    // 1) 明确的封面操作按钮/文本入口
-    for (const el of document.querySelectorAll("div,span,button")) {
+      if (r.width <= 0 || r.height <= 0) continue;
       const t = norm(el.innerText || el.textContent || "");
-      if (t && TEXT_RE.test(t)) {
-        pushEl(el, false);
+      if (!t || NOISE_RE.test(t)) continue;
+      if (ACTION_RE.test(t)) {
+        anchor = el;
+        by = `action:${t}`;
+        break;
+      }
+      if (!anchor && LABEL_RE.test(t)) {
+        anchor = el;
+        by = `label:${t}`;
       }
     }
 
-    // 2) 封面槽位容器盒（带 img 或 3:4 / 4:3 明显封面盒比例），解决自动生成预览后文案隐藏问题
-    for (const el of document.querySelectorAll('[class*="cover" i]')) {
-      const r = el.getBoundingClientRect();
-      if (r.width < 55 || r.height < 55 || r.width > 420 || r.height > 420) continue;
-      const hasImg = Boolean(el.querySelector("img"));
-      const ctx = localContextOf(el);
-      if (hasImg || ctx.includes("竖封面") || ctx.includes("横封面") || ctx.includes("封面")) {
-        pushEl(el, true);
+    if (anchor) {
+      const r = anchor.getBoundingClientRect();
+      const inView = r.top >= 40 && r.bottom <= window.innerHeight - 40;
+      if (!inView) {
+        anchor.scrollIntoView({ block: "center", inline: "nearest" });
+        return { scrolled: true, by };
       }
+      return { scrolled: false, by };
     }
 
-    return list;
+    // 兜底：若页面仍处于底部（如刚点完「保存权限-不允许」），把主滚动容器和窗口滚回顶部
+    let resetCount = 0;
+    for (const el of document.querySelectorAll("div,main,section")) {
+      if (el.scrollTop > 0 && el.clientHeight >= 300) {
+        el.scrollTop = 0;
+        resetCount++;
+      }
+    }
+    const winScrolled = window.scrollY > 0;
+    if (winScrolled) window.scrollTo(0, 0);
+    return { scrolled: resetCount > 0 || winScrolled, by: "fallback-top" };
   });
 
-  const pick = pickDyCoverSlotCandidate(rawCandidates, kind, excludeCenter);
+  if (res && res.scrolled) {
+    console.log("[dy] 已将封面区域滚入视口:", JSON.stringify(res));
+    await page.waitForTimeout(350);
+  }
+  return res;
+}
+
+async function clickDyCoverSlot(page, kind, excludeCenter = null) {
+  await scrollDyCoverAreaIntoView(page);
+
+  const collectCandidates = async () =>
+    page.evaluate(() => {
+      const norm = (t) => String(t || "").replace(/\s+/g, "").trim();
+      const NOISE_RE =
+        /(?:双封面缺失|封面缺失|建议同时设置|增加作品的流量|发文助手|快速检测|检测中|AI智能推荐|智能推荐封面|好封面能帮作品提升吸引力|查看封面展示页面)/;
+      const localContextOf = (el) => {
+        let a = el;
+        let best = norm(el.textContent || "");
+        for (let k = 0; k < 4 && a && a.parentElement; k++) {
+          a = a.parentElement;
+          const t = norm(a.textContent || "");
+          // 碰到同时包含竖封面与横封面的共享外框即立刻止步，不再向上污染
+          if (t.includes("竖封面") && t.includes("横封面")) break;
+          if (t.length <= 80) best = t;
+        }
+        return best;
+      };
+      const isInsideAssistantPanel = (el) => {
+        let a = el;
+        for (let k = 0; k < 6 && a; k++) {
+          const t = norm(a.textContent || "");
+          // 到达包含双封面槽位的共享外框即止步，避免同排右侧的 AI 推荐区误伤真实封面槽位
+          if (t.includes("竖封面") && t.includes("横封面")) return false;
+          if (t.length <= 200 && t.includes("发文助手")) return true;
+          if (
+            t.length <= 120 &&
+            !t.includes("竖封面") &&
+            !t.includes("横封面") &&
+            (t.includes("AI智能推荐") || t.includes("好封面能帮作品提升吸引力"))
+          ) {
+            return true;
+          }
+          a = a.parentElement;
+        }
+        return false;
+      };
+
+      const TEXT_RE =
+        /^(?:选择封面|编辑封面|修改封面|更换封面|设置竖封面|选择竖封面|上传竖封面|设置横封面|选择横封面|上传横封面|添加横封面|编辑横封面)$/;
+      const found = new Set();
+      const list = [];
+
+      const pushEl = (el, isCoverBox) => {
+        if (!el || found.has(el)) return;
+        const r = el.getBoundingClientRect();
+        if (r.width < 30 || r.height < 20 || r.width > 460 || r.height > 460) return;
+        if (
+          r.bottom < 0 ||
+          r.right < 0 ||
+          r.top > window.innerHeight ||
+          r.left > window.innerWidth
+        ) {
+          return;
+        }
+        const txt = norm(el.innerText || el.textContent || "");
+        const ctx = localContextOf(el);
+        if (NOISE_RE.test(txt) || NOISE_RE.test(ctx) || isInsideAssistantPanel(el)) {
+          return;
+        }
+        found.add(el);
+        const id = list.length;
+        el.setAttribute("data-mm-cover-cand", String(id));
+        list.push({
+          id,
+          text: txt,
+          localCtx: ctx,
+          x: Math.round(r.left),
+          y: Math.round(r.top),
+          width: Math.round(r.width),
+          height: Math.round(r.height),
+          hasImg: Boolean(el.querySelector && el.querySelector("img")),
+          isCoverBox,
+        });
+      };
+
+      // 清理旧标记
+      for (const old of document.querySelectorAll("[data-mm-cover-cand]")) {
+        old.removeAttribute("data-mm-cover-cand");
+      }
+
+      // 1) 明确的封面操作按钮/文本入口
+      for (const el of document.querySelectorAll("div,span,button")) {
+        const t = norm(el.innerText || el.textContent || "");
+        if (t && TEXT_RE.test(t)) {
+          pushEl(el, false);
+        }
+      }
+
+      // 2) 封面槽位容器盒（带 img 或 3:4 / 4:3 明显封面盒比例），解决自动生成预览后文案隐藏问题
+      for (const el of document.querySelectorAll('[class*="cover" i]')) {
+        const r = el.getBoundingClientRect();
+        if (r.width < 55 || r.height < 55 || r.width > 420 || r.height > 420) continue;
+        const ratio = r.height > 0 ? r.width / r.height : 1;
+        if (ratio > 2.2 || ratio < 0.4) continue;
+        const hasImg = Boolean(el.querySelector("img"));
+        const txt = norm(el.innerText || el.textContent || "");
+        if (!hasImg && txt.length > 20) continue;
+        const ctx = localContextOf(el);
+        if (hasImg || ctx.includes("竖封面") || ctx.includes("横封面") || ctx.includes("封面")) {
+          pushEl(el, true);
+        }
+      }
+
+      return list;
+    });
+
+  // 滚回封面区或大视频刚上传完时，封面槽位可能延迟 1~3s 挂载；短暂轮询等待就绪
+  const maxPollMs = kind === "portrait" ? 8000 : 1500;
+  const deadline = Date.now() + maxPollMs;
+  let rawCandidates = [];
+  let pick = null;
+  while (true) {
+    rawCandidates = await collectCandidates();
+    pick = pickDyCoverSlotCandidate(rawCandidates, kind, excludeCenter);
+    if (pick || Date.now() >= deadline) break;
+    await page.waitForTimeout(500);
+    await scrollDyCoverAreaIntoView(page);
+  }
   if (!pick) {
     return { ok: false, count: rawCandidates.length };
   }
@@ -253,6 +359,24 @@ async function clickDyCoverSlot(page, kind, excludeCenter = null) {
     return false;
   }, pick.id, pick.cx, pick.cy);
 
+  // 若 DOM .click() 未能唤起封面弹窗（例如 hover 浮层位于兄弟节点上），补一次真实坐标点击
+  if (clicked) {
+    const modalOpened = await page
+      .waitForSelector(".dy-creator-content-modal-wrap", {
+        visible: true,
+        timeout: 1800,
+      })
+      .then(() => true)
+      .catch(() => false);
+    if (!modalOpened) {
+      try {
+        await page.mouse.move(pick.cx, pick.cy);
+        await page.waitForTimeout(250);
+        await page.mouse.click(pick.cx, pick.cy);
+      } catch (_) {}
+    }
+  }
+
   return {
     ok: Boolean(clicked),
     slotCount: pick.slotCount,
@@ -272,6 +396,9 @@ async function uploadDyCustomCover(page, coverPath, horizontalCoverPath = "") {
   let horizontalModalOpened = false;
   let portraitCenter = null;
 
+  // 先把封面区域滚回视口（刚点完底部的「保存权限-不允许」后页面通常停在底部）
+  await scrollDyCoverAreaIntoView(page);
+
   if (hasPortrait) {
     if (!fs.existsSync(coverPath)) {
       throw new Error(`封面文件不存在: ${coverPath}`);
@@ -287,43 +414,19 @@ async function uploadDyCustomCover(page, coverPath, horizontalCoverPath = "") {
 
     await uploadDyCoverInOpenModal(page, coverPath, "竖版封面");
 
-    if (hasHorizontal) {
-      // 若抖音弹出「设置横封面获更多流量」引导，优先直接点「去设置 / 设置横封面」进入横封面弹窗
-      const jumped = await page.evaluate(() => {
-        const norm = (t) => String(t).replace(/\s+/g, "").trim();
-        const go = [...document.querySelectorAll("button,[role='button']")].find(
-          (x) =>
-            x.getBoundingClientRect().width > 0 &&
-            /^(?:去设置|立即设置|设置横封面)$/.test(norm(x.textContent))
-        );
-        if (go) {
-          go.click();
-          return norm(go.textContent);
-        }
-        const skip = [...document.querySelectorAll("button,[role='button']")].find(
-          (x) =>
-            x.getBoundingClientRect().width > 0 && norm(x.textContent) === "暂不设置"
-        );
-        if (skip) skip.click();
-        return "";
-      });
-      if (jumped) {
-        horizontalModalOpened = true;
-        console.log(`[dy] 已通过引导弹窗「${jumped}」直接进入横版封面设置`);
-      }
-      await page.waitForTimeout(1500);
-    } else {
-      // 「设置横封面获更多流量」引导弹窗 →「暂不设置」；横封面会基于竖封面自动生成
-      await page.evaluate(() => {
-        const norm = (t) => String(t).replace(/\s+/g, "").trim();
-        const b = [...document.querySelectorAll("button,[role='button']")].find(
-          (x) =>
-            x.getBoundingClientRect().width > 0 && norm(x.textContent) === "暂不设置"
-        );
-        if (b) b.click();
-      });
-      await page.waitForTimeout(1500);
-    }
+    // 关掉「设置横封面获更多流量」引导弹窗（点「暂不设置」）。
+    // 实测（2026-11）：该引导弹窗本身带 .dy-creator-content-modal-wrap，点击弹窗里的「设置横封面」
+    // 并不会直接拉起横封面编辑弹窗（而是关闭引导弹窗、导致旧弹窗退场瞬间误判已打开）。
+    // 统一先关闭引导弹窗、校验竖封面落定，再通过 clickDyCoverSlot("horizontal", portraitCenter) 显式打开横封面槽位。
+    await page.evaluate(() => {
+      const norm = (t) => String(t).replace(/\s+/g, "").trim();
+      const b = [...document.querySelectorAll("button,[role='button']")].find(
+        (x) =>
+          x.getBoundingClientRect().width > 0 && norm(x.textContent) === "暂不设置"
+      );
+      if (b) b.click();
+    });
+    await page.waitForTimeout(1500);
 
     if (!horizontalModalOpened) {
       await page

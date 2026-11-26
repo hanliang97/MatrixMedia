@@ -10,9 +10,19 @@
 
 const PORTRAIT_TEXT_RE = /^(?:选择封面|编辑封面|修改封面|更换封面|设置竖封面|选择竖封面|上传竖封面)$/;
 const HORIZONTAL_TEXT_RE = /^(?:选择封面|编辑封面|修改封面|更换封面|设置横封面|选择横封面|上传横封面|添加横封面|编辑横封面)$/;
+// 右侧吸顶「发文助手」提示卡片（如「横/竖双封面缺失，为增加作品的流量，建议同时设置横版和竖版的封面」）
+// 节点类名常含 cover，且位于视口内，必须显式剔除，避免封面槽位滚出视口时被当成 first-slot 误点。
+const NON_SLOT_NOISE_RE =
+  /(?:双封面缺失|封面缺失|建议同时设置|增加作品的流量|发文助手|快速检测|检测中|AI智能推荐|智能推荐封面|好封面能帮作品提升吸引力|查看封面展示页面)/;
 
 function normText(t) {
   return String(t || "").replace(/\s+/g, "").trim();
+}
+
+export function isDyCoverSlotNoise(text, localCtx = "") {
+  const txt = normText(text);
+  const ctx = normText(localCtx);
+  return NON_SLOT_NOISE_RE.test(txt) || NON_SLOT_NOISE_RE.test(ctx);
 }
 
 /**
@@ -38,9 +48,24 @@ export function pickDyCoverSlotCandidate(
   targetKind,
   excludeCenter = null
 ) {
-  const valid = (rawCandidates || []).filter(
-    (c) => c && c.width >= 30 && c.height >= 20 && c.width <= 460 && c.height <= 460
-  );
+  const valid = (rawCandidates || []).filter((c) => {
+    if (!c || c.width < 30 || c.height < 20 || c.width > 460 || c.height > 460) {
+      return false;
+    }
+    const txt = normText(c.text);
+    const ctx = normText(c.localCtx);
+    if (isDyCoverSlotNoise(txt, ctx)) return false;
+    // 无图且不是明确按钮文案的长段落提示（如侧边栏建议/说明文案）不是封面槽位
+    if (
+      !c.hasImg &&
+      !PORTRAIT_TEXT_RE.test(txt) &&
+      !HORIZONTAL_TEXT_RE.test(txt) &&
+      txt.length > 20
+    ) {
+      return false;
+    }
+    return true;
+  });
   if (!valid.length) return null;
 
   // 1) 坐标去重：中心点在 35px 内归并为一个槽位；优先保留带明确局部标签或纵横比特征的节点
@@ -57,8 +82,10 @@ export function pickDyCoverSlotCandidate(
     const isVLabel =
       (ctx.includes("竖封面") && !ctx.includes("横封面")) ||
       txt.includes("竖封面");
-    const isHShape = ratio >= 1.08 && c.width >= 60 && c.height >= 45;
-    const isVShape = ratio <= 0.92 && c.width >= 45 && c.height >= 60;
+    // 真实横封面槽位约 4:3 (~1.33) 或 16:9 (~1.78)，限定上限 2.2 过滤超宽条形提示条
+    const isHShape = ratio >= 1.08 && ratio <= 2.2 && c.width >= 60 && c.height >= 45;
+    // 真实竖封面槽位约 3:4 (~0.75) 或 9:16 (~0.56)
+    const isVShape = ratio >= 0.45 && ratio <= 0.92 && c.width >= 45 && c.height >= 60;
     const item = {
       ...c,
       cx,
@@ -112,13 +139,28 @@ export function pickDyCoverSlotCandidate(
 
   if (!pool.length) return null;
 
+  const isPlausibleSlot = (c) =>
+    Boolean(
+      c.hasImg ||
+        c.isVShape ||
+        c.isHShape ||
+        c.isVLabel ||
+        c.isHLabel ||
+        PORTRAIT_TEXT_RE.test(c.txt) ||
+        HORIZONTAL_TEXT_RE.test(c.txt)
+    );
+
   if (targetKind === "horizontal") {
     const pick =
       pool.find((c) => c.isHLabel && c.isHShape) ||
       pool.find((c) => c.isHLabel) ||
       pool.find((c) => c.isHShape && !c.isVLabel) ||
       pool.find((c) => HORIZONTAL_TEXT_RE.test(c.txt) && !c.isVLabel) ||
-      (excludeCenter ? pool[0] : pool.length >= 2 ? pool[1] : null);
+      (excludeCenter
+        ? pool.find(isPlausibleSlot) || null
+        : pool.length >= 2 && isPlausibleSlot(pool[1])
+          ? pool[1]
+          : null);
     return pick
       ? {
           ...pick,
@@ -137,7 +179,8 @@ export function pickDyCoverSlotCandidate(
     pool.find((c) => c.isVLabel) ||
     pool.find((c) => c.isVShape && !c.isHLabel) ||
     pool.find((c) => PORTRAIT_TEXT_RE.test(c.txt) && !c.isHLabel) ||
-    pool[0];
+    pool.find(isPlausibleSlot) ||
+    null;
   return pick
     ? {
         ...pick,
