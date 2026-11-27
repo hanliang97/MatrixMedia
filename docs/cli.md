@@ -110,6 +110,7 @@ matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\video.mp4 -t "标题
 | 番茄视频 | 不写元数据 | 不写元数据 | 不写元数据 | 不写元数据 |
 | `--address`                | **地址** → `data.address`（仅百家号）                                      |
 | `--publish-at`             | 一次性定时发布，格式 `YYYY-MM-DD HH:mm:ss`；创建后立即进入发布历史         |
+| `--prefer-native-schedule` | 配合 `--publish-at` 为抖音和视频号启用平台定时，其他平台继续使用软件定时 |
 | `--show`                   | 当前 CLI 会忽略，仍后台运行                                                |
 | `--no-close-window`        | CLI 下无效，仅与 GUI 显示窗口场景有关                                      |
 | `--draft`                  | 保存到平台草稿箱，不直接发布                                               |
@@ -140,8 +141,22 @@ matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\video.mp4 -t "标题
 | 1   | 未捕获异常                                     |
 | 2   | 参数错误                                       |
 | 3   | 任务失败（如上传失败、填写失败）               |
-| 4   | 视频号链接添加失败，视频已转存草稿，需人工检查 |
+| 4   | 结果需人工核对（含草稿降级、发布异常、原生定时未确认）；不要自动重试 |
 | 5   | 登录态失效，需重新扫码登录后再重跑             |
+
+### 优先原生定时
+
+单文件和 `--dir` 目录批量均支持 `--publish-at` 配合 `--prefer-native-schedule`；GUI 的单视频和目录批量表单有等价勾选项。抖音和视频号走原生定时，其他平台仍登记为 `scheduled` 软件任务。
+
+输入时间按本机时区解析，换算成北京时间填写，秒必须为 `00`。抖音要求 2 小时后至 14 天内，视频号以平台当时允许选择的时间为准。开启后立即上传；提交前读取作品列表排除旧作品，提交后重新读取列表，核对新增作品和准确排期时间。平台确认后才返回 `resultStatus: native_scheduled`、`nativeScheduled: true`、`nativeScheduleVerified: true`、退出码 `0`。原生记录的 `scheduledTask` 为 `false`，软件到点不会再次发布；`publishSuccessCount` 不把尚未公开的排期算成已发布。
+
+视频号需要提供简介（`--description`）或短标题（`--short-title`），作为作品核验依据。
+
+回执不明或超时返回退出码 `4`，先到平台核对，不能自动重传。原生控件缺失、时间回读不符时在点击发布前停止，绝不退回立即发布。`--draft` 和定时互斥。确认原生排期后可以退出软件，软件定时仍需到点保持运行。
+
+同一账号、素材和排期时间共用跨进程防重记录（`<userData>/native-schedule-attempts/`）。提交前明确失败会释放，提交后及进程意外退出均保留；重复请求返回退出码 `4` 并提示具体记录路径，不上传。需要重试时，先到平台确认没有排期，再按提示删除该条防重记录。不要批量清空此目录。
+
+`cli history --status native_scheduled` 可筛选已确认排期，JSON 保留 `scheduledPublishAt`、`scheduledPublishAtText`、`nativeScheduleVerified`；GUI 显示“平台已排期”。
 
 视频号商品上架并保存草稿：
 

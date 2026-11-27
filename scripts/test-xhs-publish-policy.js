@@ -46,6 +46,8 @@ assert.deepStrictEqual(
 
 assert.strictEqual(getPublishAttemptLimit({ pt: "小红书" }, 5), 1);
 assert.strictEqual(getPublishAttemptLimit({ pt: "快手" }, 5), 5);
+assert.strictEqual(getPublishAttemptLimit({ pt: "抖音", scheduleMode: "native" }, 5), 1);
+assert.strictEqual(getPublishAttemptLimit({ pt: "视频号", nativeScheduleAt: 1 }, 5), 1);
 
 assert.strictEqual(getXhsSecondClickDelayMs(() => 0), 5000);
 assert.strictEqual(getXhsSecondClickDelayMs(() => 1), 10000);

@@ -11,6 +11,9 @@ import { isRemotePublishFile, resolvePublishFile } from "./resolvePublishFile";
 import { normalizeVideoRecordMetadata } from "../../shared/videoMetadata.js";
 import { scheduledKey } from "./scheduledDedupe.js";
 
+import { parsePublishAt } from "../../shared/videoSchedule.js";
+export { parsePublishAt };
+
 const MAX_TIMER_DELAY_MS = 24 * 60 * 60 * 1000;
 const REFRESH_INTERVAL_MS = 60 * 1000;
 const scheduledTimers = new Map();
@@ -24,37 +27,6 @@ function pad(n) {
 function todayYmd(nowMs = Date.now()) {
   const d = new Date(nowMs);
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-function parseDateParts(value) {
-  const text = String(value || "").trim();
-  const m = text.match(/^(\d{4})-(\d{2})-(\d{2})\s+(\d{2}):(\d{2}):(\d{2})$/);
-  if (!m) {
-    return { ok: false, error: "定时发布时间格式应为 YYYY-MM-DD HH:mm:ss" };
-  }
-  const nums = m.slice(1).map((v) => Number(v));
-  const [year, month, day, hour, minute, second] = nums;
-  const dt = new Date(year, month - 1, day, hour, minute, second, 0);
-  const valid =
-    dt.getFullYear() === year &&
-    dt.getMonth() === month - 1 &&
-    dt.getDate() === day &&
-    dt.getHours() === hour &&
-    dt.getMinutes() === minute &&
-    dt.getSeconds() === second;
-  if (!valid) {
-    return { ok: false, error: "定时发布时间不是有效日期" };
-  }
-  return { ok: true, text, value: dt.getTime() };
-}
-
-export function parsePublishAt(value, nowMs = Date.now()) {
-  const parsed = parseDateParts(value);
-  if (!parsed.ok) return parsed;
-  if (parsed.value <= nowMs) {
-    return { ok: false, error: "定时发布时间必须是未来时间" };
-  }
-  return { ok: true, value: parsed.value, text: parsed.text };
 }
 
 export function createScheduledRecord(

@@ -34,6 +34,10 @@ const overrides = new Map([
   `)],
 ]);
 const moduleCache = new Map();
+const externalOverrides = new Map([
+  ["electron", asModule("export class BrowserWindow { constructor() { throw new Error('普通发布不应创建原生排期探针'); } }")],
+  ["puppeteer-in-electron", asModule("export default {};")],
+]);
 function moduleUrl(file) {
   const absolute = path.resolve(root, file);
   const relative = path.relative(root, absolute).split(path.sep).join("/");
@@ -43,6 +47,9 @@ function moduleUrl(file) {
   const source = fs.readFileSync(absolute, "utf8").replace(
     /(\bfrom\s*)(["'])([^"']+)\2/g,
     (statement, prefix, quote, specifier) => {
+      if (externalOverrides.has(specifier)) {
+        return `${prefix}${quote}${externalOverrides.get(specifier)}${quote}`;
+      }
       // 主进程 dy.js / ks.js 的依赖随版本演进，Node 内建依赖统一改写为 node: 前缀
       if (["path", "fs", "os", "url", "util", "crypto"].includes(specifier)) {
         return `${prefix}${quote}node:${specifier}${quote}`;
@@ -98,8 +105,11 @@ function makeHarness(platform, options = {}) {
       // 主进程 dy.js 演进后页面探针变多：按「参数形态 + 回调特征」区分返回值
       const src = String(callback && callback.toString ? callback.toString() : callback);
       const arg0 = args[0];
+      if (arg0 && typeof arg0 === "object" && arg0.op === "read") {
+        return { available: true, text: "", textExtraLen: 0 }; // 空简介的 Slate 视图
+      }
       if (arg0 && typeof arg0 === "object" && "mode" in arg0) {
-        return { ok: true, info: {}, mode: arg0.mode }; // trySlateClear
+        return { available: true, ok: true, info: {}, mode: arg0.mode }; // trySlateClear
       }
       if (typeof arg0 === "string") {
         // 快手描述编辑器回读：返回键盘输入累积的文本（readKsDescription）

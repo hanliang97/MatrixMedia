@@ -14,6 +14,7 @@ import {
   VIDEO_LINK_TYPES,
   buildVideoLinkOption,
 } from "../../shared/videoLink.js";
+import { resolveVideoSchedule } from "../../shared/videoSchedule.js";
 
 export { PLATFORM_ALIASES, VIDEO_PUBLISH_CANONICAL, resolvePublishPlatform };
 
@@ -39,6 +40,7 @@ export function parsePublishArgs(subArgv) {
     bt2: null,
     bq: "",
     publishAt: null,
+    preferNativeSchedule: false,
     show: false,
     closeWindowAfterPublish: true,
     dir: null,
@@ -80,6 +82,8 @@ export function parsePublishArgs(subArgv) {
       out.bq = args[++i] || "";
     } else if (a === "--publish-at") {
       out.publishAt = args[++i];
+    } else if (a === "--prefer-native-schedule") {
+      out.preferNativeSchedule = true;
     } else if (a === "--show") {
       out.show = true;
     } else if (a === "--no-close-window") {
@@ -385,6 +389,8 @@ export function parsePublishArgs(subArgv) {
     }
   }
 
+  const schedule = resolveVideoSchedule(out);
+  if (!schedule.ok) return schedule;
   return { ok: true, value: out };
 }
 
@@ -476,6 +482,8 @@ export function publishBodyToArgv(body) {
   if (body.show === true) argv.push("--show");
   if (body.closeWindowAfterPublish === false) argv.push("--no-close-window");
   if (body.draft === true) argv.push("--draft");
+  if (body.preferNativeSchedule === true || body["prefer-native-schedule"] === true)
+    argv.push("--prefer-native-schedule");
   if (body.noDownload === true || body["no-download"] === true)
     argv.push("--no-download");
 
@@ -546,6 +554,8 @@ const SHARED_PUBLISH_BODY_KEYS = [
   "bq",
   "publishAt",
   "publish-at",
+  "preferNativeSchedule",
+  "prefer-native-schedule",
   "creativeStatement",
   "creative-statement",
   "cs",
@@ -802,6 +812,9 @@ export function publishHelpText() {
                             • 百家号/头条：当前代码不消费 bq，无需填。
       --publish-at <t>  一次性定时发布，格式 "YYYY-MM-DD HH:mm:ss"。创建后立即写入发布历史，
                             到点后由应用主进程调度执行；不支持每日/每周/每月循环。
+      --prefer-native-schedule  配合 --publish-at，抖音和视频号立即上传并由平台定时；
+                            时间使用本机时区，秒数须为 00。其他平台仍走软件定时。
+                            原生设置未确认时停止，不退回立即发布。不能与草稿模式同时使用。
       --show            （已忽略）CLI 不显示自动化窗口
       --no-close-window 发布后不自动关窗（仅 GUI 显示窗口时有效；CLI 始终后台运行）
       --draft           显式发布到草稿箱（小红书点「暂存离开」）。若账号在 GUI「媒体平台管理」
@@ -824,8 +837,8 @@ export function publishHelpText() {
       --ks-link-value <v>     快手链接值：货架商品完整名称
   -h, --help            显示帮助
 
-退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败（上传未成功）, 4 已转存草稿需检查
-退出码 (批量 --dir): 0 全部成功, 1 部分失败, 2 全部失败
+退出码 (单文件): 0 成功, 1 异常, 2 参数错误, 3 任务失败, 4 结果待核对, 5 需重新登录
+退出码 (批量 --dir): 0 全部成功, 1 部分失败, 2 全部失败, 4 结果待核对, 5 需重新登录
 
 示例:
   matrixmedia.exe cli publish -p dy --phone 13800138000 -f C:\\\\v.mp4 -t "我的视频标题" --tags "#减脂 #健身"

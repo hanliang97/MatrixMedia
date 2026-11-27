@@ -31,7 +31,6 @@ import { runSingleFilePublish } from "../services/publishVideo";
 import { changeData } from "../server/utils";
 import { createScheduledRecord } from "../services/scheduledPublish";
 import { CLI_PUBLISH_TIMEOUT_MS } from "../services/upLoad/uploadTimeouts.js";
-import { resolveAccountPublishMode } from "../services/accountPublishSettingsResolver.js";
 import { resolveTaskPartition } from "../services/accountLookup.js";
 import { ensureAccountRecordsMigrated } from "../services/accountMigration.js";
 import { normalizeVideoMetadata } from "../../shared/videoMetadata.js";
@@ -240,7 +239,6 @@ async function runBatchDirPublish(v, cfg) {
     return 2;
   }
 
-  const recordDate = todayYmd();
   const results = [];
 
   for (let i = 0; i < rows.length; i++) {
@@ -339,202 +337,25 @@ async function runBatchDirPublish(v, cfg) {
       v.platform
     );
 
-    // 批量目录发布同样尊重账号「默认发布到草稿」设置 + 显式 --draft
-    // partition 先按账号记录的 accountKey 规整（新分组模型，见 accountLookup）
-    v.partition = resolveTaskPartition({
-      partition: v.partition,
-      phone: v.phone,
-      pt: v.platform,
-    });
-    const effectivePublishMode = resolveAccountPublishMode({
-      phone: derivePhoneForRecord(v),
-      pt: v.platform,
-      partition: v.partition,
-      requestDraftMode: Boolean(v.draft),
-    });
-
-    const taskId = Date.now() + Math.random();
-    const taskPayload = {
-      taskId,
-      bookName,
-      textType: "local",
-      data: {
-        textOtherName: stem,
-        title: metadata.title,
-        description: metadata.description,
-        shortTitle: metadata.shortTitle,
-        tags: metadata.tags,
-        ...metadata.legacy,
-        creativeStatement: cs,
-        coverPath,
-      },
-      url: cfg.upload,
-      show: false,
-      mmCliSuppressWindow: false,
-      publishMode: effectivePublishMode.publishMode,
-      publishToDraft: effectivePublishMode.publishToDraft,
-      publishOptions: v.publishOptions || {},
-      closeWindowAfterPublish: true,
-      useragent: cfg.useragent,
-      partition: v.partition,
-      phone: derivePhoneForRecord(v),
-      filePath: resolvedFile,
-      pt: v.platform,
-    };
-
-    const selectedFile = path.basename(resolvedFile);
-    const recordItem = {
-      bookName,
-      textOtherName: stem,
-      textType: "local",
-      pt: v.platform,
-      selectedFile,
-      bt: metadata.title,
+    // 单文件、目录批量共用发布服务，保持排期、草稿和退出码语义一致。
+    console.log(JSON.stringify({
+      progress: true, index: i + 1, total: rows.length,
+      fileName: row.fileName, title: bt1, platform: v.platform,
+      phone: v.phone || "", status: "publishing",
+    }));
+    const taskResult = await runSingleFilePublish({
+      ...v,
+      dir: null,
+      file: resolvedFile,
       title: metadata.title,
       description: metadata.description,
       shortTitle: metadata.shortTitle,
+      bt2: null,
       tags: metadata.tags,
-      ...metadata.legacy,
-      coverPath,
-      filePath: resolvedFile,
-      useragent: cfg.useragent,
-      phone: derivePhoneForRecord(v),
-      partition: v.partition,
-      url: cfg.listIndex,
-      uploadUrl: cfg.upload,
-      date: recordDate,
-      publishAttemptCount: 1,
-      republishCount: 0,
-      publishSuccessCount: 0,
-      publishFailCount: 0,
-      publishMode: effectivePublishMode.publishMode,
-      publishToDraft: effectivePublishMode.publishToDraft,
-      publishOptions: v.publishOptions || {},
-      publishStatus: effectivePublishMode.publishToDraft
-        ? "drafting"
-        : "publishing",
-      lastPublishMessage: effectivePublishMode.publishToDraft
-        ? "等待保存草稿结果"
-        : "等待发布结果",
-      lastPublishAt: Date.now(),
-    };
-
-    let recordId = null;
-    try {
-      const addRes = changeData({
-        fileName: "pushData",
-        type: "add",
-        item: recordItem,
-      });
-      if (addRes && addRes.success && Array.isArray(addRes.data)) {
-        const found = [...addRes.data]
-          .reverse()
-          .find(
-            (it) =>
-              it.textOtherName === recordItem.textOtherName &&
-              it.pt === recordItem.pt &&
-              it.selectedFile === recordItem.selectedFile &&
-              it.textType === recordItem.textType
-          );
-        if (found) recordId = found.id;
-      }
-    } catch (e) {
-      console.error(
-        "MatrixMedia: 写入 pushData 初始记录失败 [" + row.fileName + "]:",
-        e && e.message
-      );
-    }
-
-    const updateRecord = (status, message) => {
-      if (!recordId) return;
-      try {
-        changeData({
-          fileName: "pushData",
-          type: "update",
-          item: {
-            id: recordId,
-            date: recordDate,
-            publishStatus: status,
-            publishSuccessCount: status === "success" ? 1 : 0,
-            publishFailCount: status === "failed" ? 1 : 0,
-            publishAbnormalCount: status === "abnormal" ? 1 : 0,
-            lastPublishMessage: message || "",
-            lastPublishAt: Date.now(),
-          },
-        });
-      } catch (e) {
-        console.error(
-          "MatrixMedia: 更新 pushData 记录失败 [" + row.fileName + "]:",
-          e && e.message
-        );
-      }
-    };
-
-    console.log(
-      JSON.stringify({
-        progress: true,
-        index: i + 1,
-        total: rows.length,
-        fileName: row.fileName,
-        title: bt1,
-        platform: v.platform,
-        phone: v.phone || "",
-        status: "publishing",
-      })
-    );
-
-    const taskResult = await new Promise((resolve) => {
-      let settled = false;
-      const finish = (ok, message) => {
-        if (settled) return;
-        settled = true;
-        clearTimeout(timer);
-        resolve({ ok, message });
-      };
-
-      const timer = setTimeout(() => {
-        const min = Math.round(CLI_PUBLISH_TIMEOUT_MS / 60000);
-        const msg = "CLI publish 超时（" + min + " 分钟）";
-        console.error("[" + row.fileName + "] " + msg);
-        updateRecord("failed", msg);
-        finish(false, msg);
-      }, CLI_PUBLISH_TIMEOUT_MS);
-
-      const transport = {
-        reply(channel, payload) {
-          if (channel === "puppeteerFile-done") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId)
-              return;
-            if (payload && payload.skipped) {
-              const msg = payload.message || "用户关闭窗口，已跳过发布";
-              updateRecord("skipped", msg);
-              finish(true, msg);
-              return;
-            }
-            const ok = payload && payload.status === true;
-            const abnormal = ok && payload.publishAbnormal === true;
-            const msg =
-              (payload && payload.message) || (ok ? "上传成功" : "上传失败");
-            updateRecord(
-              abnormal ? "abnormal" : ok ? "success" : "failed",
-              msg
-            );
-            finish(ok && !abnormal, msg);
-          } else if (channel === "puppeteer-noLogin") {
-            if (payload && payload.taskId != null && payload.taskId !== taskId)
-              return;
-            const msg = "登录态异常或未登录";
-            console.error(
-              "[" + row.fileName + "] " + msg + ":",
-              JSON.stringify(payload)
-            );
-            updateRecord("failed", msg);
-            finish(false, msg);
-          }
-        },
-      };
-
-      runPuppeteerTask(taskPayload, transport, () => {});
+      bq,
+      bookName,
+      creativeStatement: cs,
+      cover: coverPath,
     });
 
     const r = {
@@ -544,7 +365,10 @@ async function runBatchDirPublish(v, cfg) {
       title: bt1,
       platform: v.platform,
       phone: v.phone || "",
-      status: taskResult.ok ? "success" : "failed",
+      status: taskResult.status,
+      exitCode: taskResult.exitCode,
+      nativeScheduleVerified: taskResult.nativeScheduleVerified,
+      publishAt: taskResult.publishAt,
       message: taskResult.message,
     };
     results.push(r);
@@ -552,9 +376,9 @@ async function runBatchDirPublish(v, cfg) {
   }
 
   // Summary
-  const succeeded = results.filter((r) => r.status === "success").length;
+  const succeeded = results.filter((r) => r.exitCode === 0).length;
   const failed = results.filter(
-    (r) => r.status === "failed" || r.status === "skipped"
+    (r) => r.exitCode !== 0
   ).length;
   console.log(
     JSON.stringify({
@@ -568,8 +392,9 @@ async function runBatchDirPublish(v, cfg) {
   );
 
   if (failed === 0) return 0;
-  if (succeeded === 0) return 2;
-  return 1;
+  if (results.some((r) => r.exitCode === 4)) return 4;
+  if (results.some((r) => r.exitCode === 5)) return 5;
+  return succeeded === 0 ? 2 : 1;
 }
 
 /**
@@ -678,6 +503,9 @@ export async function runCliMain(argv = process.argv) {
           status: true,
           resultStatus: result.status,
           publishMode: result.publishMode,
+          nativeScheduleVerified: result.nativeScheduleVerified,
+          nativeScheduled: result.nativeScheduled,
+          publishAt: result.publishAt,
           // 草稿模式的保存结果校验字段（#42），老版本 App 无这两个字段
           ...(result.draftVerified !== undefined
             ? { draftVerified: result.draftVerified }
@@ -697,6 +525,8 @@ export async function runCliMain(argv = process.argv) {
           publishMode: result.publishMode,
           outcome: result.outcome,
           needsAttention: true,
+          nativeScheduleVerified: result.nativeScheduleVerified,
+          publishAt: result.publishAt,
           // 草稿未确认场景透传诊断字段，便于 e2e/脚本消费（#42）
           ...(result.draftUrlUnchanged !== undefined
             ? { draftUrlUnchanged: result.draftUrlUnchanged }

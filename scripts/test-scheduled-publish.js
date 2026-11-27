@@ -265,6 +265,8 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
 })();
 
 (() => {
+  // 参数入口现会检查未来时间，不能使用已过期的 2026-05 示例。
+  const publishAt = "2090-05-05 20:30:00";
   const r = parsePublishArgs([
     "-p",
     "dy",
@@ -275,10 +277,10 @@ const fixedNow = new Date("2026-05-05T08:00:00+08:00").getTime();
     "-t",
     "标题",
     "--publish-at",
-    "2026-05-05 20:30:00",
+    publishAt,
   ]);
   assert.strictEqual(r.ok, true);
-  assert.strictEqual(r.value.publishAt, "2026-05-05 20:30:00");
+  assert.strictEqual(r.value.publishAt, publishAt);
 })();
 
 (() => {

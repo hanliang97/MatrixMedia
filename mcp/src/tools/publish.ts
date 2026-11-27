@@ -57,7 +57,11 @@ export const publishVideoTool: Tool = {
       publishAt: {
         type: "string",
         description:
-          'Optional one-time scheduled publish time, format "YYYY-MM-DD HH:mm:ss". Must be in the future; MatrixMedia must be running at that time.',
+          'Optional one-time scheduled publish time in the system local timezone, format "YYYY-MM-DD HH:mm:ss". MatrixMedia must be running then unless platform scheduling is enabled.',
+      },
+      preferNativeSchedule: {
+        type: "boolean",
+        description: "Upload now and schedule on Douyin or WeChat Channels. Douyin accepts times 2 hours to 14 days ahead; WeChat Channels validates the time in its own picker. Requires publishAt in the system local timezone with seconds 00. Other platforms keep local scheduling. Never falls back to immediate publish.",
       },
       show: {
         type: "boolean",
@@ -319,6 +323,7 @@ export async function handlePublishVideo(
     ...(tags ? ["--tags", String(tags)] : []),
     ...(address ? ["--address", String(address)] : []),
     ...(publishAt ? ["--publish-at", String(publishAt)] : []),
+    ...(args.preferNativeSchedule === true ? ["--prefer-native-schedule"] : []),
     ...(show ? ["--show"] : []),
     ...(draft ? ["--draft"] : []),
     ...(noDownload ? ["--no-download"] : []),
@@ -348,6 +353,9 @@ export async function handlePublishVideo(
     return JSON.stringify({
       status: (result.lastJson as any)?.resultStatus ?? "success",
       publishMode: (result.lastJson as any)?.publishMode,
+      nativeScheduled: (result.lastJson as any)?.nativeScheduled,
+      nativeScheduleVerified: (result.lastJson as any)?.nativeScheduleVerified,
+      publishAt: (result.lastJson as any)?.publishAt,
       message: (result.lastJson as any)?.message ?? "上传成功",
     });
   }
@@ -355,11 +363,13 @@ export async function handlePublishVideo(
   if (result.exitCode === 4) {
     return JSON.stringify({
       status: "needs_attention",
-      publishMode: "draft",
-      outcome: (result.lastJson as any)?.outcome ?? "draft_saved",
+      publishMode: (result.lastJson as any)?.publishMode,
+      nativeScheduleVerified: (result.lastJson as any)?.nativeScheduleVerified,
+      publishAt: (result.lastJson as any)?.publishAt,
+      outcome: (result.lastJson as any)?.outcome,
       needsAttention: true,
       message:
-        (result.lastJson as any)?.message ?? "已转存草稿，请检查视频号链接",
+        (result.lastJson as any)?.message ?? "无法确认提交结果，请到平台后台核对后再操作",
     });
   }
 
