@@ -835,17 +835,17 @@ export default {
           parent: parentID,
           frame: IsUseSysTitle,
           webPreferences: {
-            nodeIntegration: true,
-            webSecurity: false,
-            allowRunningInsecureContent: true,
+            // 安全基线（Issue #35）：与主窗口 / open-external-window 保持一致，
+            // 渲染进程不暴露 Node，开启上下文隔离与同源策略，
+            // 避免子窗口被注入脚本利用后获得任意命令执行能力。
+            nodeIntegration: false,
+            contextIsolation: true,
             //使用webview标签 必须开启
             webviewTag: arg?.webview ?? false,
             // 如果是开发模式可以使用devTools
             devTools: process.env.NODE_ENV === "development",
             // 在macos中启用橡皮动画
             scrollBounce: process.platform === "darwin",
-            // 临时修复打开新窗口报错
-            contextIsolation: false,
           },
         });
 
